@@ -1,176 +1,76 @@
-# Speed Dreams
+# Open Formula Racing
 
-![Speed Dreams logo](./doc/readme/sd-logo.png)
+**Un fork de Speed Dreams 2.4.2, con físicas simuv5, orientado a construir un campeonato de Fórmula 1 de 1997.**
 
-Speed Dreams is a free and open source motorsport simulator. Originally
-a fork of the [TORCS](https://torcs.sourceforge.net/) project,
-it has evolved into a higher level of maturity, featuring realistic physics
-with tens of high-quality cars and tracks to choose from.
+El propósito es adaptar la base abierta de Speed Dreams a una experiencia centrada en la temporada 1997: coches, pilotos, circuitos, reglajes y competición. Para construir ese contenido se trabaja con adaptaciones de mods creados por las comunidades de **F1 Challenge 99–02 (F1C), rFactor y Grand Prix 4 (GP4)**, conservando los créditos de sus creadores y la procedencia de cada recurso.
 
-> **This repository contains the engine source code,**
-> **and the base assets [as a submodule](./speed-dreams-data/).**
-> **End users are expected to download the pre-built packages listed below.**
->
-> The assets repository is located on
-> https://forge.a-lec.org/speed-dreams/speed-dreams-data/
+La conversión de un modelo o una textura no sustituye la autoría original. Agradecemos a los modders que hicieron posible recuperar y mantener este patrimonio del simracing. Los [créditos y procedencias](CREDITS.md) distinguen los recursos ya utilizados, los colaboradores del paquete de origen y las atribuciones que todavía faltan por verificar.
 
-![A collage of in-game screenshots](./doc/readme/collage.jpg)
+## Base tecnológica y procedencia
 
-## Pre-built packages
+| Componente | Referencia |
+| --- | --- |
+| Motor | **Speed Dreams 2.4.2**, versión declarada en [CMakeLists.txt](CMakeLists.txt) |
+| Simulación utilizada | **simuv5**, adaptada para este proyecto |
+| Código de referencia recibido | [brhndursun/speed-dreams-simuv5](https://github.com/brhndursun/speed-dreams-simuv5), revisión [`d8d9c179`](https://github.com/brhndursun/speed-dreams-simuv5/commit/d8d9c179a7c944405fa4fedda4249d4703f33749) |
+| Proyecto original | [Speed Dreams](https://www.speed-dreams.net/), derivado de [TORCS](https://torcs.sourceforge.net/) |
+| Preparación previa de contenidos | [Formula90s](https://github.com/Anthony38zrgo-2/formula-90), mediante conversión offline a formatos nativos |
 
-Speed Dreams binaries are available from the
-[official website](https://www.speed-dreams.net/en/downloads).
+La revisión de referencia fue comprobada directamente y declara también 2.4.2. Este repositorio inició su historial local con una instantánea adaptada: el commit de referencia **no es un ancestro Git** de este historial. La procedencia se documenta sin presentar las modificaciones como una versión oficial de Speed Dreams. Véase [el registro de procedencia](implementation/source_provenance.json).
 
-## Building from source
+## Estado actual
 
-In-tree builds (i.e., including both code and data on the same build)
-are recommended for simplicity. To achieve this, update the
-[`speed-dreams-data/`](./speed-dreams-data/) submodule with:
+El prototipo local se centra en **Williams FW19, Jacques Villeneuve, variante Hockenheim, sobre Fuji76-77**, como sesión individual de práctica. Fuji76-77 es un circuito histórico de prueba; no se presenta como el circuito japonés del campeonato de 1997.
 
-```
-git submodule update --init --recursive
-```
+El trabajo existente incluye conversión visual y de materiales, contacto y colisiones de Fuji, controles de teclado/mando, calibración de geometría y suspensión, diferencial con precarga y ajuste separado de aceleración/retención, alas y fondo aerodinámico, y bancos de regresión nativos.
 
-Otherwise, CMake will search the `speed-dreams-data` package on a
-well-known location, or rely on the
-[`CMAKE_PREFIX_PATH`](https://cmake.org/cmake/help/latest/variable/CMAKE_PREFIX_PATH.html)
-variable to search for an **installed** version of the `speed-dreams-data`
-package, which must then be indicated when configuring the project:
+**El campeonato completo todavía no está implementado.** Tampoco hay un importador universal que cargue directamente cualquier mod F1C, rFactor o GP4. Las conversiones actuales son específicas, preparadas offline y requieren sus recursos de origen. La equivalencia física histórica, conducción y calibración final siguen en validación.
 
-```
-cmake -DCMAKE_PREFIX_PATH=<path-to-speed-dreams-data> # other args...
-```
+El nuevo modelo de neumáticos y térmica inspirado en Rust está especificado en [instrucciones.md](instrucciones.md); ese handoff no significa que el modelo ya esté implementado. Los resultados y límites del trabajo actual están en [implementation/reports](implementation/reports).
 
-Nonetheless, there is also the [`freesolid`](./freesolid/) submodule that might
-be required since that project has not been packaged by most distributions yet.
-In such case, update the submodule with:
+## Créditos principales del contenido utilizado
 
-```
-git submodule update --init freesolid
-```
+- **Williams FW19 y variante visual GP4:** VRC, MSchumi24 y Hega; actualizaciones de SkaningeN. El carset *F1 1997 Season Mod v2.0* está organizado por MSchumi24.
+- **Cockpit:** Enzojz; texturas de MSchumi24. **Casco Arai y pintura Williams:** jvinu2000.
+- **Llantas y neumáticos:** Ulf (Alesi_fan) y Turbo Lover.
+- **[Fuji76-77](https://www.overtake.gg/downloads/fujji-1976-1977.79502/):** modificación del trazado y AIW por Gulag_Express. La autoría de la base queda pendiente porque el propio README original no la confirma.
+- **Audio V10 de referencia:** [Ferrari F2002 Sound Mod](https://www.overtake.gg/downloads/btk150s-ferrari-f2002-sound-mod.52684/) de **kudos_kudos**, creado para el Ferrari F2002 de **btk150** en Assetto Corsa; procedencia indicada por el mantenedor. Es una adaptación sonora provisional, no una grabación certificada del Williams de 1997.
+- **Carbon Fiber Black:** James Middleton, según los metadatos del material BlenderKit incorporado al GLB de origen.
+- **Herramientas GP4:** Diego Noriega (Öggo), por GP4 Mesh Tools; ZaZ, por las herramientas del ecosistema GP4.
+- **Motor y dependencias:** los equipos y colaboradores de Speed Dreams, TORCS y las bibliotecas incluidas, conservando sus avisos originales.
 
-> **The steps below will assume in-tree builds unless noted otherwise.**
+El [registro completo](CREDITS.md) incluye la relación de créditos del carset, adaptaciones intermedias y recursos con autor pendiente. No atribuimos el audio V10 del prototipo a los autores de sonido del carset sin demostrar que sea el mismo recurso.
 
-Once configured as described below, the project can be built with:
+## Código, contenido y licencias
 
-```
-cmake --build build/ # Optionally, add -j8 or any other number for faster builds
-```
+El código de Speed Dreams conserva su licencia **GPL-2.0-or-later** y los avisos correspondientes; consulte [LICENSE](LICENSE) y los textos específicos de cada componente. Las aportaciones de este fork sobre esa base se distribuyen con esa misma licencia, salvo indicación específica compatible en el archivo correspondiente.
 
-Optionally, the project can be installed via:
+Los modelos, pistas, texturas y sonidos de terceros conservan sus propias condiciones. **Acreditar un recurso no concede permiso de redistribución ni lo convierte en GPL.** Este repositorio publica el código, las herramientas y la documentación de las adaptaciones; los paquetes locales de mods y la distribución jugable generada no se incluyen en este push. Las atribuciones y permisos incompletos quedan identificados en CREDITS.md.
 
-```
-cmake --install build/
-```
+El contenido base oficial de Speed Dreams y FreeSOLID se referencia mediante submódulos, con sus propias licencias. El paquete Williams/Fuji de la instalación de desarrollo no forma parte de esos submódulos.
 
-### BSDs, Linux
-
-Speed Dreams can be built from source using the conventional build process
-in CMake projects:
-
-```
-cmake -B build
-```
-
-### Windows
-
-- [CMake](https://cmake.org/download/#latest) `3.12.0` or newer
-- [Git](https://git-scm.com/download/win)
-- [OpenJDK](https://jdk.java.net/) `8` or newer (for the track editor)
-- [MinGW](https://winlibs.com/), with support for C++11.
-
-> Please ensure these tools are added to the `%PATH%` environment variable.
-
-On Windows, dependencies cannot be fetched from a package manager as in
-conventional Linux distributions. To solve this, Speed Dreams defines
-[a separate build system for third-party dependencies](./packaging/3rdParty-devel/).
-This would build all dependencies from source, so they can be later found
-by CMake.
-
-> **Both methods described below will require the path to the pre-built**
-> **dependencies**.
-> Please read [the instructions](./packaging/3rdParty-devel/README.md)
-> for further reference.
-
-#### Native builds
-
-If building from Windows, append the path to the pre-built dependencies to
-the
-[`CMAKE_PREFIX_PATH`](https://cmake.org/cmake/help/latest/variable/CMAKE_PREFIX_PATH.html)
-variable:
-
-```
-cmake -B build -DCMAKE_PREFIX_PATH=<path-to-dependencies>
-```
-
-If using MinGW, then the `MinGW Makefiles` CMake generator might have to be
-manually selected:
-
-```
-cmake -B build -G "MinGW Makefiles" -DCMAKE_PREFIX_PATH=<path-to-dependencies>
-```
-
-#### Cross-compiling from Linux
-
-Speed Dreams can not only be compiled natively from Windows, but can be also
-cross-compiled for Windows from a fully free (as in freedom) operating
-system like GNU/Linux. The
-[`w64-mingw32`](https://git.code.sf.net/p/mingw-w64/mingw-w64)
-toolchain can be used for the cross-compilation, with dedicated
-toolchain files for
-[`i686-w64-mingw32`](./packaging/3rdParty-devel/i686-w64-mingw32.cmake)
-and
-[`x86_64-w64-mingw32`](./packaging/3rdParty-devel/x86_64-w64-mingw32.cmake),
-referred to by the
-[`CMAKE_TOOLCHAIN_FILE`](https://cmake.org/cmake/help/latest/variable/CMAKE_TOOLCHAIN_FILE.html)
-variable. Third-party dependencies are then referred to by the
-[`CMAKE_FIND_ROOT_PATH`](https://cmake.org/cmake/help/latest/variable/CMAKE_FIND_ROOT_PATH.html)
-variable, as intended for cross-builds.
-
-> **`CMAKE_FIND_ROOT_PATH` must be an absolute path.**
-
-##### `x86_64`
-
-```
-cmake -B build -DCMAKE_TOOLCHAIN_FILE=packaging/3rdParty-devel/x86_64-w64-mingw32.cmake -DCMAKE_FIND_ROOT_PATH=<path-to-dependencies>
-```
-
-#### `i686`
-
-```
-cmake -B build -DCMAKE_TOOLCHAIN_FILE=packaging/3rdParty-devel/i686-w64-mingw32.cmake -DCMAKE_FIND_ROOT_PATH=<path-to-dependencies>
-```
-
-### Dependencies
-
-#### Debian/Ubuntu
+## Obtener y compilar
 
 ```sh
-sudo apt install git cmake build-essential libopenscenegraph-dev libcurl4-gnutls-dev libsdl2-dev libsdl2-mixer-dev librhash-dev libenet-dev libpng-dev libjpeg-dev zlib1g-dev libminizip-dev libopenal-dev libplib-dev libexpat1-dev libcjson-dev openjdk-17-jdk openjdk-17-jre libsdl2-ttf-dev
+git clone --recurse-submodules https://github.com/Anthony38zrgo-2/open-formula-racing.git
+cd open-formula-racing
 ```
 
-> The version for the `openjdk-*` packages might change among distributions.
-
-#### Fedora
+Las dependencias y compilación del motor se describen en el [README original de Speed Dreams](README_SPEED_DREAMS.md). Como punto de partida, con las dependencias instaladas:
 
 ```sh
-sudo dnf install SDL2_mixer SDL2_mixer-devel expat-devel OpenSceneGraph-devel plib-devel libcurl-devel openal-soft-devel enet-devel minizip-devel rhash-devel mesa-libGL-devel mesa-libGLU-devel
+cmake -S . -B build
+cmake --build build --parallel
 ```
 
-## License
+En Windows, la instalación de desarrollo usa CMake, Ninja y MSYS2 UCRT64, además de las dependencias gráficas y de audio de Speed Dreams. Ese entorno concreto no es un instalador portable incluido en Git.
 
-By default, Speed Dreams code is licensed under the GPLv2-or-later license,
-as specified by the [`LICENSE`](./LICENSE) file, whereas non-functional data
-is licensed under the [Free Art License](http://artlibre.org/) by default.
+Los scripts de `tools/` preparan el vehículo, pista, sesión y distribución desde fuentes locales. **Un clon de este repositorio no contiene los recursos externos necesarios para reproducir automáticamente el Williams/Fuji.** Los enlaces de créditos conducen a las publicaciones originales de sus autores; no se presupone autorización para redistribuir sus paquetes.
 
-However, some sections of the code and some other assets are distributed under
-various free (as in freedom) licenses. Please read their license files
-located in their respective directories for further reference.
+Cuando ya se ha generado una distribución local completa, el punto de entrada es `distribution/OpenFormula.exe`. No necesita Godot para ejecutar el port; Formula90s es una fuente de preparación y referencia, no el motor de juego de este fork.
 
-## Trademark disclaimer
+## Contribuir
 
-Windows is a registered trademark of Microsoft Corporation.
+Se agradecen correcciones de física, herramientas de conversión, pruebas, documentación de procedencia y contacto con autores. Para incorporar contenido, registrar autor original, conversores, versión del mod, archivos usados, evidencia y condiciones de uso; separar esos créditos de los trabajos de adaptación.
 
-Ubuntu is a registered trademark of Canonical Ltd.
-
-Linux is a registered trademark of Linus Torvalds.
+Este es un proyecto comunitario independiente, sin afiliación oficial con Formula 1, FIA, Williams, fabricantes o los juegos de origen. Sus nombres y marcas pertenecen a sus respectivos titulares.

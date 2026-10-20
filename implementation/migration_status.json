@@ -141,6 +141,14 @@
     "render_fullscreen": false,
     "aerodynamic_and_grip_report": "implementation/reports/williams_aerodynamics_and_grip.md",
     "differential_report": "implementation/reports/williams_differential_preload.md",
-    "tire_model_comparison_report": "implementation/reports/williams_tire_model_comparison.md"
-  }
+    "tire_model_comparison_report": "implementation/reports/williams_tire_model_comparison.md",
+    "carbon_material_specific_shader_installed": true,
+    "carbon_material_appearance_before_after_inspected": true,
+    "carbon_material_appearance_report": "implementation/reports/williams_carbon_appearance.md"
+  },
+  "upstream_reference_commit_fetched_and_version_verified": true,
+  "upstream_declared_version": "2.4.2",
+  "upstream_reference_is_local_git_ancestor": false,
+  "public_source_provenance": "implementation/source_provenance.json",
+  "public_credits": "CREDITS.md"
 }

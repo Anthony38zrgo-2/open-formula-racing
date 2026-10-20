@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "review_date": "2026-10-20",
+  "project": "Open Formula Racing",
+  "project_repository": "https://github.com/Anthony38zrgo-2/open-formula-racing",
+  "engine": {
+    "name": "Speed Dreams",
+    "declared_version": "2.4.2",
+    "physics_module": "simuv5",
+    "reference_repository": "https://github.com/brhndursun/speed-dreams-simuv5",
+    "reference_commit": "d8d9c179a7c944405fa4fedda4249d4703f33749",
+    "reference_fetched_and_version_checked": true,
+    "local_initial_commit": "57ddca9375bc18136f319234f53a930db42a6563",
+    "reference_commit_is_git_ancestor": false,
+    "snapshot_comparison": "37 changed or added paths between the reference and the first local port commit; not an unmodified upstream release",
+    "official_project": "https://www.speed-dreams.net/",
+    "origin_project": "TORCS"
+  },
+  "pinned_submodules": {
+    "speed-dreams-data": "8bb0beb8d1ec77ae02349468ada9f40db298a41d",
+    "freesolid": "2c0071923be6afb487ed4e3b84da501f0a2e7e2d"
+  },
+  "content_policy": {
+    "third_party_mod_media_included_in_publication": false,
+    "redistribution_permissions_complete": false,
+    "credits_document": "CREDITS.md",
+    "complete_1997_championship_implemented": false
+  },
+  "evidence": [
+    {
+      "role": "gp4_carset_credits",
+      "source_path": "D:\\Formula90s\\game\\assets\\season\\1997\\extracted\\combined\\Data\\Files\\Documentation\\credits.txt",
+      "sha256": "63fb1036d23fc57bc0340f9837d18686eb67b190f72997ef58620c5a206f8e81"
+    },
+    {
+      "role": "gp4_carset_help",
+      "source_path": "D:\\Formula90s\\game\\assets\\season\\1997\\extracted\\combined\\Data\\Files\\Documentation\\help.txt",
+      "sha256": "54b9b145e1f440920f94f53fb8e7d75edc4a328d53980c0e846124a875a7b633"
+    },
+    {
+      "role": "williams_source_inventory",
+      "source_path": "D:\\Formula90s\\game\\assets\\models\\vehicles\\f1-1997\\williams\\variants\\hockenheim\\villenueve\\reports\\source_inventory.json",
+      "sha256": "d4f915f64fdc59ab67c9da523bc8129602611409fc1827ed945975666c263655"
+    },
+    {
+      "role": "fuji_original_readme",
+      "source_path": "D:\\gtr2-glb-conversor\\gtr2-tracks\\Fuji76-77\\Readme.txt",
+      "sha256": "be9fbdd547ab25d26a737a045bb1c40a2ddcc2d3eaa511a97fe9abec9af4332e"
+    },
+    {
+      "role": "fuji_conversion_report",
+      "source_path": "D:\\gtr2-glb-conversor\\tracks-glb\\fuji76_77\\conversion_report.json",
+      "sha256": "831fc156d940177dc9cb476ed9f80e1a8e5b9e39c0ac11a938a8ce14fc3d20c0"
+    },
+    {
+      "role": "driver_source_provenance",
+      "source_path": "D:\\Formula90s\\game\\assets\\models\\drivers\\source\\source_provenance.json",
+      "sha256": "40bc16c1d82c094d8ab8597cb76899595a8142e0e83914989f363cf58f23540e"
+    },
+    {
+      "role": "engine_bank_manifest",
+      "source_path": "D:\\Formula90s\\game\\sounds\\banks\\v10-v2-bank\\manifest.json",
+      "sha256": "6cbf798f9535e83144660d25b5c42089af19f4dcbc29e23a7212cbee38f80b8a"
+    },
+    {
+      "role": "engine_bank_source_inventory",
+      "source_path": "D:\\Formula90s\\game\\sounds\\banks\\v10-v2-bank\\source_inventory.json",
+      "sha256": "4298df4c5dab3b00795888cbf69e7502c8309dc5301600833da228277be471f3"
+    }
+  ],
+  "pending_attributions": [
+    "Fuji original base author",
+    "Restored Carbon_Fiber_diffuse.jpg individual author",
+    "race-car-driver-low-poly.zip original author",
+    "Upstream authorship of donor steering wheel where applicable",
+    "Exact Ferrari F2002 Sound Mod package version and variation used for the source bank"
+  ],
+  "carbon_material_metadata": {
+    "name": "Carbon Fiber Black",
+    "author": "James Middleton",
+    "library": "BlenderKit",
+    "asset_base_identifier": "abd33787-1667-41cb-baf3-9c7409e74517",
+    "asset_revision_identifier": "125ce3f5-13bd-4276-b288-7014b3482af8",
+    "license_label_in_source": "royalty_free",
+    "separate_restored_texture_identity_confirmed": false
+  },
+  "public_mod_sources": [
+    {
+      "resource": "V10 engine sound reference",
+      "url": "https://www.overtake.gg/downloads/btk150s-ferrari-f2002-sound-mod.52684/",
+      "sound_mod_author": "kudos_kudos",
+      "reference_car_author": "btk150",
+      "source_game": "Assetto Corsa",
+      "local_usage_identified_by": "maintainer confirmation in publication request",
+      "public_author_checked": true,
+      "local_package_version_and_variation_verified": false
+    },
+    {
+      "resource": "Fuji76-77 track",
+      "url": "https://www.overtake.gg/downloads/fujji-1976-1977.79502/",
+      "modification_author": "Gulag_Express",
+      "source_game": "rFactor",
+      "public_author_checked": true,
+      "original_base_author_verified": false
+    }
+  ],
+  "adapted_shader_source": {
+    "source_path": "speed-dreams-data/data/data/shaders/car.frag",
+    "source_submodule_commit": "8bb0beb8d1ec77ae02349468ada9f40db298a41d",
+    "destination_path": "implementation/shaders/car_material_appearance.frag",
+    "upstream_license_reference": "speed-dreams-data/LICENSE"
+  }
+}
