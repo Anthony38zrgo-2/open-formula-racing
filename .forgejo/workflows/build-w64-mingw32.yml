@@ -1,0 +1,45 @@
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*.*.*'
+  pull_request:
+
+jobs:
+  build:
+    runs-on: docker
+    container:
+      image: forge.a-lec.org/speed-dreams/ubuntu-i686-w64-mingw32:jammy
+    steps:
+      - name: Download third-party libraries
+        run: curl -so 3rdparty.tar.gz ${{ vars.THIRDPARTY_URL }}
+      - name: Untar third-party libraries
+        run: tar -xf 3rdparty.tar.gz
+      - name: Clone repository recursively
+        run: forgejo-clone -r src
+      - name: Configure project
+        run: |
+          cmake -B build \
+            -DCMAKE_FIND_ROOT_PATH=${{ env.GITHUB_WORKSPACE }}/3rdParty \
+            -DCMAKE_TOOLCHAIN_FILE=packaging/3rdParty-devel/i686-w64-mingw32.cmake
+        working-directory: src
+      - name: Build project
+        run: cmake --build build -j$(nproc --all)
+        working-directory: src
+      - name: Build installer
+        run: cpack -G NSIS
+        working-directory: src/build
+      - name: Upload installer
+        run: |
+          if [ $USERNAME ]
+          then
+            upload-artifact *.exe
+          else
+            echo "Skipping due to missing secrets" >&2
+          fi
+        working-directory: src/build
+        env:
+          URL: ${{ vars.STORE_URL }}
+          USERNAME: ${{ secrets.STORE_USERNAME }}
+          PASSWORD: ${{ secrets.STORE_PASSWORD }}

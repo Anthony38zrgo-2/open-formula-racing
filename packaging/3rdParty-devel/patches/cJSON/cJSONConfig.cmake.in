@@ -1,0 +1,4 @@
+@PACKAGE_INIT@
+set_and_check(cJSON_INCLUDE_DIRS "@PACKAGE_include_dir@")
+set_and_check(cJSON_LIBRARIES "@PACKAGE_CMAKE_INSTALL_LIBDIR@")
+check_required_components(cJSON)

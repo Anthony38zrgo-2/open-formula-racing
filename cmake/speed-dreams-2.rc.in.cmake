@@ -1,0 +1,1 @@
+IDI_ICON1 ICON DISCARDABLE "${SD_DATADIR_ABS}/data/icons/icon.ico"

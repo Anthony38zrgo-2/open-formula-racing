@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Speed Dreams
+Comment=3D racing cars simulator
+Exec=@CMAKE_INSTALL_PREFIX@/@SD_BINDIR@/@_TARGET_NAME@
+Icon=@SD_DATADIR_ABS@/data/icons/icon.png
+Terminal=false
+Type=Application
+Encoding=UTF-8
+Categories=Game;Simulation;

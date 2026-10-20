@@ -1,0 +1,34 @@
+#==============================================================================
+#
+#    Generated AppleScript file for setting the background image,
+#    'Finder' window options, and position of icons
+#
+#==============================================================================
+
+tell application "Finder"
+	tell disk "@DMG_VOL_NAME@"
+		open
+		set current view of container window to icon view
+		set theViewOptions to the icon view options of container window
+		set background picture of theViewOptions to file ".installer-mac-bg-22.png"
+		set arrangement of theViewOptions to not arranged
+		set icon size of theViewOptions to 128
+		delay 5
+		close
+		
+		open
+		update without registering applications
+		tell container window
+			set sidebar width to 0
+			set statusbar visible to false
+			set toolbar visible to false
+			set the bounds to {400, 200, 1120, 665}
+			set position of item "@SD_BUNDLE_NAME@" to {229, 292}
+			set position of item "Applications" to {458, 292}
+		end tell
+		update without registering applications
+		delay 5
+		close
+	end tell
+	delay 1
+end tell

@@ -1,0 +1,112 @@
+#==============================================================================
+#
+#    Generated Script file for creating the DMG file
+#    Apple only
+#
+#==============================================================================
+
+set(_result )
+set(_error )
+
+# Create a read/write dmg
+message(STATUS "Creating read/write dmg...")
+execute_process(COMMAND hdiutil create "./@READ_WRITE_DMG_NAME@" -volname "@DMG_VOL_NAME@" -size 4g -fs HFS+
+               RESULT_VARIABLE _result
+               ERROR_VARIABLE _error
+               COMMAND_ECHO STDOUT )
+#message(STATUS "Result of hdiutil create = ${_result}")
+
+# Attach read/write dmg
+if(${_result} EQUAL "0")
+   message(STATUS "Attaching read/write dmg...")
+   execute_process(COMMAND hdiutil attach "./@READ_WRITE_DMG_NAME@" -nobrowse
+                  RESULT_VARIABLE _result
+                  ERROR_VARIABLE _error
+                  COMMAND_ECHO STDOUT )
+   #message(STATUS "Result of hdiutil attach = ${_result}")
+
+   # Copy the background image (renaming NOTE the leading . in target name)
+   if(${_result} EQUAL "0")
+      # Copy the background image (renaming NOTE the leading . in target name)
+      message(STATUS "Copying installer-mac-bg-22.png...")
+      execute_process(COMMAND cp "@CMAKE_SOURCE_DIR@/packaging/OSX/installer-mac-bg-22.png" "/Volumes/@DMG_VOL_NAME@/.installer-mac-bg-22.png"
+                     RESULT_VARIABLE _result
+                     ERROR_VARIABLE _error
+                     COMMAND_ECHO STDOUT )
+      #message(STATUS "Result of copying installer-mac-bg-22.png = ${_result}")
+
+      # Create a link to Applications folder
+      if(${_result} EQUAL "0")
+         # Create a link to Applications folder
+         message(STATUS "Creating link to Applications...")
+         execute_process(COMMAND ln -s /Applications "/Volumes/@DMG_VOL_NAME@/Applications"
+                        RESULT_VARIABLE _result
+                        ERROR_VARIABLE _error
+                        COMMAND_ECHO STDOUT )
+         #message(STATUS "Result of creating link to Applications = ${_result}")
+      endif()
+
+      # Copy the whole .app folder recursively
+      if(${_result} EQUAL "0")
+
+         # Copy the whole .app folder recursively
+         message(STATUS "Copying the @SD_BUNDLE_NAME@ folder...")
+         execute_process(COMMAND cp -r "@SD_BUNDLE_NAME@/" "/Volumes/@DMG_VOL_NAME@/@SD_BUNDLE_NAME@"
+                        RESULT_VARIABLE _result
+                        ERROR_VARIABLE _error
+                        COMMAND_ECHO STDOUT )
+         #message(STATUS "Result of copying the @SD_BUNDLE_NAME@ folder = ${_result}")
+      endif()
+
+      # run the generated 'Finder' script
+      if(${_result} EQUAL "0")
+         # run the generated 'Finder' script
+         message(STATUS "Running the generated 'Finder' script...")
+         execute_process(COMMAND osascript @DMG_FINDER_SCRIPT@
+                        RESULT_VARIABLE _result
+                        ERROR_VARIABLE _error
+                        COMMAND_ECHO STDOUT )
+         #message(STATUS "Result of running the generated 'Finder' script = ${_result}")
+      endif()
+
+      # Detach the read/write dmg
+      if(${_result} EQUAL "0")
+         message(STATUS "Detaching read/write dmg...")
+         execute_process(COMMAND hdiutil detach "/Volumes/@DMG_VOL_NAME@/"
+                        RESULT_VARIABLE _result
+                        ERROR_VARIABLE _error
+                        COMMAND_ECHO STDOUT )
+         #message(STATUS "Result of hdiutil detach = ${_result}")
+      # Detach the read/write dmg but use differt variables to preserve the real error
+      else()
+         message(WARNING "Error(s) occured: Detaching read/write dmg...")
+         execute_process(COMMAND hdiutil detach "/Volumes/@DMG_VOL_NAME@/"
+                        RESULT_VARIABLE _detach_result
+                        ERROR_VARIABLE _detach_error
+                        COMMAND_ECHO STDOUT )
+         if(NOT (${_detach_result} EQUAL "0") )
+            message(WARNING "Failed to detach after earlier error: ${_detach_error}")
+         endif()
+      endif()
+
+      # create the Read only version
+      if(${_result} EQUAL "0")
+         # create the Read only version
+         message(STATUS "converting read/write dmg to read-only...")
+         execute_process(COMMAND hdiutil convert "./@READ_WRITE_DMG_NAME@" -format UDZO -imagekey zlib-level=9 -o "./@READ_ONLY_DMG_NAME@"
+                        RESULT_VARIABLE _result
+                        ERROR_VARIABLE _error
+                        COMMAND_ECHO STDOUT )
+         #message(STATUS "Result of hdiutil convert = ${_result}")
+      endif()
+   endif()
+endif()
+
+# Report any error
+if(NOT (${_result} EQUAL "0") )
+   message(SEND_ERROR "Error(s)\n: ${_error}")
+   message(FATAL_ERROR "Script Faild: see above")
+else()
+   message(STATUS "Script Succeeded")
+endif()
+

@@ -1,0 +1,86 @@
+{
+    "cars": [
+        {
+            "name": "FMC GT4",
+            "category": "Supercars",
+            "author": "W.E.C, Eckhard M. Jager, Chad Phillips",
+            "license": "Free Art License",
+            "url": "http://localhost:8000/sc-fmc-gt4.zip",
+            "hashtype": "sha256",
+            "hash": "ff2f963abf60c245e986a4166c3f2ff7605ec80c2ee8ba4e931dd07e9f86fa40",
+            "size": "17768546",
+            "thumbnail": "http://localhost:8000/sc-fmc-gt4.png",
+            "directory": "sc-fmc-gt4",
+            "revision": "0"
+        },
+        {
+            "name": "Monoposto 1 Vicente",
+            "category": "Monoposto1",
+            "author": "Vicente Marti",
+            "license": "Free Art License",
+            "url": "http://localhost:8000/mp1-vicente.zip",
+            "hashtype": "sha256",
+            "hash": "9764285b0c2a4f779b409da3f9680fd6dde33939c60a18dbf65ecd10501a3b57",
+            "size": "20730105",
+            "thumbnail": "http://localhost:8000/mp1-vicente.jpg",
+            "directory": "mp1-vicente",
+            "revision": "2"
+        },
+        {
+            "name": "Tridenti",
+            "category": "36gp",
+            "author": "Andrew Sumner",
+            "license": "Free Art License",
+            "url": "http://localhost:8000/36gp-tridenti-6c34.zip",
+            "hashtype": "sha256",
+            "hash": "ece72e25d721d01c84b8c975a405197511c6358f15e61c9373b505b3a03114e4",
+            "size": "6041989",
+            "thumbnail": "http://localhost:8000/36gp-tridenti-6c34.jpg",
+            "directory": "36gp-tridenti-6c34",
+            "revision": "0"
+        }
+    ],
+    "tracks": [
+        {
+            "name": "Longjour",
+            "category": "road",
+            "author": "Leillo",
+            "license": "Free Art License",
+            "url": "http://localhost:8000/longjour.zip",
+            "hash": "6c9b59ba754358c6f2bbdc51f729a02a80c019846ff2121e580ce769557d170c",
+            "hashtype": "sha256",
+            "size": "105861293",
+            "thumbnail": "http://localhost:8000/longjour.png",
+            "directory": "longjour",
+            "revision": "0"
+        },
+        {
+            "name": "A-Speedway",
+            "category": "speedway",
+            "author": "Eric Espie",
+            "license": "Free Art License",
+            "url": "http://localhost:8000/a-speedway.zip",
+            "hash": "7875b1ad67750aaeceba3431d468c6d4770d4bc72963953b3a3c86162e212e17",
+            "hashtype": "sha256",
+            "size": "483297",
+            "thumbnail": "http://localhost:8000/a-speedway.png",
+            "directory": "a-speedway",
+            "revision": "0"
+        }
+    ],
+    "drivers": [
+        {
+            "name": "Ren Suzuki",
+            "category": "dandroid",
+            "author": "?",
+            "license": "Free Art License",
+            "url": "http://localhost:8000/ren-suzuki.zip",
+            "hash": "458128211a8f7215060b54b8ebf953ed8692181aed69a47c9280f20730f67665",
+            "hashtype": "sha256",
+            "size": "668",
+            "thumbnail": "http://localhost:8000/logo.png",
+            "directory": "ren-suzuki",
+            "revision": "3"
+        }
+    ]
+}

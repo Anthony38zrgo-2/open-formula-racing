@@ -1,0 +1,149 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://forge.a-lec.org/speed-dreams/speed-dreams-code/raw/branch/main/doc/download-manager/assets.schema.json",
+    "title": "Asset Database",
+    "description": "A list of downloadable assets for Speed Dreams.",
+    "type": "object",
+    "properties": {
+        "cars": {
+            "type": "array",
+            "items": {
+                "$ref": "#/$defs/car"
+            }
+        },
+        "tracks": {
+            "type": "array",
+            "items": {
+                "$ref": "#/$defs/track"
+            }
+        },
+        "drivers": {
+            "type": "array",
+            "items": {
+                "$ref": "#/$defs/driver"
+            }
+        }
+    },
+    "$defs": {
+        "url": {
+            "type": "string",
+            "pattern": "^(http(s)*:\\/\\/)[-a-zA-Z0-9@:%._\\+~#=]{2,256}(\\.[a-z]{2,6})*\\b([-a-zA-Z0-9@:%_\\+.~#?&//=]*)$"
+        },
+        "uint": {
+            "title": "Unsigned integer",
+            "description": "A positive (or zero) integer, expressed as a string.",
+            "type": "string",
+            "pattern": "^\\d+$"
+        },
+        "car": {
+            "$ref": "#/$defs/asset"
+        },
+        "driver": {
+            "$ref": "#/$defs/asset",
+            "type": "object",
+            "required": [
+                "category"
+            ],
+            "properties": {
+                "category": {
+                    "description": "The category is used to determine the sub directory in which the track is stored.",
+                    "type": "string",
+                    "not": {
+                        "enum": [
+                            "human",
+                            "networkhuman"
+                        ]
+                    }
+                }
+            }
+        },
+        "track": {
+            "$ref": "#/$defs/asset",
+            "type": "object",
+            "required": [
+                "category"
+            ],
+            "properties": {
+                "category": {
+                    "description": "The category is used to determine the sub directory in which the track is stored.",
+                    "type": "string",
+                    "enum": [
+                        "circuit",
+                        "development",
+                        "dirt",
+                        "gprix",
+                        "karting",
+                        "road",
+                        "speedway"
+                    ]
+                }
+            }
+        },
+        "asset": {
+            "type": "object",
+            "required": [
+                "author",
+                "directory",
+                "hash",
+                "hashtype",
+                "license",
+                "name",
+                "revision",
+                "size",
+                "thumbnail",
+                "url"
+            ],
+            "properties": {
+                "author": {
+                    "description": "The author(s).",
+                    "type": "string"
+                },
+                "category": {
+                    "description": "Which category an asset belongs to.",
+                    "type": "string"
+                },
+                "directory": {
+                    "description": "The directory name where the asset shall be stored. The exact directory structure will be determined by Speed Dreams. The directory name should be unique for each asset among each category.",
+                    "type": "string",
+                    "pattern": "^[aA-zZ|\\-|_|0-9]+$"
+                },
+                "hash": {
+                    "description": "Resulting hash as calculated by the hash function defined by hashtype.",
+                    "type": "string",
+                    "pattern": "^[aA-fF|0-9]+$"
+                },
+                "hashtype": {
+                    "description": "The hash function used to calculate the hash.",
+                    "type": "string",
+                    "enum": [
+                        "sha256"
+                    ]
+                },
+                "license": {
+                    "description": "The license covering the asset. Speed Dreams shall not perform any specific actions based on the value of this string.",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "Human-readable name for an asset.",
+                    "type": "string"
+                },
+                "revision": {
+                    "description": "The revision of an asset. This value is used as a basic mechanism to inform users about updates.",
+                    "$ref": "#/$defs/uint"
+                },
+                "size": {
+                    "description": "The size of the asset in bytes.",
+                    "$ref": "#/$defs/uint"
+                },
+                "thumbnail": {
+                    "description": "The URL to a thumbnail image. The URL must point to an image file with an extension known to the GfTexReadImageFromFile function.",
+                    "$ref": "#/$defs/url"
+                },
+                "url": {
+                    "description": "The URL to download the asset. The URL must point to a ZIP file.",
+                    "$ref": "#/$defs/url"
+                }
+            }
+        }
+    }
+}

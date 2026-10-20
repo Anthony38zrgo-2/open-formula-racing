@@ -1,0 +1,6 @@
+[submodule "data"]
+	path = speed-dreams-data
+	url = https://forge.a-lec.org/speed-dreams/speed-dreams-data.git
+[submodule "freesolid"]
+	path = freesolid
+	url = https://forge.a-lec.org/speed-dreams/freesolid.git

@@ -1,0 +1,9 @@
+.vscode/
+/build*/
+/packaging/3rdParty-devel/build*/
+/.cache/
+/distribution/
+/implementation/candidates/
+/implementation/initial-settings/
+__pycache__/
+*.pyc

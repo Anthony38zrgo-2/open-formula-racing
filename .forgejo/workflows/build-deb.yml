@@ -1,0 +1,45 @@
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        image: [
+          debian-sd:stable,
+          ubuntu-sd:jammy,
+        ]
+    runs-on: docker
+    container:
+      image: forge.a-lec.org/speed-dreams/${{ matrix.image }}
+    steps:
+      - name: Clone repository
+        run: forgejo-clone /src
+      - name: Update FreeSOLID submodule
+        run: git submodule update --init freesolid
+        working-directory: /src
+      - name: Configure project
+        working-directory: /src
+        run: cmake -B build -DSD_ASSUME_DATADIR=1 -DCMAKE_INSTALL_PREFIX=/usr
+      - name: Build project
+        run: cmake --build build -j$(nproc --all)
+        working-directory: /src
+      - name: Build Debian package
+        run: cpack -G DEB
+        working-directory: /src/build
+      - name: Upload Debian package
+        run: |
+          if [ $USERNAME ]
+          then
+            upload-artifact -d ${{ matrix.image }} *.deb
+          else
+            echo "Skipping due to missing secrets" >&2
+          fi
+        working-directory: /src/build
+        env:
+          URL: ${{ vars.STORE_URL }}
+          USERNAME: ${{ secrets.STORE_USERNAME }}
+          PASSWORD: ${{ secrets.STORE_PASSWORD }}

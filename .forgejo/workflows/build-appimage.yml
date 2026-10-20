@@ -1,0 +1,50 @@
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*.*.*'
+  pull_request:
+
+jobs:
+  build-appimage:
+    runs-on: docker
+    container:
+      image: forge.a-lec.org/speed-dreams/ubuntu-appimage:focal
+    steps:
+      - name: Clone repository recursively
+        run: forgejo-clone -r src
+      - name: Configure project
+        working-directory: src
+        run: cmake -B build -DCMAKE_INSTALL_PREFIX=/usr -DOPTION_TRACKEDITOR=OFF
+      - name: Build project
+        run: cmake --build build -j$(nproc --all)
+        working-directory: src
+      - name: Install project into DESTDIR
+        run: make install DESTDIR=/AppDir
+        working-directory: src/build
+      - name: Generate AppImageBuilder manifest
+        run: ./gen-builder.sh > /AppImageBuilder.yml
+        working-directory: src/packaging/appimage
+      - name: Copy icon to standard location
+        run: |
+          mkdir -p /AppDir/usr/share/icons
+          cp \
+            /AppDir/usr/share/games/speed-dreams-2/data/icons/icon.png \
+            /AppDir/usr/share/icons/
+      - name: Generate AppImage
+        run: appimage-builder --skip-tests
+        working-directory: /
+      - name: Upload AppImage
+        run: |
+          if [ $USERNAME ]
+          then
+            upload-artifact *.AppImage
+          else
+            echo "Skipping due to missing secrets" >&2
+          fi
+        working-directory: /
+        env:
+          URL: ${{ vars.STORE_URL }}
+          USERNAME: ${{ secrets.STORE_USERNAME }}
+          PASSWORD: ${{ secrets.STORE_PASSWORD }}

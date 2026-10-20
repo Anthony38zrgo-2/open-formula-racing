@@ -1,0 +1,39 @@
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  pull_request:
+    paths:
+      - '/packaging/3rdParty-devel/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: docker
+    container:
+      image: forge.a-lec.org/speed-dreams/ubuntu-i686-w64-mingw32:jammy
+    steps:
+      - name: Clone repository
+        run: forgejo-clone /src
+      - name: Configure third-party libraries
+        run: cmake -B build -DCMAKE_TOOLCHAIN_FILE=i686-w64-mingw32.cmake
+        working-directory: /src/packaging/3rdParty-devel
+      - name: Build third-party libraries
+        run: cmake --build build -j$(nproc --all)
+        working-directory: /src/packaging/3rdParty-devel
+      - name: Archive third-party libraries
+        run: tar -czf 3rdparty-$(git describe --tags).tar.gz 3rdParty/
+        working-directory: /src/packaging/3rdParty-devel/build
+      - name: Upload third-party libraries
+        run: |
+          if [ $USERNAME ]
+          then
+            upload-artifact 3rdparty-$(git describe --tags).tar.gz
+          else
+            echo "Skipping due to missing secrets" >&2
+          fi
+        working-directory: /src/packaging/3rdParty-devel/build
+        env:
+          URL: ${{ vars.STORE_URL }}
+          USERNAME: ${{ secrets.STORE_USERNAME }}
+          PASSWORD: ${{ secrets.STORE_PASSWORD }}

@@ -1,0 +1,10 @@
+*~
+*#
+*.bak
+*.orig
+
+*.xcf*
+*.psd
+*.svg*
+*-src.ac
+*.class

@@ -1,0 +1,36 @@
+#==============================================================================
+#
+#    Generated Script file for creating the the base app bundle
+#    Apple only
+#
+#==============================================================================
+
+# Create the base.app
+
+message(STATUS "Creating @SD_BASE_BUNDLE_NAME@ bundle...")
+
+file(COPY "@CMAKE_INSTALL_PREFIX@/"
+      DESTINATION "@SD_BASE_BUNDLE_NAME@"
+      PATTERN "@SD_DATADIR@/tracks/*" EXCLUDE
+      PATTERN "@SD_DATADIR@/cars/models/*" EXCLUDE)
+
+
+file(GLOB SC_CARS
+   LIST_DIRECTORIES TRUE
+   "@CMAKE_INSTALL_PREFIX@/@SD_DATADIR@/cars/models/sc-*")
+
+foreach(_CAR ${SC_CARS})
+   #message(STATUS "_CAR = ${_CAR}")
+   file(COPY "${_CAR}"
+   DESTINATION "@SD_BASE_BUNDLE_NAME@/@SD_DATADIR@/cars/models")
+endforeach()
+
+file(GLOB SC_TRACKS
+      LIST_DIRECTORIES TRUE
+      "@CMAKE_INSTALL_PREFIX@/@SD_DATADIR@/tracks/circuit/espie")
+
+foreach(_TRACK ${SC_TRACKS})
+   #message(STATUS "_TRACK = ${_TRACK}")
+   file(COPY "${_TRACK}"
+      DESTINATION "@SD_BASE_BUNDLE_NAME@/@SD_DATADIR@/tracks/circuit")
+endforeach()
