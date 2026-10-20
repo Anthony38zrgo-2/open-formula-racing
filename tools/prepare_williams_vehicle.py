@@ -137,9 +137,13 @@ def main():
     conversion_reports = []
     carbon_material_overrides = {'fw19_cf.tGA:fw19_cf.tga': {
         'texture': asset_directory / 'car/source/textures/Carbon_Fiber_diffuse.jpg', 'color_factor': [0.25, 0.25, 0.25, 1]}}
+    carbon_appearance = {name: {'diffuse_color': [0.25, 0.25, 0.25, 1],
+        'specular_color': [0.04, 0.04, 0.04], 'shininess': 32} for name in
+        ['fw19_cf.tGA:fw19_cf.tga', 'UniformBlenderKitCarbonFiber.006', 'UniformBlenderKitCarbonFiber.004']}
     conversion_reports.append(export_scene(asset_directory / 'car/runtime/williams_fw19_hockenheim_1997_chassis.glb',
         destination_directory / (identifier + '.acc'), transformation,
-        material_texture_overrides=carbon_material_overrides, bake_untextured_colors=True))
+        material_texture_overrides=carbon_material_overrides, bake_untextured_colors=True,
+        material_appearance_overrides=carbon_appearance))
     conversion_reports.append(export_scene(asset_directory / 'driver/runtime/jacques_villeneuve_williams_fw19_1997_driver.glb', destination_directory / 'static_driver.acc', transformation))
     model_prefixes = {}
     for axle_name in ['front', 'rear']:
@@ -163,6 +167,7 @@ def main():
         if existing is not None:
             document.remove(existing)
     graphics = find_section(document, 'Graphic Objects')
+    set_text(graphics, 'material appearance shader', 'car_material_appearance.frag')
     ranges = find_section(graphics, 'Ranges')
     first_range = find_section(ranges, '1')
     set_text(first_range, 'car', identifier + '.acc')

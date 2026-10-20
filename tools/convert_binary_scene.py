@@ -115,7 +115,7 @@ class BinaryScene:
         return filenames
 
 
-def export_scene(source_path, destination_path, transformation, excluded_names=(), material_texture_overrides=None, bake_untextured_colors=False):
+def export_scene(source_path, destination_path, transformation, excluded_names=(), material_texture_overrides=None, bake_untextured_colors=False, material_appearance_overrides=None):
     scene = BinaryScene(source_path)
     destination_path = pathlib.Path(destination_path)
     destination_path.parent.mkdir(parents=True, exist_ok=True)
@@ -154,8 +154,13 @@ def export_scene(source_path, destination_path, transformation, excluded_names=(
         for material_index, material in enumerate(materials + [{}]):
             color = material.get('pbrMetallicRoughness', {}).get('baseColorFactor', [1, 1, 1, 1])
             emission = material.get('emissiveFactor', [0, 0, 0])
+            appearance = (material_appearance_overrides or {}).get(material.get('name'), {})
+            color = appearance.get('diffuse_color', color)
+            specular = appearance.get('specular_color', [0.08, 0.08, 0.08])
+            shininess = appearance.get('shininess', 32)
+            material_name = ('formula_carbon_' if appearance else 'material_') + str(material_index)
             ambient = [0.4 * component for component in color[:3]] if bake_untextured_colors else [0.4, 0.4, 0.4]
-            output.write(f'MATERIAL "material_{material_index}" rgb {color[0]} {color[1]} {color[2]} amb {ambient[0]} {ambient[1]} {ambient[2]} emis {emission[0]} {emission[1]} {emission[2]} spec 0.08 0.08 0.08 shi 32 trans {1-color[3]}\n')
+            output.write(f'MATERIAL "{material_name}" rgb {color[0]} {color[1]} {color[2]} amb {ambient[0]} {ambient[1]} {ambient[2]} emis {emission[0]} {emission[1]} {emission[2]} spec {specular[0]} {specular[1]} {specular[2]} shi {shininess} trans {1-color[3]}\n')
         output.write(f'OBJECT world\nkids {len(primitives)}\n')
         for name, material_index, positions, indices, texture_coordinates in primitives:
             positions = (numpy.column_stack((positions, numpy.ones(len(positions)))) @ transformation.T)[:, :3]

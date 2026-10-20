@@ -17,7 +17,14 @@ def main():
     arguments = parser.parse_args()
     scene = BinaryScene(arguments.source)
     export_path = pathlib.Path(arguments.export)
-    exported_groups = export_path.read_text().split('OBJECT poly\n')[1:]
+    exported_document = export_path.read_text()
+    exported_groups = exported_document.split('OBJECT poly\n')[1:]
+    carbon_appearance_materials = re.findall(r'^MATERIAL "formula_carbon_\d+" rgb ([^\n]+)$', exported_document, re.MULTILINE)
+    if len(carbon_appearance_materials) != 3:
+        raise ValueError('Expected three explicitly shaded carbon materials')
+    for appearance in carbon_appearance_materials:
+        if not appearance.startswith('0.25 0.25 0.25 amb ') or ' spec 0.04 0.04 0.04 shi 32 trans 0' not in appearance:
+            raise ValueError('Carbon diffuse or specular appearance differs from the calibrated export')
     source_primitives = []
     for node_index in scene.world_transforms:
         node = scene.document['nodes'][node_index]
@@ -60,6 +67,7 @@ def main():
     report = {'primitive_count': len(exported_groups), 'secondary_coordinate_groups': verified_secondary_coordinate_groups,
               'restored_carbon_groups': verified_carbon_groups, 'textures': texture_records,
               'all_texture_files_present': True, 'all_material_coordinate_channels_preserved': True,
+              'carbon_appearance_materials': len(carbon_appearance_materials),
               'runtime_visual_validated': False}
     if verified_secondary_coordinate_groups == 0 or verified_carbon_groups == 0:
         raise ValueError('Expected Williams carbon material groups were not tested')

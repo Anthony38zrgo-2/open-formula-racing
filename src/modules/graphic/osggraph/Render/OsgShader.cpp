@@ -39,14 +39,17 @@ SDCarShader::SDCarShader(osg::Node *car, SDCar *c)
     program = new osg::Program;
     program->addShader(osgDB::readShaderFile(osg::Shader::VERTEX,
         osgDB::findDataFile(TmpPath + "data/shaders/car.vert")));
+    const std::string materialAppearanceShader = GfParmGetStr(c->getCar()->_carHandle,
+        "Graphic Objects", "material appearance shader", "car.frag");
     program->addShader(osgDB::readShaderFile(osg::Shader::FRAGMENT,
-        osgDB::findDataFile(TmpPath + "data/shaders/car.frag")));
+        osgDB::findDataFile(TmpPath + "data/shaders/" + materialAppearanceShader)));
 
     //pCar= dynamic_cast<osg::Group *> (car);
     pCar = car;
     this->pSdCar = c;
     stateset = pCar->getOrCreateStateSet();
     stateset->setAttributeAndModes(program);
+    stateset->addUniform(new osg::Uniform("materialAppearanceEnabled", false));
 
     diffuseMap = new osg::Uniform("diffusemap", 0 );
     stateset->addUniform(diffuseMap);

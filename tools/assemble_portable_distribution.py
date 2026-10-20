@@ -18,6 +18,10 @@ def main():
     distribution = project / 'distribution'
     data_directory = distribution / 'share/games/speed-dreams-2'
     binaries_directory = distribution / 'bin'
+    shader_directory = data_directory / 'data/shaders'
+    shader_directory.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(project / 'implementation/shaders/car_material_appearance.frag',
+        shader_directory / 'car_material_appearance.frag')
     shutil.copytree(project / 'implementation/candidates/fuji-seventy-six-seventy-seven', data_directory / 'tracks/circuit/fuji-seventy-six-seventy-seven', dirs_exist_ok=True)
     shutil.copytree(project / 'implementation/candidates/williams-nineteen-ninety-seven', data_directory / 'cars/models/williams-nineteen-ninety-seven', dirs_exist_ok=True)
     shutil.copytree(project / 'implementation/initial-settings', distribution / 'initial-settings', dirs_exist_ok=True)

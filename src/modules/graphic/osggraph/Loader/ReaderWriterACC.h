@@ -35,6 +35,7 @@
 #include <osg/Light>
 #include <osg/LightSource>
 #include <osg/Material>
+#include <osg/Uniform>
 #include <osg/Math>
 #include <osg/Texture2D>
 #include <osg/TexEnv>
@@ -128,6 +129,14 @@ public:
     void toStateSet(osg::StateSet* stateSet) const
     {
         stateSet->setAttribute(mMaterial.get());
+        if (mMaterial->getName().find("formula_carbon_") == 0)
+        {
+            stateSet->addUniform(new osg::Uniform("materialAppearanceEnabled", true));
+            stateSet->addUniform(new osg::Uniform("materialDiffuseColor", mMaterial->getDiffuse(osg::Material::FRONT)));
+            stateSet->addUniform(new osg::Uniform("materialSpecularColor", mMaterial->getSpecular(osg::Material::FRONT)));
+            stateSet->addUniform(new osg::Uniform("materialShininess", mMaterial->getShininess(osg::Material::FRONT)));
+            stateSet->addUniform(new osg::Uniform("materialReflectionWeight", 0.03f));
+        }
         if (mTranslucent)
             setTranslucent(stateSet);
     }
