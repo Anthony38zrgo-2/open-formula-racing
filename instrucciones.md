@@ -1,175 +1,217 @@
-# Handoff: calibración física del Williams 1997 en Speed Dreams
+# Handoff: nuevo modelo de neumáticos para Speed Dreams / simuv5
 
 Fecha: 20 de octubre de 2026.
+Destino: D:/open-formula.
+Base inspeccionada: rama codex/initial-port, HEAD 02d93a2a0422c7efd3851ec387cbf24951d7cb9f; árbol limpio antes de esta documentación.
 
-## Continuación implementada
+## 1. Mandato, resultado esperado y límites
 
-Estado actual antes del commit: diferencial con precarga independiente de 10 Nm, aceleración 0,30 y retención 0,70; presión solicitada de 160 psi guardada como presión absoluta por el motor. La comparación con Rust confirma diferencias de unidades, carcasa y respuesta combinada todavía sin resolver; ver `implementation/reports/williams_tire_model_comparison.md`. Los apartados anteriores de seguimiento conservan la secuencia de ajustes, no todos los valores actuales.
+Añadir un modelo nativo de neumáticos que incorpore las mejores propiedades verificadas del modelo Rust de Formula90s, adaptadas a los contactos, suspensión, transmisión, unidades y ciclo de actualización de simuv5. Incluye fuerzas, carcasa, presión, térmica y desgaste. No basta con copiar mu, stiffness o unas curvas.
 
-Actualización aerodinámica y neumáticos: fondo 40% / alas 60% en la condición de referencia, con carga máxima total y centro de presión longitudinal conservados. Se corrige la exportación de caída de agarre y posición del pico lateral para coincidir con los objetivos del perfil de origen; mu permanece en 2,7. Pruebas nativas pasan, pero conducción y fidelidad histórica siguen pendientes. Ver `implementation/reports/williams_aerodynamics_and_grip.md`.
+Este documento es una especificación para una implementación posterior. Su creación SOLO modifica documentación: no implementa ni activa el modelo, no cambia parámetros físicos, no recompila bibliotecas y no constituye aceptación de conducción. El handoff anterior se conserva en implementation/reports/williams_physics_handoff_before_new_tire_model.md. Los informes anteriores sirven de historial; comprobar siempre el estado instalado y los generadores.
 
-Corrección autorizada tras la auditoría: se corrigieron altura de exportación/centro de gravedad, recorridos de suspensión, equivalencia lineal en rueda mediante relaciones de palanca medidas y reacción nativa de las barras. Ver `implementation/reports/williams_chassis_correction.md` para valores instalados, procedencia y pruebas. La auditoría previa conserva los valores anteriores; no describe ya la configuración candidata actual. La aceptación de vuelco en conducción sigue pendiente.
+El nuevo modelo debe ser seleccionable por vehículo; el modelo legacy sigue siendo el predeterminado de los demás coches. Primera integración y calibración exclusivamente en el Williams/Fuji. La comparación legacy/nuevo debe ser reproducible con idénticos neumáticos, masas, suspensión, superficie, ayudas, estado térmico y entradas. No compensar defectos con dirección, diferencial, alas, altura del centro de gravedad o mu global.
 
-Auditoría posterior de geometría/suspensión: ver `implementation/reports/williams_chassis_suspension_audit.md`. Batalla y trochas coinciden con el perfil; se confirmó un desfase vertical nominal de 50 mm, recorridos de suspensión mal convertidos y riesgos en la equivalencia de amortiguación/reacción de barras. La auditoría no modificó código, configuración física, binarios ni medios; incluye evidencia nativa y un orden de corrección concreto.
+No implementar una dependencia de Godot ni una DLL Rust para resolver esta tarea. Adaptar las ecuaciones y contratos a C++ nativo dentro de simuv5. Revisar procedencia y compatibilidad de licencias antes de trasladar código; conservar atribuciones aplicables en documentación y avisos de licencia. No modificar D:/Formula90s, su BUILD_SOURCE ni sus binarios.
 
-Último ajuste solicitado: refrigeración por velocidad de neumáticos 1,0 → 0,25 y factor de histéresis 1,0 → 1,25 en las cuatro ruedas del Williams; bloqueo de diferencial en retención 0,10 → 0,20, conservando tracción 0,30. Las comparaciones térmicas nativas y la comprobación de duplicación del cierre pasan; todavía no equivalen a aceptación en conducción. Datos y condiciones en `implementation/reports/williams_physics_changes.md`.
+## 2. Hallazgos confirmados y estado que debe preservarse
 
-Seguimiento de materiales y setup: restauración de textura de carbono del chasis, corrección del canal UV del carbono del volante, ala trasera 16° → 17° y diferencial 1.5 WAY con bloqueo suave en retención. Se detectó y corrigió un signo desestabilizador del bloqueo en retención mediante opción exclusiva del Williams. Ver evidencia y límites en `implementation/reports/williams_physics_changes.md`; todavía requiere revisión visual y conducción.
+- simuv5 usa una curva tipo Magic Formula sobre sqrt(sx² + sy²), con reparto vectorial de la fuerza. No equivale a dos curvas puras independientes ni al presupuesto combinado de Rust.
+- El Williams actual tiene mu=2,7, pico lateral aproximadamente 0,115 rad, dynamic friction=88%, elasticity factor=0,86 y stiffness=104,26873608. El 88% es el límite asintótico de la curva nativa: no significa 88% de fuerza para todo deslizamiento posterior al pico.
+- El banco nativo aislado mide mu efectivo aproximadamente 2,32–3,55 según carga/eje, sin penalización térmica ni camber. No demuestra falta de agarre máximo, aceleración del coche completo ni fidelidad histórica. No subir mu por defecto.
+- La variable tireSpringRate se calcula a partir de presión y geometría, pero no tiene consumidores en el solver simuv5 inspeccionado. No afirmar que ese valor ya endurece físicamente el contacto.
+- El modelo térmico actual concentra el neumático en una temperatura global. Su actualización ocurre dentro de SimWheelUpdateForce mediante SimWheelUpdateTire cuando está habilitada.
+- Hay dos rutas de integración que llaman rueda/transmisión en simu.cpp. Toda integración nueva debe cubrir ambas sin duplicar calor, desgaste ni par resistente.
+- El paso físico de referencia del motor es 0,002 s, definido por RCM_MAX_DT_SIMU. Los 120 FPS configurados son de renderizado: no son la frecuencia física ni térmica.
+- Se solicitó literalmente 160 psi para las cuatro ruedas. El generador guarda 1103161,16691 Pa; simuv5 trata ese valor como absoluto en sus ecuaciones. Con 101300 Pa atmosféricos equivale a unos 145,3 psi manométricos. El nuevo modelo no debe reinterpretar ni sustituir silenciosamente ese setup.
+- El perfil Rust Williams hockenheim contiene presiones frías manométricas de 130/120 kPa y referencias calientes de 160/150 kPa delante/detrás. No confundir esos 160 kPa con 160 psi. Esos valores son un perfil de juego, no datos certificados del Goodyear de 1997.
+- Diferencial actual: precarga independiente 10 Nm, power 0,30, coast 0,70, activación 90 Nm. Aero: fondo 40% y alas 60% en la referencia óptima, sin imponer ese porcentaje durante toda la vuelta. Conservar esos ajustes.
+- Conservar materiales, piloto estático, audio autorizado, controles teclado/Xbox, malla de contacto de Fuji, geometría, configuración de suspensión y ventana 1920×1080 con límite 120 FPS.
 
-Seguimiento de controles: se corrigieron la selección de reversa (límite R/N y signo de relación), se aumentó el suavizado del mando con respuesta exponencial de 0,16 segundos y se activó la reducción de recorrido según velocidad. Configuración actual: aplicación/inversión/centrado 1,5/2/3 por segundo y sensibilidad por velocidad 0,018 por m/s. Ver el apartado de seguimiento en `implementation/reports/williams_physics_changes.md`; la aceptación de conducción física continúa pendiente.
+Hipótesis aún no demostradas: rigidez/deformación correctas para el FW19; curva real de fuerzas de sus neumáticos; equilibrio final entre grip mecánico y aero; estabilidad con mando; explicación completa de los vuelcos. No convertirlas en hechos al implementar.
 
-Se aplicó un candidato de dirección, contrato aerodinámico, fondo aproximado y correcciones térmicas con alcance del Williams. El detalle de archivos, pruebas, límites y aceptación pendiente está en `implementation/reports/williams_physics_changes.md`. Las barras y el factor de refrigeración conservan sus valores anteriores. Los cuatro problemas de conducción siguen pendientes de validación completa; no interpretar los resultados de compilación, pruebas nativas o arranque como aceptación física.
+## 3. Fuentes Rust y responsabilidades en el destino
 
-## Objetivo y alcance
+Leer las implementaciones actuales, no copiar comentarios o parámetros de revisiones antiguas:
 
-Investigar y resolver cuatro problemas del Williams FW19 en Fuji76-77: dirección excesivamente brusca con mando, vuelcos durante cambios rápidos de dirección en asfalto liso, enfriamiento demasiado rápido de neumáticos y velocidad punta baja. Resolver causas y validar el comportamiento del coche completo; no aceptar una mejora visual, una compilación o un cálculo aislado como prueba de conducción estable.
-
-Este handoff es documentación. Su creación no modifica código, configuraciones físicas ni ejecutables. Las propuestas numéricas siguientes NO están aplicadas ni aprobadas como calibración definitiva.
-
-## Estado del proyecto y restricciones
-
-- Proyecto destino: `D:\open-formula`. El usuario autorizó posteriormente inicializar Git y realizar el primer commit. Rama inicial: `codex/initial-port`. Verificar rama, HEAD y cambios pendientes antes de continuar; preservar cambios ajenos. La autorización del commit no implica aprobación de la calibración física ni de los problemas pendientes.
-- Origen declarado por el usuario: https://github.com/brhndursun/speed-dreams-simuv5. La correspondencia exacta del árbol local con un commit de ese origen no está demostrada.
-- Fuente de contenido: `D:\Formula90s`, rama `main-clean`, HEAD observado `f3efcf246c2a2abf62477037ed0243f2f9a93a9b`. Tiene cambios ajenos preexistentes. Inventariar su estado antes de cualquier intervención; no modificarlo para calibrar el port.
-- Preservar la sesión Williams/Fuji, las texturas y el recorte alfa, el piloto estático oculto en cabina, los controles simultáneos de teclado/Xbox y la desactivación de penalizaciones por salida de pista.
-- Único audio autorizado: `D:\Formula90s\game\sounds\banks\v10-v2-bank\engine_powered_maximum_loop.wav`. No ampliar el banco.
-- No cambiar coches o configuraciones compartidas para corregir este Williams sin demostrar que existe un defecto general del motor. Preferir parámetros y funciones con alcance explícito.
-- Cualquier trabajo sobre Godot debe cumplir el AGENTS.md de Formula90s y usar su MCP obligatorio. Este port funciona con Speed Dreams/simuv5, sin depender del solver Rust ni de Godot.
-
-## Archivos y responsabilidades
-
-| Sistema | Archivos principales |
+| Referencia Rust, solo lectura | Propiedad a extraer |
 | --- | --- |
-| Generación del vehículo | `D:\open-formula\tools\prepare_williams_vehicle.py` |
-| Configuración candidata | `D:\open-formula\implementation\candidates\williams-nineteen-ninety-seven\williams-nineteen-ninety-seven.xml` |
-| Configuración distribuida | `D:\open-formula\distribution\share\games\speed-dreams-2\cars\models\williams-nineteen-ninety-seven\williams-nineteen-ninety-seven.xml` |
-| Entrada simultánea y curva del mando | `D:\open-formula\src\libs\robottools\formula_gear_controls.cpp` y `.h` |
-| Integración del conductor | `D:\open-formula\src\libs\robottools\rthumandriver.cpp` |
-| Dirección física y límite de velocidad de cremallera | `D:\open-formula\src\modules\simu\simuv5\steer.cpp` |
-| Barras, fuerzas y dinámica de carrocería | `D:\open-formula\src\modules\simu\simuv5\axle.cpp`, `susp.cpp`, `wheel.cpp`, `car.cpp` |
-| Aerodinámica, motor y transmisión | `D:\open-formula\src\modules\simu\simuv5\aero.cpp`, `engine.cpp`, `transmission.cpp`, `atmosphere.cpp` |
-| Apoyo sobre terreno original | `D:\open-formula\src\modules\simu\simuv5\track_ground_mesh.cpp` y `.h` |
-| Colisiones con objetos | `D:\open-formula\src\modules\simu\simuv5\collide.cpp` |
-| Preparación de Fuji | `D:\open-formula\tools\prepare_fuji_track.py`, `align_fuji_visual.py`, `prepare_fuji_object_collisions.py` |
-| Empaquetado y arranque | `D:\open-formula\tools\assemble_portable_distribution.py`, `open_formula_launcher.cpp` |
-| Estado y evidencia | `D:\open-formula\implementation\migration_status.json`, `D:\open-formula-migration-evidence` |
+| D:/Formula90s/game/crates/vehicle-physics-engine/src/tire.rs | Curvas puras, presupuesto combinado, relajación, recuperación, camber y par autoalineante |
+| D:/Formula90s/game/crates/vehicle-physics-engine/src/wheel_mechanics.rs | Deformación, radio efectivo, contacto y sensibilidad a carga |
+| D:/Formula90s/game/crates/vehicle-physics-engine/src/tire_thermals.rs | Banda en tres zonas, carcasa, gas, presión y modificadores mecánicos |
+| D:/Formula90s/game/crates/vehicle-physics-engine/src/tire_wear.rs | Desgaste por zona y relación entre energía, temperatura y pérdida de goma |
+| D:/Formula90s/game/crates/vehicle-physics-engine/src/vehicle_configuration/tires/ | Esquema, conversión y validación de parámetros |
+| D:/Formula90s/game/data/vehicles/f1_1997/williams/profiles/hockenheim/tires.json | Perfil de referencia; separar valores de juego de evidencia histórica |
 
-Editar el generador además de su salida cuando se cambien parámetros persistentes. Un ajuste directo exclusivamente en `distribution` se perderá al regenerar. Revisar también posibles setups guardados en `distribution\user-settings` que puedan alterar los parámetros efectivos.
+Rust dispone de Standard y backends simplificados. Standard conserva memoria de deslizamiento, migración de picos y rampa de contacto; los simplificados eliminan parte de esos estados. La arquitectura destino debe partir de los contratos físicos completos y justificar cualquier simplificación con pruebas, no presentar todos los backends Rust como idénticos.
 
-## Problema 1: mando sin filtrado temporal suficiente
+| Archivo destino existente | Responsabilidad concreta |
+| --- | --- |
+| src/modules/simu/simuv5/wheel.cpp y wheel.h | Adaptador de rueda, selección, estado e intercambio de fuerzas con el motor |
+| src/modules/simu/simuv5/simu.cpp | Orden de actualización en las dos rutas, subpasos y publicación final |
+| src/modules/simu/simuv5/susp.cpp, axle.cpp y car.cpp | Auditar compatibilidad del contacto vertical y de las reacciones; cambiar solo lo necesario y medido |
+| src/modules/simu/simuv5/transmission.cpp y differential.cpp | Consumidores del par de reacción y velocidades; conservar su modelo, integrar el contrato de rueda |
+| src/modules/simu/simuv5/atmosphere.cpp | Densidad, presión y temperatura ambiental efectivas |
+| src/modules/simu/simuv5/track_ground_mesh.cpp y .h | Contacto, normal y propiedades de superficie existentes |
+| src/interfaces/car.h y consumidor HUD correspondiente | Publicar temperatura, presión, desgaste y par autoalineante con unidades coherentes; revisar compatibilidad antes de ampliar la interfaz |
+| src/modules/simu/simuv5/CMakeLists.txt y CMakeLists.txt raíz | Compilar módulos nuevos y registrar bancos de prueba |
+| tools/prepare_williams_vehicle.py | Única generación persistente del selector y parámetros del Williams |
+| tools/assemble_portable_distribution.py | Copiar configuración candidata y generar manifiesto portable |
+| implementation/migration_status.json e implementation/reports/ | Estado confirmado, límites, procedencia y resultados |
 
-### Confirmado
+Crear módulos internos propuestos tire_force_model.cpp/.h, tire_contact_model.cpp/.h y tire_thermal_model.cpp/.h. Añadir tire_wear_model.cpp/.h si la complejidad lo justifica. Mantener configuración, estado y resultados separados; evitar un wheel.cpp monolítico. Los nombres nuevos deben ser autoexplicativos, sin abreviaturas y sin comentarios de código. No usar nombres abreviados heredados en símbolos nuevos salvo al interactuar con la interfaz existente.
 
-El usuario informa que la dirección cambia demasiado deprisa. En `applyFormulaSteeringControls`, el stick izquierdo pasa por zona muerta y curva de potencia 1,8, pero cualquier objetivo no nulo se asigna inmediatamente a `previous_steering`. El único suavizado temporal propio de este adaptador actúa al volver a cero, a 6,85 unidades/s. Tampoco hay reducción del recorrido del mando en función de la velocidad.
+Auditar antes cómo el motor reserva, pone a cero, copia y libera tWheel/tCar. Si usa memoria C, no introducir contenedores con constructores o punteros propietarios sin adaptar su ciclo de vida. Preferir estado de tamaño fijo por rueda. Reiniciar correctamente al iniciar sesión, entrar en boxes, cambiar compuesto, reiniciar carrera y destruir el vehículo.
 
-No describirlo como ausencia absoluta de todo filtro: sí existen curva estática, zonas muertas y un límite posterior de velocidad de cremallera en `SimSteerUpdate`. Lo que falta en el adaptador es filtrado temporal de entrada y de inversión entre objetivos no nulos. Aún no está demostrado que sea la única causa del vuelco.
+## 4. Contrato de coordenadas, unidades y signos
 
-### Trabajo requerido
+Crear primero una tabla verificable de coordenadas del motor, marco de rueda y normal del terreno. En simuv5 se usa avance X y vertical Z; no trasladar sin conversión el marco Rust (+X derecha, +Y arriba, -Z avance). Confirmar signos con pruebas de cada rueda, marcha atrás y rotación de dirección.
 
-1. Registrar eje bruto, objetivo tras curva, comando filtrado, ángulo real de ruedas y velocidad del coche.
-2. Añadir un filtro independiente de la frecuencia de actualización, con parámetros explícitos para aplicación, inversión y retorno al centro. Evaluar limitador de pendiente y/o filtro exponencial; evitar latencia innecesaria y doble filtrado excesivo con la cremallera.
-3. Investigar una reducción progresiva de sensibilidad o recorrido a alta velocidad. No imponerla como solución física al vuelco ni eliminar el recorrido útil en maniobras lentas.
-4. Mantener RT/LT, A/X para marchas, flechas y A/Z de teclado. Verificar que el filtrado del mando no rompe el comportamiento del teclado.
-5. Configurar parámetros del filtro en un lugar persistente y documentado, con alcance del Williams/perfil de controles.
+Unidades internas: metros, segundos, kilogramos, radianes, rad/s, newtons, N·m, joules, watts, pascales absolutos y kelvin. Grados, Celsius, psi y presión manométrica se convierten solamente en fronteras explícitas.
 
-### Aceptación
+Presión: absolute_pressure = gauge_pressure + ambient_absolute_pressure. La presión usada en gas ideal debe ser absoluta. Definir en configuración el tipo y unidad del valor, temperatura de referencia y volumen/gas de referencia; mostrar en HUD qué convención usa. No añadir o restar la atmósfera dos veces.
 
-- Ensayar escalón, barrido, inversión completa, liberación, ruido alrededor del centro y desconexión del mando.
-- Repetir con distintos pasos temporales y comprobar tiempos de respuesta equivalentes.
-- Registrar que una inversión del stick produce una transición continua del comando y comprobar la respuesta efectiva de las ruedas.
-- Probar mando Xbox físico; el controlador virtual no sustituye esta prueba.
+Si falta la convención en un coche legacy, conservar su comportamiento. Para el nuevo selector exigir configuración inequívoca; un valor fuera del dominio calibrado genera diagnóstico, no una conversión oculta ni una supuesta presión normal. Registrar los 160 psi como caso extremo de robustez, no como referencia de calibración. La selección de una presión de conducción distinta exige una decisión explícita posterior del usuario.
 
-## Problema 2: vuelcos al transferir carga
+Definir el signo de slip longitudinal desde la velocidad relativa en el contacto, una referencia de velocidad regularizada a baja velocidad y signos correctos en reversa. La fuerza sobre el coche y el par sobre la rueda deben formar un par acción/reacción compatible con el convenio de spin del diferencial.
 
-### Confirmado
+## 5. Modelo de fuerzas obligatorio
 
-El usuario indica que vuelca al dar un volantazo incluso en asfalto liso. Las barras iniciales estaban en cero. El ajuste actualmente instalado es 100.000 N/m delante y 80.000 N/m detrás, y el usuario lo considera insuficiente.
+1. Curvas puras independientes: pico lateral en ángulo, pico longitudinal en slip ratio, caída progresiva y meseta por eje. Partir de los objetivos 0,115 rad, 0,12 y caída 0,88 del perfil; no convertirlos en datos reales certificados.
+2. Presupuesto combinado único: normalizar las demandas por capacidades lateral/longitudinal y proyectar sobre una elipse continua. La fuerza publicada nunca excede ese presupuesto. La frenada consume capacidad, no multiplica mu.
+3. Mantener el ratio longitudinal/lateral de superficie como parámetro independiente; el Road Rust vale 0,95. Separar fricción del compuesto y multiplicador de pista: no aplicar dos veces el 2,7 que el port trasladó desde el perfil de superficie.
+4. Sensibilidad a carga con referencia física por rueda y disminución de mu al aumentar carga. Implementar curvas continuas, con fuerza tendiendo a cero con carga cero y sin salto en la referencia. Comparar la ley Rust con la legacy, no copiar ambos multiplicadores simultáneamente.
+5. Camber: carga lateral por inclinación y redistribución de contacto térmico, con espejo correcto izquierda/derecha. A igual camber simétrico las contribuciones laterales en recta deben cancelarse.
+6. Radio efectivo, deformación y cobertura/contacto deben proceder del modelo mecánico, no de constantes duplicadas. La temperatura y presión afectan la capacidad y respuesta mediante modificadores limitados y con significado físico.
+7. Par autoalineante: trail neumático dependiente del estado del contacto y saturación. Su magnitud debe caer al saturarse; no añadir un momento artificial para estabilizar el chasis ni duplicar el feedback existente.
+8. Transitorios: relajación por distancia con coeficiente 1-exp(-speed*duration/length), tiempo mínimo si está justificado, rampa de contacto y memoria de pérdida/recuperación separadas. Probar una versión sin relajación frente a otra con ella antes de fijar valores; evitar doble filtrado con FLOAT_RELAXATION2 del legacy y con controles.
+9. Migración de picos con deslizamiento combinado: incorporar la formulación Rust solamente si los ensayos demuestran continuidad, monotonicidad de la demanda y ninguna ganancia de capacidad oculta. Debe poder aislarse en el banco.
+10. Fricción en reposo/baja velocidad: resolver o regularizar de forma disipativa. No generar drift, yaw creciente o autoaceleración; tampoco congelar artificialmente una rueda que debería girar por par aplicado.
 
-Las categorías MP1/92MP1 incluidas en `speed-dreams-data\data\cars\categories` usan 2.000 lbs/in por eje, aproximadamente 350.254 N/m. En esta implementación `SimAxleUpdate` calcula la fuerza de barra como rigidez por diferencia de recorrido de suspensión. No aplicar automáticamente otro multiplicador por el bellcrank declarado de la barra.
+Publicar una sola pareja de fuerzas de tracción y su par de reacción. Resistencia a la rodadura se contabiliza una vez; determinar si el motor existente la aplica como fuerza, par o ambas antes de integrar el nuevo modelo. No reutilizar simultáneamente el resultado legacy.
 
-### Hipótesis pendientes
+## 6. Contacto radial y adaptación a suspensión nativa
 
-- Entrada de dirección demasiado rápida o excesiva para la velocidad.
-- Transferencia de carga, contacto de ruedas, signos o unidades de fuerzas, amortiguación, inercias o altura efectiva del centro de gravedad.
-- Agarre lateral no calibrado: el multiplicador 2,7 se copió del modelo original a otro modelo de neumático; no implica la misma adherencia efectiva. La categoría nativa 92MP1 usa 1,5 como referencia de configuración, no como valor que deba copiarse sin pruebas.
-- Aero incompleta y posible interacción con el muestreo del terreno o con colisiones invisibles. Aislar el caso sobre suelo plano antes de atribuirlo a las barras.
+Antes de añadir un muelle, dibujar el balance de masas, resortes y fuerzas existente entre terreno, rueda y chasis. Medir contacto en equilibrio y durante un escalón; no asumir que la variable tireSpringRate ya resuelve esa dinámica.
 
-### Trabajo y aceptación
+Implementar una carcasa radial con rigidez y amortiguación explícitas por eje, deformación no negativa, recorrido físico finito y radio efectivo. La presión caliente modifica rigidez; derivar amortiguación para conservar aproximadamente la razón de amortiguamiento. Usar límites de protección documentados y detectar cuándo se alcanzan; no usarlos para esconder inestabilidad.
 
-Capturar roll, velocidad angular de roll, aceleración lateral, ángulo de dirección, carga/contacto y recorrido de cada rueda, fuerza de cada barra y normal/altura del suelo. Comparar un escenario plano controlado con Fuji. Verificar que las barras ejercen un momento restaurador con signos correctos y que no aparece energía artificial.
+Adaptar la carcasa como elemento en serie con la suspensión o mediante una formulación equivalente estable, demostrando las reacciones y masas efectivas. No sumar dos muelles sobre la misma penetración ni aplicar la carga normal completa dos veces. No crear otro rigid body o duplicar la masa no suspendida del motor.
 
-Evaluar, como candidato y no como cura demostrada, 350.000 N/m delante y 280.000 detrás: multiplica ambas barras por 3,5 y conserva el reparto actual. Comparar con el ajuste vigente y variaciones moderadas; no seguir multiplicando rigidez a ciegas. Una barra más rígida puede descargar antes la rueda interior y empeorar respuesta sobre pianos.
+La fuerza normal que alimenta fricción, calefacción y desgaste debe ser la misma reacción mecánica aceptada en el subpaso. Separar geometría muestreada, deformación de goma y recorrido de suspensión. En vuelo: fuerza de contacto y calentamiento por suelo cero, giro libre coherente, intercambio térmico con aire activo.
 
-Aceptar solo tras maniobras repetidas y reproducibles de cambio de carril/slalom a velocidades crecientes, sin vuelcos espurios en asfalto liso, sin cargas imposibles ni valores no finitos, y con comprobación posterior de pianos/escapatorias. Declarar las condiciones ensayadas; no prometer que el coche sea físicamente imposible de volcar.
+Conservar la malla original de Fuji y las normales de contacto. Evaluar pendientes, bordillos y contacto parcial en el marco del suelo, sin sustituir las alturas por un plano mundial. Definir qué hace el modelo cuando falta una muestra válida de terreno.
 
-## Problema 3: enfriamiento rápido de neumáticos
+## 7. Modelo térmico obligatorio
 
-### Confirmado en configuración y ecuaciones
+Estado por rueda: temperatura interior/central/exterior de banda, temperatura de carcasa, temperatura del gas, presión absoluta, desgaste por zona y cantidades de energía acumuladas. Cada nodo tiene una capacidad térmica positiva explícita.
 
-Se heredaron parámetros térmicos del Cavallo: temperatura inicial 30 °C, óptima 80 °C, `tire speed cooling factor=1.0`, coeficientes genéricos de calentamiento y masa de llanta predeterminada de 7 kg. No constituyen una calibración del neumático F1 1997.
+Red de intercambios: entre zonas de banda; banda-carcasa; carcasa-gas; banda-pista cuando hay contacto; banda-aire y carcasa-aire; intercambio adicional solo si existe una fuente definida. No inventar temperatura de pista a partir del aire sin identificarlo como fallback.
 
-En `SimWheelUpdateTire`, la pérdida convectiva se multiplica por `1 + 1.5 * tireSpeedCoolFactor`: actualmente 2,5. El pequeño `tire cooling factor=0.000075` actúa en otro término; reducir únicamente ese valor no corrige la pérdida dominante a velocidad alta.
+Para cada arista: heat_power = conductance * (source_temperature - destination_temperature). Restar y sumar la misma energía en los dos nodos; el intercambio interno se cancela en el balance total. El calor hacia aire/pista cuenta como flujo externo con su signo, permitiendo calentamiento cuando el ambiente está más caliente.
 
-Estimación analítica a 260 km/h, neumático a 80 °C, aire a 30 °C, sin desgaste, sin agua y SIN generación de calor: enfriamiento inicial aproximado 2,88 °C/s delante y 2,33 °C/s detrás; semivida del exceso de temperatura de unos 12/15 segundos. Son cálculos de términos del modelo, no una curva térmica medida en conducción. El calentamiento por deformación y deslizamiento reduce la pérdida neta.
+Calor de deslizamiento: derivarlo del trabajo disipado por las fuerzas reales y la velocidad relativa del contacto. Con fuerza sobre el coche y velocidad de deslizamiento definidas coherentemente, usar -force_dot_slip_velocity para la parte disipativa. Documentar aparte almacenamiento y liberación elástica; no convertir energía elástica recuperable ni empuje de camber íntegro en calor. Evitar estimar calor otra vez con el par del motor o con la misma potencia multiplicada por dos ejes.
 
-### Trabajo y aceptación
+Integrar la potencia del mismo subpaso que generó la fuerza, distribuirla entre banda/pista y zonas por carga/camber con pesos normalizados. La histéresis de carcasa procede de deformación/rodadura con eficiencia explícita y no duplica las pérdidas de rodadura ni las de deslizamiento.
 
-Instrumentar energía de histéresis, calentamiento lateral/longitudinal, convección, enfriamiento adicional, capacidad térmica, carga, velocidad de rueda, camber, presión y desgaste. Verificar unidades y que los términos no introducen calentamiento/enfriamiento no físico. Revisar también la corrección de carga por camber del algoritmo antes de compensarla con parámetros.
+Temperatura de banda regula grip; temperatura de carcasa regula propiedades estructurales con una influencia moderada; temperatura del gas regula presión mediante gas ideal y una corrección pequeña de volumen por deformación. No introducir una campana de grip por presión para ocultar errores de contacto: el efecto debe seguir la cadena presión → compliance/deformación → contacto/respuesta, con límites comprobados.
 
-Separar pruebas de neumático caliente en recta, neumático frío calentándose, curva sostenida y frenada. Evaluar un barrido del factor de refrigeración, por ejemplo 1,0 frente a 0,25: el multiplicador convectivo pasaría de 2,5 a 1,375, una reducción del 45 %. Este candidato NO está aplicado ni validado. No fijar la temperatura artificialmente ni desactivar la simulación térmica para ocultar el síntoma. Definir y justificar objetivos de temperatura y enfriamiento; no inventar una referencia histórica del Williams.
+Presión caliente: p_abs = reference_p_abs * gas_temperature_kelvin / reference_temperature_kelvin * reference_volume / current_volume. Usar una referencia fija y gas consistente; no multiplicar repetidamente por la temperatura relativa al paso anterior. Evitar que los límites de presión alteren masa de gas sin contabilización.
 
-## Problema 4: velocidad punta baja y drag
+El modelo usa capacidades/conductancias finitas y positivas. Integrar la red con un método estable, preferiblemente implícito conservativo para intercambios, o subpasos térmicos con estabilidad demostrada. No depender de clamps de temperatura para pasar pruebas; toda saturación debe quedar registrada y su energía residual explicada.
 
-### Confirmado
+Desgaste: derivarlo de energía de deslizamiento, temperatura y compuesto por zona. Debe ser no negativo, sin recuperación espontánea, sin desgaste por deslizamiento en el aire o en reposo sin trabajo. Alimentar suavemente espesor, capacidad térmica y pérdida de grip. Mantener compatibilidad con boxes y compuestos; reinicio y pinchazo son eventos explícitos, no flags locales que se olvidan cada paso.
 
-El usuario observa aproximadamente 260 km/h en quinta. El archivo original `D:\Formula90s\game\data\vehicles\f1_1997\williams\profiles\hockenheim\aerodynamics.json` declara `drag_coefficient_scope=whole_vehicle_reference`.
+No reutilizar automáticamente coolingFactor=0,000075 o tireSpeedCoolFactor=0,25 como conductancias nuevas: pertenecen a otra ley. Los parámetros térmicos Rust son candidatos iniciales con unidades y procedencia, no equivalencias ni una garantía de temperatura real.
 
-El port copia Cx=0,83 y área frontal 1,15 m², añade alerones nativos `FLAT` de 0,5347/0,7122 m² a 18/16 grados, omite las polares originales y el modelo de fondo, y configura sustentación de carrocería delantera/trasera en cero. Ese conjunto no reproduce el paquete aerodinámico original: añade resistencia de placas planas a una referencia del vehículo completo y pierde la carga original.
+## 8. Ciclo de integración y compatibilidad
 
-Con las fórmulas nativas y densidad nominal 1,29 kg/m³, la demanda aerodinámica calculada es aproximadamente 408 kW a 260 km/h y 626 kW a 300 km/h. No incluye rodadura ni pérdidas de transmisión; tampoco es telemetría. Investigar además `rho` global en `aero.cpp`: se inicializa antes de configurar la atmósfera de la sesión, mientras el registro de Fuji muestra una densidad cercana a 1,219 kg/m³.
+Auditar los dos caminos de simu.cpp. El orden actual relevante es contacto/altura → barras → fuerzas de rueda (incluye térmica legacy) → transmisión → rotación → chasis. El nuevo orden debe conservar el contrato de transmisión y decidir explícitamente cómo integrar el acoplamiento rueda-suelo.
 
-Con radio trasero 0,322016 m, grupo final 4,65 y limitador a 17.500 RPM, el desarrollo cinemático permite aproximadamente 317 km/h en quinta y 371 km/h en sexta; 260 km/h en quinta corresponde a unas 14.351 RPM. Esto descarta el limitador de quinta como explicación basada en esos parámetros, pero no demuestra la velocidad real alcanzable.
+Contrato propuesto por subpaso:
 
-### Trabajo y aceptación
+1. Leer estado térmico/mecánico previo y resolver modificadores de presión/carcasa.
+2. Muestrear contacto, resolver suspensión/carcasa y obtener carga normal aceptada.
+3. Resolver slip, fuerza combinada y reacción de rueda; integrar giro/transmisión de forma consistente con esas fuerzas. Si se itera o subintegra, acumular trabajo una sola vez sobre la solución aceptada.
+4. Acumular energía de contacto, pérdidas y desgaste usando las velocidades correspondientes a la fuerza aplicada; explicar el uso de estado inicial, medio o final.
+5. Actualizar red térmica, gas y presión una sola vez por intervalo aceptado; los modificadores resultantes entran en el siguiente subpaso, salvo solución acoplada explícita.
+6. Publicar fuerzas, reacción, temperatura, desgaste, presión y feedback una sola vez.
 
-1. Medir acelerador/freno/embrague efectivos, marcha, RPM, par, potencia transmitida, pérdidas, pendiente, velocidad del aire y daños. Descartar limitador de velocidad o arrastre de frenos.
-2. Corregir el contrato de drag total frente a contribuciones por elemento. Adaptar las polares originales al modelo nativo o implementar una representación equivalente, conservando reparto y alturas de aplicación de las fuerzas.
-3. Restituir/calibrar la carga de fondo y alerones con pruebas de fuerza frente a velocidad, pitch y altura; verificar la densidad efectiva usada.
-4. Comparar aceleración y velocidad estacionaria en quinta/sexta sobre recta plana, con entradas y clima controlados. Ajustar desarrollos después del balance de potencia y resistencia.
+Mientras el selector nuevo esté activo, no ejecutar también SimWheelUpdateTire, penalización currentGripFactor, curvas mfB/mfC/mfE o relajación legacy sobre las fuerzas nuevas. El camino legacy debe permanecer funcional y aislado.
 
-No aumentar potencia arbitrariamente ni borrar drag para alcanzar una cifra prefijada. La velocidad objetivo debe tener una referencia declarada y condiciones de prueba reproducibles.
+Decidir si se integran subpasos mecánicos internos; no cambiar globalmente el paso de todos los coches. La térmica no debe ejecutarse en callbacks de dibujo. Registrar el paso físico real y el número de actualizaciones por rueda; un frame puede contener varios pasos físicos.
 
-## Orden de trabajo y evidencia exigida
+Adaptar el HUD y carElt: indicar si la temperatura agregada es banda media, centro o carcasa; conservar acceso por rueda y registrar los tres nodos de banda. Documentar presión mostrada y convertirla en un solo sitio. Investigar el consumidor antes de cambiar nombres/unidades públicas. Evitar romper drivers, ayudas o acceso a _wheelSlipOpt, _tyreEffMu, spinTq, rollRes y torqueAlign.
 
-1. Inventariar cambios y respaldar los archivos afectados. Registrar procedencia del binario/configuración realmente cargados.
-2. Preparar telemetría y escenarios reproducibles. Confirmar especialmente filtro del mando y cargas durante el vuelco.
-3. Corregir el contrato aerodinámico y el problema de dirección; evaluar el efecto por separado.
-4. Calibrar barras y suspensión con comparaciones controladas; no mezclar simultáneamente múltiples cambios sin evidencia atribuible.
-5. Calibrar el balance térmico y repetir aceleración y maniobras de estabilidad con neumáticos en condiciones equivalentes.
-6. Regenerar candidatos, instalar/empaquetar, comprobar hashes de binarios y validar la distribución portable sin depender del PATH de compilación.
-7. Completar una vuelta y las maniobras de aceptación con mando físico. Mantener explícitos los resultados pendientes de aprobación humana.
+Selector propuesto por coche en Formula Controls: tire model = legacy o transient coupled. Configuración nueva en Formula Tires, con bloques Front/Rear y parámetros de compuesto/superficie separados. Añadir versión de esquema y validación, dejando los nombres definitivos documentados. No reutilizar pressure ambiguo para parámetros nuevos.
 
-Las pruebas geométricas previas de terreno/objetos y las pruebas con mando virtual no validan estabilidad, aerodinámica, temperatura ni respuesta física al choque. No marcar estos cuatro problemas como resueltos basándose solo en que la escena carga o compila.
+## 9. Secuencia de implementación y entregables
 
-## Compilación, ejecución y registros
+1. TIRE-01 — Baseline y contratos: inventario, hashes, unidades, signos, ciclo de vida y orden de ambas rutas. Capturar legacy a la presión actual sin cambiarla. Entregar mapa de responsabilidades y pruebas de signos/presión.
+2. TIRE-02 — Núcleo de fuerzas puro: entradas/salidas explícitas, curvas por eje, sensibilidad a carga y presupuesto combinado. Banco fuera del juego antes de conectar al vehículo.
+3. TIRE-03 — Carcasa/contacto: carga normal coherente, deformación, amortiguación y radio efectivo; demostrar equilibrio/energía sin ayudas ni cambios de suspensión ajenos.
+4. TIRE-04 — Transitorios y feedback: comparar con/sin relajación, añadir solo los estados necesarios para respuesta y recuperación verificables; integrar trail y reacción de transmisión.
+5. TIRE-05 — Térmica/presión/desgaste: red conservativa, gas y pérdidas de grip, validación por nodo y energía. Incluir pruebas que detecten doble actualización y doble calentamiento.
+6. TIRE-06 — Adaptador simuv5: selector, dos rutas de integración, carElt/HUD, generación persistente y reset/boxes. Los otros vehículos continúan legacy.
+7. TIRE-07 — Calibración Williams: curvas con iguales cargas/presiones/temperaturas; contraste Rust nativo y candidato sin mezclar configuraciones. Separar presión solicitada de escenario de referencia acordado. Mantener aero, diferencial y controles constantes.
+8. TIRE-08 — Conducción y entrega: telemetría, regresiones, build instalado, manifiesto, reporte de candidatos y límites. La validación humana en pista cierra la aceptación de manejo; no sustituirla por un benchmark.
 
-- CMake/Ninja: `C:\Users\bill\open-formula-build\engine`.
-- Herramientas UCRT64: `C:\Users\bill\open-formula-build-tools\msys64\ucrt64\bin`.
-- Dependencias PLIB: `C:\Users\bill\open-formula-build\dependencies`.
-- Python usado: `C:\Users\bill\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe`.
-- Para regenerar la configuración CMake, conservar la configuración de compilación existente. Se utilizó `CMAKE_DISABLE_FIND_PACKAGE_SOLID=TRUE` para seguir construyendo FreeSOLID desde el árbol y evitar que su instalación previa cambie los targets durante la reconfiguración.
-- Compilar con `cmake --build C:/Users/bill/open-formula-build/engine -j 6` e instalar con `cmake --install C:/Users/bill/open-formula-build/engine`, usando el PATH UCRT64 correspondiente.
-- Regenerar el Williams con `tools\prepare_williams_vehicle.py` y empaquetar con `tools\assemble_portable_distribution.py`; revisar sus argumentos antes de ejecutarlos.
-- Lanzador de la entrega: `D:\open-formula\distribution\OpenFormula.exe`. Abrir directamente `distribution\bin\speed-dreams-2.exe` puede usar otro perfil de usuario y no reproduce necesariamente la sesión preparada.
-- Registro de ejecución: `D:\open-formula\distribution\user-settings\runtime.log`.
-- Diagnóstico detallado ya existente: `D:\open-formula\implementation\reports\williams_physics_investigation.md`.
-- Evidencia y respaldos: `D:\open-formula-migration-evidence`.
+Cada entrega debe identificar archivos propios, decisiones, referencia exacta, escenarios, resultados y riesgos. Una fase aprobada no autoriza reescribir motor, colisiones o transmisión fuera del contrato descrito.
 
-## Fuentes consultadas
+## 10. Pruebas y criterios de aceptación
 
-- iRacing, construcción y ajuste de estabilizadoras: https://www.iracing.com/commodores-garage-11-swayanti-roll-bars/
-- iRacing, comparación en skidpad del Skip Barber: https://www.iracing.com/skidpadman-effect-of-the-rear-anti-roll-bar/
-- Studio 397, mecanismos y parámetros térmicos de neumáticos: https://www.studio-397.com/wp-content/uploads/2016/12/rF2_TGM_TyreTool_QuickStart_V3.pdf
-- Referencia directamente comparable de unidades y configuración: archivos locales `MP1.xml` y `92MP1.xml` en `D:\open-formula\speed-dreams-data\data\cars\categories`.
+Crear bancos nuevos de fuerzas/contacto/térmica con nombres completos y registrarlos en CMake. Conservar validate_formula_tire_energy como regresión legacy; no cambiar sus expectativas para ocultar una rotura. Añadir trazas de referencia y tests diferenciales desde Rust si se puede ejecutar su núcleo sin Godot, indicando revisión/hash y tolerancias. La fidelidad entre implementaciones se comprueba con salidas, no con parámetros de igual nombre.
 
-Las referencias explican mecanismos y ofrecen puntos de comparación; no establecen una configuración histórica verificada del Williams FW19 ni garantizan equivalencia numérica entre simuladores.
+### Fuerzas y transmisión
+
+- Barridos laterales y longitudinales de cero, pico, caída, bloqueo y wheelspin; simetría de signos y entre lados.
+- Malla combinada de frenada/aceleración con giro: utilización normalizada ≤1 más tolerancia numérica, sin saltos en el borde, sin aumento artificial al saturar el otro eje.
+- Cargas 0, 100, 1200, 3200, 6000 y 12000 N; contacto parcial, vuelo y aterrizaje. Registrar fuerza absoluta y mu efectivo; no inferir agarre del vehículo solo desde mu.
+- Recta con camber simétrico: sin deriva neta espuria; camber y dirección invertidos conservan simetrías físicas.
+- Rueda libre: sin fuente de energía; par de contacto, giro, motor y freno balanceados. Prueba de frenada que contabilice energía del chasis y rotación.
+- Comparar marcha atrás y cruce por cero con alta/baja velocidad; sin denominadores singulares o signos inestables.
+
+### Contacto y frecuencia
+
+- Carga estática, escalón vertical, bordillo y caída: masas y reacciones cerradas, deformación finita y energía no creciente cuando no hay excitación.
+- Frecuencias de banco 120/240/480/500/1000 Hz, incluyendo el paso nativo 0,002 s. Comparar respuestas a igual tiempo y entrada; el render no se modifica para pasar pruebas.
+- Criterio inicial de convergencia: diferencias <2% en fuerzas estacionarias, <5% en métricas transitorias y <1 C en escenarios térmicos de 60 s entre 500 y 1000 Hz. Documentar condiciones y ajustar tolerancias solo con evidencia numérica previa.
+- No fijar por conveniencia una deflexión o temperatura universal para un FW19: usar referencia declarada y distinguir objetivo de calibración de dato medido.
+
+### Térmica, presión y desgaste
+
+- Equilibrio sin fuentes y temperaturas iguales; sistema aislado conserva energía; conductancias internas cancelan exactamente sus transferencias por arista.
+- Cada paso: suma de cambios de energía = calor externo entrante - saliente + disipación depositada. Objetivo de residual relativo <0,1% en ensayos cerrados, sin compensaciones artificiales.
+- Calentamiento a potencia constante, recuperación en recta, parada, vuelo, lluvia si existe soporte, zonas interior/exterior con camber, cambio de compuesto y boxes.
+- Gas ideal: a volumen constante p_abs/T constante; distinguir frío/caliente, psi/kPa/Pa y absoluto/manométrico; nunca presión/temperatura absolutas negativas.
+- 160 psi: caso extremo explícito. Verificar robustez y diagnósticos; no demostrar plausibilidad física mediante clamps. Las pruebas de conducción deben declarar su presión efectiva, sin sustitución silenciosa.
+- Desgaste monótono con trabajo disipado, cero desgaste por fricción sin contacto, estado de pinchazo persistente y reset correcto.
+- Prueba contador: ninguna rueda recibe dos actualizaciones térmicas para el mismo intervalo en ninguna de las dos rutas.
+
+### Coche completo
+
+- Reposo 30 s, rueda libre, aceleración y frenada recta, círculo de radio constante, slalom, entrada frenando, salida acelerando, bordillos y vueltas completas en Fuji.
+- Mantener constantes aero 40/60 de referencia, diferencial 10 Nm/30%/70%, geometría, combustible y ayudas; registrar presiones y temperaturas reales.
+- Buscar vibración, deriva en reposo, energía creciente, wheel hop, cambios bruscos de yaw y vuelcos. No declarar estos defectos resueltos sin ese ensayo.
+- Probar mando físico y teclado. Separar respuesta del neumático del filtro de steering; no retocar ambos a la vez para facilitar el ensayo.
+- Medir coste por coche a 500 Hz y flota de referencia, memoria fija y ausencia de asignaciones por rueda/paso. Publicar hardware y carga; no inventar equivalencia a partir de FPS.
+
+## 11. Telemetría mínima
+
+Por rueda y con tiempo físico: selector/version, carga normal, cobertura, normal de suelo, compresión de suspensión, deformación y velocidad de carcasa, radio efectivo, spin, slip objetivo/efectivo por eje, capacidades, fuerzas, utilización combinada, régimen, trail y par autoalineante.
+
+Añadir temperaturas de las cinco masas térmicas, presión absoluta y manométrica, temperatura ambiental/pista, energías depositadas/transferidas/perdidas, residual de balance, desgaste por zona y contadores de clamps/fallbacks. Registrar parámetros efectivos y fuentes de cada setup. Reducir frecuencia de escritura sin perder acumulados por paso ni contaminar el rendimiento normal.
+
+## 12. Rebuild, distribución y cierre
+
+Antes de cada edición verificar y registrar rama, HEAD y estado; preservar modificaciones ajenas y respaldar los archivos propios. No cambiar/resetear ramas sucias. Mantener commits atómicos, añadir rutas explícitas y revisar git diff --cached. La autorización anterior de commit no implica push ni aprobación física.
+
+Build nativo conocido: C:/Users/bill/open-formula-build/engine; herramientas C:/Users/bill/open-formula-build-tools/msys64/ucrt64/bin. Añadir allí los targets necesarios mediante CMake. No reutilizar objetos/bibliotecas entre ramas; verificar procedencia de fuente y toolchain. Si cambia el layout de tWheel/tCar, recompilar todos sus consumidores, no solo el .cpp nuevo.
+
+Comprobar que el juego está cerrado antes de reemplazar simuv5.dll; no matar sesiones ajenas. Instalar la biblioteca realmente recompilada en distribution/lib/games/speed-dreams-2/modules/simu, verificar hash y regenerar la distribución con tools/assemble_portable_distribution.py. Nunca promover una DLL de otra rama o sustituirla solo por fecha.
+
+Arrancar con distribution/OpenFormula.exe para conservar la sesión Williams/Fuji. Separar prueba de arranque, inspección visual y conducción. No usar herramientas Godot para validar el port nativo; si se trabaja sobre Godot de origen, cumplir su AGENTS.md y MCP obligatorio.
+
+Las carpetas distribution, implementation/candidates e implementation/initial-settings están ignoradas. Persistir el ajuste en el generador y conservar una instantánea textual de configuración efectiva y hashes en el informe de pruebas; no forzar medios/binarios a Git. Actualizar migration_status.json con el alcance exacto y conservar los flags de validación pendientes mientras no se hayan cumplido.
+
+Definition of done: modelo seleccionable y aislado, fuerzas/contacto/térmica acoplados sin doble contabilización, contrato de presión resuelto explícitamente, tests y telemetría reproducibles, biblioteca instalada con procedencia verificada, regresiones legacy sin romperse y conducción aceptada por el usuario. Compilación, ausencia de NaN y curvas de banco por sí solas no completan la tarea.
