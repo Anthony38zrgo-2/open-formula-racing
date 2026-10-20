@@ -185,10 +185,36 @@ target_include_directories(validate_williams_chassis PRIVATE src/modules/simu/si
     src/interfaces src/libs/tgf src/libs/portability src/libs/math src/libs/robottools freesolid/include)
 target_link_libraries(validate_williams_chassis tgf)
 
+add_executable(validate_formula_tire_forces tools/validate_formula_tire_forces.cpp
+    src/modules/simu/simuv5/tire_force_model.cpp
+    src/modules/simu/simuv5/tire_model_configuration.cpp)
+target_include_directories(validate_formula_tire_forces PRIVATE src/modules/simu/simuv5
+    src/interfaces src/libs/tgf src/libs/portability src/libs/math src/libs/robottools)
+target_link_libraries(validate_formula_tire_forces tgf)
+
+add_executable(validate_formula_tire_contact tools/validate_formula_tire_contact.cpp
+    src/modules/simu/simuv5/tire_contact_model.cpp
+    src/modules/simu/simuv5/tire_thermal_model.cpp
+    src/modules/simu/simuv5/tire_model_configuration.cpp)
+target_include_directories(validate_formula_tire_contact PRIVATE src/modules/simu/simuv5
+    src/interfaces src/libs/tgf src/libs/portability src/libs/math src/libs/robottools)
+target_link_libraries(validate_formula_tire_contact tgf)
+
+add_executable(validate_formula_tire_thermal tools/validate_formula_tire_thermal.cpp
+    src/modules/simu/simuv5/tire_thermal_model.cpp
+    src/modules/simu/simuv5/tire_wear_model.cpp
+    src/modules/simu/simuv5/tire_model_configuration.cpp)
+target_include_directories(validate_formula_tire_thermal PRIVATE src/modules/simu/simuv5
+    src/interfaces src/libs/tgf src/libs/portability src/libs/math src/libs/robottools)
+target_link_libraries(validate_formula_tire_thermal tgf)
+
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     add_executable(validate_formula_tire_energy tools/validate_formula_tire_energy.cpp src/modules/simu/simuv5/wheel.cpp
         src/modules/simu/simuv5/susp.cpp src/modules/simu/simuv5/brake.cpp src/modules/simu/simuv5/track_ground_mesh.cpp
-        src/modules/simu/simuv5/simulationOptions.cpp)
+        src/modules/simu/simuv5/simulationOptions.cpp src/modules/simu/simuv5/tire_model.cpp
+        src/modules/simu/simuv5/tire_model_configuration.cpp src/modules/simu/simuv5/tire_force_model.cpp
+        src/modules/simu/simuv5/tire_contact_model.cpp src/modules/simu/simuv5/tire_thermal_model.cpp
+        src/modules/simu/simuv5/tire_wear_model.cpp)
     target_include_directories(validate_formula_tire_energy PRIVATE src/modules/simu/simuv5
         src/interfaces src/libs/tgf src/libs/portability src/libs/math src/libs/robottools freesolid/include)
     target_compile_options(validate_formula_tire_energy PRIVATE -ffunction-sections -fdata-sections)

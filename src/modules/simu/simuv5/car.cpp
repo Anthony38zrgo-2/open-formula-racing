@@ -353,6 +353,8 @@ SimCarConfig(tCar *car)
 
     SimCarReConfig(car);
 
+    SimTireModelConfigure(car);
+
     /* initialize dashboardInstant */
     tPrivCar *priv = &(car->carElt->priv);
     tCarSetup *setup = &(car->carElt->setup);
@@ -1130,6 +1132,25 @@ SimCarUpdate2(tCar *car, tSituation *situation)
                       wheel.convection_energy, wheel.additional_cooling_energy, wheel.thermal_capacity, SimDeltaTime);
             GfLogInfo("Formula wheel power: wheel=%d drive_torque=%.6f brake_torque=%.6f rolling_resistance=%.6f\n",
                       wheel_index, wheel.driveTq, wheel.brake.Tq, wheel.rollRes);
+            const TireWheelModelState& tire = wheel.formula_tire_model;
+            double ambient_pressure = car->formula_tire_configuration.pressure.ambient_absolute_pascals;
+            GfLogInfo("Formula coupled tire: car=%d wheel=%d enabled=%d deflection=%.6f deflection_velocity=%.6f effective_radius=%.6f contact_patch=%.6f coverage=%.6f utilization=%.6f demand=%.6f lateral_capacity=%.6f longitudinal_capacity=%.6f slip_angle=%.6f slip_ratio=%.6f aligning_torque=%.6f tread_inner=%.6f tread_center=%.6f tread_outer=%.6f carcass=%.6f gas=%.6f pressure_abs=%.6f pressure_gauge=%.6f wear_inner=%.6f wear_center=%.6f wear_outer=%.6f wear_grip=%.6f slip_power=%.6f thermal_residual=%.9f pressure_clamps=%d temperature_clamps=%d contact_clamps=%d thermal_updates=%d\n",
+                      car->carElt->index, wheel_index, car->formula_tire_model_enabled,
+                      tire.contact.deflection, tire.contact.deflection_velocity,
+                      tire.contact.effective_radius, tire.contact.contact_patch,
+                      tire.contact.contact_fraction, tire.force.combined_utilization,
+                      tire.force.combined_demand, tire.force.lateral_capacity,
+                      tire.force.longitudinal_capacity, tire.force.slip_angle_rad,
+                      tire.force.slip_ratio, tire.force.aligning_torque,
+                      tire.thermal.tread_inner_kelvin, tire.thermal.tread_center_kelvin,
+                      tire.thermal.tread_outer_kelvin, tire.thermal.carcass_kelvin,
+                      tire.thermal.gas_kelvin, tire.thermal.pressure_absolute_pascals,
+                      tire.thermal.pressure_absolute_pascals - ambient_pressure,
+                      tire.wear.inner_wear_fraction, tire.wear.center_wear_fraction,
+                      tire.wear.outer_wear_fraction, tire.wear.wear_grip_scale,
+                      tire.force.slip_power, tire.thermal.last_balance_residual_joules,
+                      (int)tire.thermal.pressure_clamp_count, (int)tire.thermal.temperature_clamp_count,
+                      (int)tire.contact.clamp_count, (int)tire.thermal.update_count);
         }
     }
     if ((SimTelemetry == car->carElt->index)

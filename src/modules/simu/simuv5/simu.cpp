@@ -312,6 +312,7 @@ SimReConfig(tCarElt *carElt)
                 GfLogInfo("# SimuV5 tire compound changed mu = %.3f - hysteresis = %.2f - wear factor = %.7f\n", car->wheel[i].mu,
                           car->wheel[i].hysteresisFactor, car->wheel[i].wearFactor);
             }
+            SimTireModelResetWheel(car, i, true);
         }
     }
 

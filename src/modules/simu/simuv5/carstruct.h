@@ -31,6 +31,7 @@
 #include "transmission.h"
 #include "engine.h"
 #include "simulationOptions.h"
+#include "tire_model_configuration.h"
 
 typedef struct
 {
@@ -42,6 +43,8 @@ typedef struct
     tCarCtrl	preCtrl;
     bool formula_diagnostic_telemetry;
     double formula_diagnostic_elapsed;
+    TireModelConfiguration formula_tire_configuration;
+    int formula_tire_model_enabled;
 
     /* components */
     tAxle		axle[2];

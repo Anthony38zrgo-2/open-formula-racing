@@ -70,6 +70,10 @@ extern void SimWheelUpdateForce(tCar *car, int index);
 extern void SimWheelUpdateTire(tCar *car, int index);
 extern void SimWheelUpdateRotation(tCar *car);
 extern void SimUpdateFreeWheels(tCar *car, int axlenb);
+extern void SimTireModelConfigure(tCar *car);
+extern void SimTireModelResetWheel(tCar *car, int index, bool new_tire);
+extern void SimTireModelUpdateWheel(tCar *car, int index);
+extern void SimTireModelPublishWheel(tCar *car, int index);
 
 extern void SimSteerConfig(tCar *car);
 extern void SimSteerReConfig(tCar *car);

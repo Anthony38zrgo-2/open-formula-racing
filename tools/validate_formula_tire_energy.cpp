@@ -7,6 +7,7 @@
 tdble SimDeltaTime = 0.002;
 tdble SimRain = 0.0;
 double Tair = 303.15;
+tdble Ttrack = 293.15;
 float SimAirPressure = 101300.0f;
 tdble simSkidFactor[6] = {};
 

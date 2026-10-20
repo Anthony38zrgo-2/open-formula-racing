@@ -1,5 +1,7 @@
 # Comparación del neumático simuv5 con Rust
 
+> Actualización posterior: el modelo acoplado seleccionable ya está implementado en `implementation/reports/williams_coupled_tire_model.md`. Este documento conserva la comparación previa al cambio y no describe el estado actual.
+
 Revisión de código y pruebas nativas del 20 de octubre de 2026. Sin equivalencia histórica ni conducción validadas.
 
 simuv5 usa una curva de fuerza común sobre la magnitud del deslizamiento, dividida entre ejes longitudinal y lateral. Rust usa curvas independientes y un presupuesto combinado. Rust Standard incluye memoria de pérdida/recuperación, migración de picos y rampa de contacto; los backends simplificados eliminan parte de esos estados.

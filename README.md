@@ -26,7 +26,7 @@ El trabajo existente incluye conversión visual y de materiales, contacto y coli
 
 **El campeonato completo todavía no está implementado.** Tampoco hay un importador universal que cargue directamente cualquier mod F1C, rFactor o GP4. Las conversiones actuales son específicas, preparadas offline y requieren sus recursos de origen. La equivalencia física histórica, conducción y calibración final siguen en validación.
 
-El nuevo modelo de neumáticos y térmica inspirado en Rust está especificado en [instrucciones.md](instrucciones.md); ese handoff no significa que el modelo ya esté implementado. Los resultados y límites del trabajo actual están en [implementation/reports](implementation/reports).
+El nuevo modelo de neumáticos y térmica inspirado en Rust está implementado como candidato seleccionable para el Williams/Fuji en [implementation/reports/williams_coupled_tire_model.md](implementation/reports/williams_coupled_tire_model.md). La especificación de origen se conserva en [instrucciones.md](instrucciones.md). La activación no implica aceptación de conducción: la validación humana, la lluvia y las vueltas completas siguen pendientes. Los resultados y límites del trabajo actual están en [implementation/reports](implementation/reports).
 
 ## Créditos principales del contenido utilizado
 

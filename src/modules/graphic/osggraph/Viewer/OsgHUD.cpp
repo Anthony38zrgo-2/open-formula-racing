@@ -1819,7 +1819,7 @@ void SDHUD::Refresh(tSituation *s, const SDFrameInfo* frameInfo,
         temp.str("");
         tireNameText.str("");
         //set the current tire temp (internally the tire temp is in KPA *1000 so we wanto to convert it ot PSI)
-        temp << currCar->_tyreCurrentPressure(i) * 0.145038 / 1000;
+        temp << (currCar->_tyreCurrentPressure(i) - currCar->_airPressure) * 0.145038 / 1000;
         tireNameText << "tire-" << tireName.str().c_str()  << "-pressures";
         hudTextElements[tireNameText.str().c_str()]->setText(temp.str());
 

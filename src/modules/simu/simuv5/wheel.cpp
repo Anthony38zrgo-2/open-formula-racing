@@ -432,6 +432,7 @@ void SimWheelReConfig(tCar *car, int index)
         setupPressure->value = wheel->pressure;
         setupPressure->changed = false;
         GfLogInfo(" # Car simu setup Pressure simuReWheelReConfig = %.2f\n", wheel->pressure);
+        SimTireModelResetWheel(car, index, false);
     }
 
     if (setupOpLoad->changed)
@@ -460,6 +461,7 @@ void SimWheelReConfig(tCar *car, int index)
         wheel->wearFactor = wheel->wearFactorC[wheel->tireSet];
         GfLogInfo("# SimuV4 tire compound changed mu = %.3f - hysteresis = %.2f - wear factor = %.7f\n", wheel->mu, wheel->hysteresisFactor,
                   wheel->wearFactor);
+        SimTireModelResetWheel(car, index, true);
     }
 
     x0 = setupRideHeight->value;
@@ -521,9 +523,19 @@ void SimWheelUpdateRide(tCar *car, int index)
     // Wheel susp.x is not the wheel movement, look at SimSuspCheckIn, it becomes there scaled with
     // susp->spring.bellcrank, so we invert this here.
 
+    tdble effective_road_height = Zroad;
+    if (car->formula_tire_model_enabled && wheel->formula_tire_model_grounded)
+    {
+        effective_road_height -= wheel->formula_tire_model.contact.deflection;
+    }
     tdble new_susp_x = (wheel->susp.x - wheel->susp.v * SimDeltaTime) / wheel->susp.spring.bellcrank;
-    tdble max_extend =  wheel->pos.z - Zroad;
-    wheel->rideHeight = max_extend;
+    tdble max_extend =  wheel->pos.z - effective_road_height;
+    wheel->rideHeight = wheel->pos.z - Zroad;
+
+    if (car->formula_tire_model_enabled && max_extend < 0.0f)
+    {
+        max_extend = 0.0f;
+    }
 
     if (max_extend > new_susp_x + 0.01)
     {
@@ -533,6 +545,8 @@ void SimWheelUpdateRide(tCar *car, int index)
     {
         wheel->susp.state = 0;
     }
+
+    wheel->formula_tire_model_grounded = (wheel->susp.state & SIM_WH_INAIR) ? 0 : 1;
 
     if (max_extend < new_susp_x)
     {
@@ -578,6 +592,34 @@ void SimWheelUpdateRide(tCar *car, int index)
         }
     }
     // ... Option TCL
+}
+
+static void SimWheelUpdateDriverAssists(tCar *car, int index)
+{
+    tWheel *wheel = &(car->wheel[index]);
+    tdble sx = wheel->sx;
+
+    if (car->features & FEAT_TCLINSIMU)
+    {
+        tEngine *engine = &(car->engine);
+        if (sx < -car->TCL_SlipScale)
+        {
+            wheel->brake.TCL = -sx;
+            engine->TCL = (tdble) MIN(car->TCL_AccelScale * wheel->brake.TCL, engine->TCL);
+        }
+    }
+
+    if (car->features & FEAT_ABSINSIMU)
+    {
+        if (sx > car->ABS_SlipScale)
+        {
+            wheel->brake.ABS = (tdble) MAX(0.0, MIN(1.0, 1 - car->ABS_BrakeScale * sx));
+        }
+        else
+        {
+            wheel->brake.ABS = 1.0f;
+        }
+    }
 }
 
 void SimWheelUpdateForce(tCar *car, int index)
@@ -651,6 +693,13 @@ void SimWheelUpdateForce(tCar *car, int index)
 
     // update wheel coord, center relative to GC
     wheel->relPos.z = - wheel->susp.x / wheel->susp.spring.bellcrank + wheel->radius;
+
+    if (car->formula_tire_model_enabled)
+    {
+        SimTireModelUpdateWheel(car, index);
+        SimWheelUpdateDriverAssists(car, index);
+        return;
+    }
 
     // HORIZONTAL FORCES
     waz = wheel->steer + wheel->staticPos.az;
@@ -837,37 +886,7 @@ void SimWheelUpdateForce(tCar *car, int index)
         SimWheelUpdateTire(car, index);
     }
 
-    // Option TCL ...
-    if (car->features & FEAT_TCLINSIMU)
-    {
-        //tdble TCL_SlipScale = 1.00f;	// Make it be a parameter later
-        //tdble TCL_AccelScale = 0.9f;	// Make it be a parameter later
-
-        tEngine	*engine = &(car->engine); // Get engine
-
-        if (sx < -car->TCL_SlipScale)          // Slip is over our limit
-        {	// Store the TCL_Brake command for this wheel
-            wheel->brake.TCL = -sx;
-            // Store the minimum TCL_Accel command for the engine
-            engine->TCL = (tdble) MIN(car->TCL_AccelScale * wheel->brake.TCL,engine->TCL);
-            // fprintf(stderr,"sx: %.1f TCL: %.3f %%\n",sx,wheel->brake.TCL);
-        };
-    }
-    // ... Option TCL
-
-    // Option ABS ...
-    if (car->features & FEAT_ABSINSIMU)
-    {
-        //tdble ABS_SlipScale = 0.1f;		// Make it be a parameter later
-        //tdble ABS_BrakeScale = 1.0f;	// Make it be a parameter later
-
-        // If slip is over the limit, reduce brake command for this wheel
-        if (sx > car->ABS_SlipScale)
-            wheel->brake.ABS = (tdble) MAX(0.0,MIN(1.0,1 - car->ABS_BrakeScale * sx));
-        else
-            wheel->brake.ABS = 1.0f;
-    }
-    // ... Option ABS
+    SimWheelUpdateDriverAssists(car, index);
 }
 
 void SimWheelUpdateRotation(tCar *car)
@@ -903,7 +922,11 @@ void SimWheelUpdateRotation(tCar *car)
         /*update rotation*/
         wheel->spinVel = wheel->in.spinVel;
 
-        if ( (car->features & FEAT_SLOWGRIP) && (wheel->brake.Tq <= 1.0) && (car->ctrl->accelCmd * car->transmission.clutch.transferValue < 0.05) )
+        if (car->formula_tire_model_enabled)
+        {
+            wheel->prespinVel = wheel->spinVel;
+        }
+        else if ( (car->features & FEAT_SLOWGRIP) && (wheel->brake.Tq <= 1.0) && (car->ctrl->accelCmd * car->transmission.clutch.transferValue < 0.05) )
         {
             /* prevent wheelspin value oscillating around wheel tangential velocity */
             tdble waz = wheel->steer + wheel->staticPos.az;

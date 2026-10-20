@@ -94,6 +94,130 @@ def configure_tire_grip(document, tires):
             set_number(wheel, 'load factor max', 1.6)
 
 
+def configure_coupled_tires(document, tires):
+    controls = find_section(document, 'Formula Controls')
+    set_text(controls, 'tire model', 'transient coupled')
+    formula_tires = find_section(document, 'Formula Tires')
+    set_number(formula_tires, 'schema version', 1)
+    set_text(formula_tires, 'pressure convention', 'gauge')
+    set_text(formula_tires, 'pressure unit', 'Pa')
+    set_number(formula_tires, 'ambient pressure', 101325, 'Pa')
+    set_number(formula_tires, 'reference temperature', 298.15, 'K')
+    set_number(formula_tires, 'compound friction', tires['surfaces']['Road']['friction'])
+    set_number(formula_tires, 'longitudinal grip ratio', tires['surfaces']['Road']['longitudinal_grip_ratio'])
+    set_number(formula_tires, 'wet grip scale', 0.6)
+    set_number(formula_tires, 'compliance sensitivity', tires['pressure_mechanics']['compliance_sensitivity'])
+    set_number(formula_tires, 'response sensitivity', tires['pressure_mechanics']['response_sensitivity'])
+    set_number(formula_tires, 'rolling resistance sensitivity', tires['pressure_mechanics']['rolling_resistance_sensitivity'])
+    for wheel_name, pressure in [('front right', 130000), ('front left', 130000),
+                                 ('rear right', 130000), ('rear left', 130000)]:
+        set_number(formula_tires, 'cold pressure ' + wheel_name, pressure, 'Pa')
+    for wheel_name, pressure in [('front right', 160000), ('front left', 160000),
+                                 ('rear right', 150000), ('rear left', 150000)]:
+        set_number(formula_tires, 'reference hot pressure ' + wheel_name, pressure, 'Pa')
+    for axle_name in ['Front', 'Rear']:
+        source_name = axle_name.lower()
+        force = tires['force_model'][source_name]
+        force_section = find_section(formula_tires, axle_name + ' Force')
+        for parameter_name, source_name_key, unit in [
+                ('lateral peak slip angle', 'lateral_peak_slip_angle_rad', 'rad'),
+                ('longitudinal peak slip ratio', 'longitudinal_peak_slip_ratio', None),
+                ('lateral slide grip ratio', 'lateral_slide_mu_ratio', None),
+                ('longitudinal slide grip ratio', 'longitudinal_slide_mu_ratio', None),
+                ('falloff sharpness', 'falloff_sharpness', None),
+                ('budget blend width', 'budget_blend_width', None),
+                ('combined lateral peak migration', 'combined_lateral_peak_migration', None),
+                ('combined longitudinal peak migration', 'combined_longitudinal_peak_migration', None),
+                ('contact ramp seconds', 'contact_ramp_tau_s', 's'),
+                ('minimum relaxation seconds', 'min_relaxation_tau_s', 's'),
+                ('relaxation recovery scale', 'relaxation_recovery_scale', None),
+                ('slip loss seconds', 'slip_loss_tau_s', 's'),
+                ('slip recovery seconds', 'slip_recovery_tau_s', 's')]:
+            set_number(force_section, parameter_name, force[source_name_key], unit)
+        contact_patch = tires[source_name]['contact_patch']
+        set_number(force_section, 'contact patch', contact_patch, 'm')
+        set_number(force_section, 'relaxation length', contact_patch * (1.65 if source_name == 'front' else 1.80), 'm')
+        set_number(force_section, 'pneumatic trail', contact_patch * (0.22 if source_name == 'front' else 0.24), 'm')
+        set_number(force_section, 'camber thrust gain', 0.18 if source_name == 'front' else 0.15)
+        set_number(force_section, 'load sensitivity exponent', 0.92)
+        set_text(force_section, 'relaxation enabled', 'yes')
+        set_text(force_section, 'peak migration enabled', 'yes')
+        contact_section = find_section(formula_tires, axle_name + ' Contact')
+        set_number(contact_section, 'radial damping ratio', tires['radial_damping_ratio'])
+        set_number(contact_section, 'maximum deflection', tires[source_name]['radius'] * 0.12, 'm')
+        set_number(contact_section, 'rolling radius deflection factor', 0.68)
+        set_number(contact_section, 'contact patch load gain', 0.12)
+        set_number(contact_section, 'contact patch deflection gain', 0.20)
+        set_number(contact_section, 'partial contact stiffness floor', 0.35)
+        thermal = tires['thermal'][source_name]
+        thermal_section = find_section(formula_tires, axle_name + ' Thermal')
+        for parameter_name, source_name_key, unit in [
+                ('initial temperature', 'initial_temperature_c', 'C'),
+                ('ambient fallback', 'ambient_fallback_c', 'C'),
+                ('track fallback', 'track_fallback_c', 'C'),
+                ('optimal tread temperature', 'optimal_tread_temperature_c', 'C'),
+                ('optimal tread window', 'optimal_tread_window_c', 'C'),
+                ('overheat tread temperature', 'overheat_tread_temperature_c', 'C'),
+                ('optimal carcass temperature', 'optimal_carcass_temperature_c', 'C'),
+                ('tread zone heat capacity', 'tread_zone_heat_capacity_j_k', 'J/K'),
+                ('carcass heat capacity', 'carcass_heat_capacity_j_k', 'J/K'),
+                ('gas heat capacity', 'gas_heat_capacity_j_k', 'J/K'),
+                ('tread to carcass conductance', 'tread_to_carcass_w_k', 'W/K'),
+                ('carcass to gas conductance', 'carcass_to_gas_w_k', 'W/K'),
+                ('tread to air conductance', 'tread_to_air_w_k', 'W/K'),
+                ('carcass to air conductance', 'carcass_to_air_w_k', 'W/K'),
+                ('road conductance', 'road_conductance_w_k', 'W/K'),
+                ('lateral tread conductance', 'lateral_tread_conductance_w_k', 'W/K'),
+                ('slip heat efficiency', 'slip_heat_efficiency', None),
+                ('carcass hysteresis efficiency', 'carcass_hysteresis_efficiency', None),
+                ('volume deflection gain', 'volume_deflection_gain', None),
+                ('minimum pressure gauge', 'minimum_pressure_kpa_gauge', 'kPa'),
+                ('maximum pressure gauge', 'maximum_pressure_kpa_gauge', 'kPa')]:
+            value = thermal[source_name_key]
+            if parameter_name in ['minimum pressure gauge', 'maximum pressure gauge']:
+                value *= 1000.0
+                unit = 'Pa'
+            if parameter_name == 'initial temperature':
+                value = 25.0
+            if source_name_key in ['initial_temperature_c', 'ambient_fallback_c', 'track_fallback_c',
+                                   'optimal_tread_temperature_c', 'overheat_tread_temperature_c',
+                                   'optimal_carcass_temperature_c']:
+                value += 273.15
+                unit = 'K'
+            elif source_name_key == 'optimal_tread_window_c':
+                unit = 'K'
+            set_number(thermal_section, parameter_name, value, unit)
+        wear = tires['wear']
+        wear_section = find_section(formula_tires, axle_name + ' Wear')
+        for parameter_name, source_name_key, unit in [
+                ('initial tread depth', 'initial_tread_depth_millimeters', 'mm'),
+                ('minimum tread depth', 'minimum_tread_depth_millimeters', 'mm'),
+                ('tread wear per megajoule', 'tread_wear_per_megajoule_millimeters', 'mm/MJ'),
+                ('cold tread temperature', 'cold_tread_temperature_celsius', 'C'),
+                ('optimal tread temperature', 'optimal_tread_temperature_celsius', 'C'),
+                ('overheat tread temperature', 'overheat_tread_temperature_celsius', 'C'),
+                ('extreme tread temperature', 'extreme_tread_temperature_celsius', 'C'),
+                ('cold temperature multiplier', 'cold_temperature_wear_multiplier', None),
+                ('overheat temperature multiplier', 'overheat_temperature_wear_multiplier', None),
+                ('extreme temperature multiplier', 'extreme_temperature_wear_multiplier', None),
+                ('friction reference coefficient', 'friction_reference_coefficient', None),
+                ('friction sensitivity exponent', 'friction_sensitivity_exponent', None),
+                ('inner shoulder wear multiplier', 'inner_shoulder_wear_multiplier', None),
+                ('center wear multiplier', 'center_wear_multiplier', None),
+                ('outer shoulder wear multiplier', 'outer_shoulder_wear_multiplier', None),
+                ('cliff start wear fraction', 'cliff_start_wear_fraction', None),
+                ('end of life grip scale', 'end_of_life_grip_scale', None),
+                ('progressive grip loss fraction', 'progressive_grip_loss_fraction', None)]:
+            source_value = wear[source_name_key] if source_name_key in wear else wear[source_name][source_name_key]
+            if source_name_key == 'tread_wear_per_megajoule_millimeters':
+                source_value = wear[source_name][source_name_key]
+            if source_name_key in ['cold_tread_temperature_celsius', 'optimal_tread_temperature_celsius',
+                                   'overheat_tread_temperature_celsius', 'extreme_tread_temperature_celsius']:
+                source_value += 273.15
+                unit = 'K'
+            set_number(wear_section, parameter_name, source_value, unit)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--source-root', required=True)
@@ -332,6 +456,7 @@ def main():
                floor_profile['lift_area_m2'] * floor_profile['induced_drag_ratio'], 'm2')
     configure_aerodynamic_load_distribution(document)
     configure_tire_grip(document, tires)
+    configure_coupled_tires(document, tires)
     source_audio = source_root / 'game/sounds/banks/v10-v2-bank/engine_powered_maximum_loop.wav'
     source_audio_digest = hashlib.sha256(source_audio.read_bytes()).hexdigest()
     if source_audio_digest != '9bec0ea0aef8424b7062ab18471e849e660c906c609848a5a3adb8ff1411414c':
@@ -353,6 +478,19 @@ def main():
               'suspension_reference': suspension_reference,
               'audio_reference_revolutions_per_minute': sample['reference_revolutions_per_minute'], 'geometry': conversion_reports,
               'adapted_parameters': ['native tire force curve', 'wheel stiffness', 'differential slip bias', 'wheel inertia', 'native suspension bellcrank', 'native wing polar'],
+              'coupled_tire_model': {
+                  'selector': 'transient coupled',
+                  'schema_version': 1,
+                  'pressure_convention': 'gauge',
+                  'pressure_unit': 'Pa',
+                  'cold_pressure_pascals': {'front_right': 130000, 'front_left': 130000,
+                                            'rear_right': 130000, 'rear_left': 130000},
+                  'reference_hot_pressure_pascals': {'front_right': 160000, 'front_left': 160000,
+                                                     'rear_right': 150000, 'rear_left': 150000},
+                  'reference_temperature_kelvin': 298.15,
+                  'initial_temperature_celsius': 25.0,
+                  'source_reference': 'Formula90s tires.json and tire.rs/tire_thermals.rs/tire_wear.rs',
+                  'calibration_validated': False},
               'calibration_candidate': {'front_anti_roll_stiffness': arguments.front_anti_roll_stiffness,
                   'rear_anti_roll_stiffness': arguments.rear_anti_roll_stiffness,
                   'tire_speed_cooling_factor': arguments.tire_speed_cooling_factor,

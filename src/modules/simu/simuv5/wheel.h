@@ -21,6 +21,7 @@
 #define _WHEEL_H__
 
 #include "differential.h"
+#include "tire_model_state.h"
 
 typedef struct
 {
@@ -146,6 +147,10 @@ typedef struct
     tdble additional_cooling_energy;
     tdble thermal_capacity;
     bool corrected_thermal_load;
+
+    TireWheelModelState formula_tire_model;
+    int formula_tire_model_grounded;
+    double formula_tire_model_zone_weights[3];
 } tWheel;
 
 #endif /* _WHEEL_H__ */

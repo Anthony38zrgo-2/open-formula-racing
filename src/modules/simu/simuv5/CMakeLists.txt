@@ -15,9 +15,13 @@ ENDIF(MSVC)
 SET(SIMU_SOURCES aero.cpp atmosphere.cpp axle.cpp brake.cpp car.cpp categories.cpp
                  collide.cpp differential.cpp engine.cpp simu.cpp simulationOptions.cpp
                  steer.cpp susp.cpp transmission.cpp wheel.cpp
+                 tire_model.cpp tire_model_configuration.cpp tire_force_model.cpp
+                 tire_contact_model.cpp tire_thermal_model.cpp tire_wear_model.cpp
                  simuv5.cpp)
 SET(SIMU_HEADERS aero.h axle.h brake.h carstruct.h differential.h engine.h
                  options.h sim.h simulationOptions.h steer.h susp.h transmission.h
+                 tire_model_configuration.h tire_model_state.h tire_force_model.h
+                 tire_contact_model.h tire_thermal_model.h tire_wear_model.h
 				 wheel.h simuv5.h)
 LIST(APPEND SIMU_SOURCES track_ground_mesh.cpp)
 
