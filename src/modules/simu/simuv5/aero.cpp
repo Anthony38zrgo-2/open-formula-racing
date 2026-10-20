@@ -71,6 +71,32 @@ SimAeroConfig(tCar *car)
 
     Cx       = GfParmGetNum(hdle, SECT_AERODYNAMICS, PRM_CX, (char*)NULL, 0.4f);
     FrntArea = GfParmGetNum(hdle, SECT_AERODYNAMICS, PRM_FRNTAREA, (char*)NULL, 2.5f);
+    car->aero.whole_vehicle_reference = strcmp(GfParmGetStr(hdle, SECT_AERODYNAMICS, "drag coefficient scope", "body"), "whole vehicle reference") == 0;
+    car->aero.reference_drag_area = Cx * FrntArea;
+    car->aero.reference_wing_drag_area = GfParmGetNum(hdle, SECT_AERODYNAMICS, "reference wing drag area", NULL, 0.0);
+    car->aero.floor_lift_area = GfParmGetNum(hdle, "Formula Underfloor", "lift area", NULL, 0.0);
+    car->aero.floor_induced_drag_ratio = GfParmGetNum(hdle, "Formula Underfloor", "induced drag ratio", NULL, 0.13);
+    car->aero.floor_choke_height = GfParmGetNum(hdle, "Formula Underfloor", "choke height", NULL, 0.014);
+    car->aero.floor_optimal_height = GfParmGetNum(hdle, "Formula Underfloor", "optimal height", NULL, 0.052);
+    car->aero.floor_high_height = GfParmGetNum(hdle, "Formula Underfloor", "high height", NULL, 0.165);
+    car->aero.floor_front_clearance = GfParmGetNum(hdle, "Formula Underfloor", "front clearance", NULL, 0.03);
+    car->aero.floor_rear_clearance = GfParmGetNum(hdle, "Formula Underfloor", "rear clearance", NULL, 0.045);
+    car->aero.floor_optimal_rake = GfParmGetNum(hdle, "Formula Underfloor", "optimal rake", "deg", 0.6);
+    car->aero.floor_rake_window = GfParmGetNum(hdle, "Formula Underfloor", "rake window", "deg", 3.25);
+    car->aero.floor_seal_roll = GfParmGetNum(hdle, "Formula Underfloor", "seal roll", NULL, 0.15);
+    car->aero.floor_position.x = GfParmGetNum(hdle, "Formula Underfloor", "xpos", NULL, 0.0);
+    car->aero.floor_position.z = GfParmGetNum(hdle, "Formula Underfloor", "zpos", NULL, 0.0);
+    car->aero.floor_downforce = car->aero.floor_drag = 0.0;
+    car->aero.soft_maximum_load_ratio = GfParmGetNum(hdle, "Formula Underfloor", "soft maximum load ratio", NULL, 0.0);
+    car->aero.hard_maximum_load_ratio = GfParmGetNum(hdle, "Formula Underfloor", "hard maximum load ratio", NULL, 0.0);
+    car->aero.hard_maximum_downforce = GfParmGetNum(hdle, "Formula Underfloor", "hard maximum downforce", NULL, 0.0);
+    if (!(car->aero.floor_choke_height > 0.0 && car->aero.floor_optimal_height > car->aero.floor_choke_height &&
+          car->aero.floor_high_height > car->aero.floor_optimal_height && car->aero.floor_rake_window > 0.0 &&
+          car->aero.floor_seal_roll > 0.0))
+    {
+        GfLogError("Invalid Formula underfloor height or angular range; underfloor disabled\n");
+        car->aero.floor_lift_area = 0.0;
+    }
 
     // Try to get the old style parameters
     car->aero.Clift[0] = GfParmGetNum(hdle, SECT_AERODYNAMICS, PRM_FCL, (char*)NULL, 0.0f);
@@ -94,6 +120,8 @@ SimAeroConfig(tCar *car)
     car->aero.Clift[1] *= aero_factor; // 4.0f;
 
     car->aero.CdBody = 0.645f * Cx * FrntArea;
+    if (car->aero.whole_vehicle_reference)
+        car->aero.CdBody = 0.5 * SimAirDensity * MAX(0.0, car->aero.reference_drag_area - car->aero.reference_wing_drag_area);
     car->aero.Cd = car->aero.CdBody;
 
     float max_lift = MaximumLiftGivenDrag (0.5f * rho * Cx * FrntArea, FrntArea);
@@ -220,9 +248,74 @@ SimAeroUpdate(tCar *car, tSituation *s)
     hm = 2 * exp(-3.0f*hm);
     car->aero.lift[0] = - car->aero.Clift[0] * v2 * hm;
     car->aero.lift[1] = - car->aero.Clift[1] * v2 * hm;
+    if (car->aero.whole_vehicle_reference)
+    {
+        car->aero.CdBody = 0.5 * SimAirDensity * MAX(0.0, car->aero.reference_drag_area - car->aero.reference_wing_drag_area);
+        car->aero.drag = -SIGN(airSpeed) * car->aero.CdBody * v2 * dragK * dragK *
+                         (car->options->aero_damage ? 1.0 + car->dammage / 10000.0 : 1.0);
+    }
 }
 
 static const char *WingSect[2] = {SECT_FRNTWING, SECT_REARWING};
+
+static double formulaSmoothStep(double value)
+{
+    value = MAX(0.0, MIN(1.0, value));
+    return value * value * (3.0 - 2.0 * value);
+}
+
+static double formulaFloorHeightEfficiency(double height, const tAero& aerodynamics)
+{
+    if (height <= 0.0)
+        return 0.0;
+    if (height < aerodynamics.floor_choke_height)
+        return 0.2 * formulaSmoothStep(height / aerodynamics.floor_choke_height);
+    if (height < aerodynamics.floor_optimal_height)
+        return 0.2 + 0.8 * formulaSmoothStep((height - aerodynamics.floor_choke_height) /
+            (aerodynamics.floor_optimal_height - aerodynamics.floor_choke_height));
+    return 1.0 - formulaSmoothStep((height - aerodynamics.floor_optimal_height) /
+        (aerodynamics.floor_high_height - aerodynamics.floor_optimal_height));
+}
+
+static void updateFormulaUnderfloor(tCar* car)
+{
+    tAero& aerodynamics = car->aero;
+    aerodynamics.floor_downforce = aerodynamics.floor_drag = 0.0;
+    if (aerodynamics.floor_lift_area <= 0.0 || car->DynGC.vel.x <= 0.0)
+        return;
+    const double front_height = 0.5 * (car->wheel[0].rideHeight + car->wheel[1].rideHeight) - 0.05 + aerodynamics.floor_front_clearance;
+    const double rear_height = 0.5 * (car->wheel[2].rideHeight + car->wheel[3].rideHeight) - 0.05 + aerodynamics.floor_rear_clearance;
+    const double ground_roll = atan2((car->wheel[1].rideHeight + car->wheel[3].rideHeight -
+                                     car->wheel[0].rideHeight - car->wheel[2].rideHeight) * 0.5, MAX(0.1, fabs(car->wheeltrack)));
+    const double rake_degrees = atan2(rear_height - front_height, MAX(0.1, car->wheelbase)) * 180.0 / PI;
+    const double height_factor = sqrt(formulaFloorHeightEfficiency(front_height, aerodynamics) *
+                                      formulaFloorHeightEfficiency(rear_height, aerodynamics));
+    const double rake_factor = 1.0 - formulaSmoothStep(fabs(rake_degrees - aerodynamics.floor_optimal_rake) / aerodynamics.floor_rake_window);
+    const double seal_factor = 1.0 - formulaSmoothStep(fabs(ground_roll) / aerodynamics.floor_seal_roll);
+    const double forward_speed = MAX(0.0, car->DynGC.vel.x);
+    const double yaw_factor = pow(forward_speed / MAX(0.001, hypot(forward_speed, car->DynGC.vel.y)), 1.2);
+    aerodynamics.floor_downforce = -0.5 * SimAirDensity * car->airSpeed2 * aerodynamics.floor_lift_area *
+        height_factor * rake_factor * seal_factor * yaw_factor * car->options->aero_factor;
+    aerodynamics.floor_drag = -fabs(aerodynamics.floor_downforce) * aerodynamics.floor_induced_drag_ratio;
+    const double raw_downforce = -(car->wing[0].forces.z + car->wing[1].forces.z + aerodynamics.floor_downforce);
+    const double vehicle_weight = (car->mass + car->fuel * car->fuelMass) * G;
+    const double hard_limit = MIN(aerodynamics.hard_maximum_downforce, aerodynamics.hard_maximum_load_ratio * vehicle_weight);
+    const double soft_limit = MIN(hard_limit, aerodynamics.soft_maximum_load_ratio * vehicle_weight);
+    if (hard_limit > 0.0 && soft_limit >= 0.0 && raw_downforce > soft_limit)
+    {
+        const double limit_span = hard_limit - soft_limit;
+        const double limited_downforce = limit_span > 0.0 ?
+            soft_limit + limit_span * (1.0 - exp(-(raw_downforce - soft_limit) / limit_span)) : hard_limit;
+        const double limit_factor = MIN(1.0, limited_downforce / raw_downforce);
+        aerodynamics.floor_downforce *= limit_factor;
+        aerodynamics.floor_drag *= limit_factor;
+        for (int wing_index = 0; wing_index < 2; ++wing_index)
+        {
+            car->wing[wing_index].forces.z *= limit_factor;
+            car->wing[wing_index].forces.x *= limit_factor;
+        }
+    }
+}
 
 tdble F(tWing* wing)
 {
@@ -273,6 +366,8 @@ SimWingConfig(tCar *car, int index)
     const char * w = GfParmGetStr(hdle, WingSect[index], PRM_WINGTYPE, "FLAT");
 
     wing->WingType = 0; // Default if nothing is contained in the wing section
+    wing->polar_point_count = 0;
+    wing->polar_area = area;
 
     if (area == 0)
       wing->WingType = -1;
@@ -282,6 +377,29 @@ SimWingConfig(tCar *car, int index)
       wing->WingType = 1;
     else if (strncmp(w,"THIN",4) == 0)
       wing->WingType = 2;
+    else if (strcmp(w, "TABULATED") == 0)
+    {
+        wing->WingType = 3;
+        for (int point_index = 0; point_index < 16; ++point_index)
+        {
+            char section_path[256];
+            snprintf(section_path, sizeof(section_path), "%s/Polar/%d", WingSect[index], point_index + 1);
+            const tdble angle = GfParmGetNum(hdle, section_path, "angle", "deg", -1000.0);
+            if (angle == -1000.0)
+                break;
+            if (point_index > 0 && angle <= wing->polar_angles[point_index - 1])
+                break;
+            wing->polar_angles[point_index] = angle;
+            wing->polar_drag_coefficients[point_index] = MAX(0.0, GfParmGetNum(hdle, section_path, "drag coefficient", NULL, 0.0));
+            wing->polar_lift_coefficients[point_index] = MAX(0.0, GfParmGetNum(hdle, section_path, "downforce coefficient", NULL, 0.0));
+            ++wing->polar_point_count;
+        }
+        if (wing->polar_point_count < 2)
+        {
+            GfLogError("Tabulated wing requires at least two ascending polar points\n");
+            wing->WingType = -1;
+        }
+    }
     // ...
 
     if (wing->WingType == 1)
@@ -435,6 +553,46 @@ SimWingUpdate(tCar *car, int index, tSituation* s)
     tdble aoa = atan2(car->DynGC.vel.z, car->DynGC.vel.x) + car->DynGCg.pos.ay;
 
     aoa += wing->angle;
+    if (wing->WingType == 3)
+    {
+        const tdble attack_degrees = aoa * 180.0 / PI;
+        int upper_point = 1;
+        while (upper_point < wing->polar_point_count - 1 && attack_degrees > wing->polar_angles[upper_point])
+            ++upper_point;
+        const int lower_point = upper_point - 1;
+        const tdble interpolation = MAX(0.0, MIN(1.0, (attack_degrees - wing->polar_angles[lower_point]) /
+                                                (wing->polar_angles[upper_point] - wing->polar_angles[lower_point])));
+        tdble drag_coefficient = wing->polar_drag_coefficients[lower_point] + interpolation *
+            (wing->polar_drag_coefficients[upper_point] - wing->polar_drag_coefficients[lower_point]);
+        tdble lift_coefficient = wing->polar_lift_coefficients[lower_point] + interpolation *
+            (wing->polar_lift_coefficients[upper_point] - wing->polar_lift_coefficients[lower_point]);
+        const double distance_outside_polar = MAX(wing->polar_angles[0] - attack_degrees,
+            attack_degrees - wing->polar_angles[wing->polar_point_count - 1]);
+        if (distance_outside_polar > 0.0)
+        {
+            const double stalled_fraction = formulaSmoothStep(distance_outside_polar / 35.0);
+            if (attack_degrees < wing->polar_angles[0])
+            {
+                const double lift_slope = MAX(0.0, (wing->polar_lift_coefficients[1] - wing->polar_lift_coefficients[0]) /
+                    (wing->polar_angles[1] - wing->polar_angles[0]));
+                lift_coefficient = MAX(0.0, lift_coefficient - lift_slope * distance_outside_polar);
+            }
+            lift_coefficient *= 1.0 - stalled_fraction;
+            drag_coefficient += stalled_fraction * (1.2 - drag_coefficient);
+        }
+        const tdble dynamic_pressure_area = 0.5 * SimAirDensity * vt2 * wing->polar_area;
+        wing->forces.x = -SIGN(car->DynGC.vel.x) * dynamic_pressure_area * drag_coefficient *
+            (car->options->aero_damage ? 1.0 + car->dammage / 10000.0 : 1.0);
+        wing->forces.z = car->DynGC.vel.x > 0.0 && fabs(aoa) < PI_2 ?
+            -dynamic_pressure_area * lift_coefficient * car->options->aero_factor : 0.0;
+        if (index == 1)
+        {
+            updateFormulaUnderfloor(car);
+            car->aero.Cd = car->aero.CdBody + (vt2 > 0.0 ?
+                (fabs(car->wing[0].forces.x) + fabs(wing->forces.x) + fabs(car->aero.floor_drag)) / vt2 : 0.0);
+        }
+        return;
+    }
 
     if (wing->WingType == 2) //thin wing works for every direction
     {

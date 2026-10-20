@@ -286,6 +286,8 @@ SimCarConfig(tCar *car)
     SimSteerConfig(car);
     SimBrakeSystemConfig(car);
     SimAeroConfig(car);
+    car->formula_diagnostic_telemetry = GfParmGetNum(car->params, "Formula Controls", "diagnostic telemetry", NULL, 0.0) > 0.0;
+    car->formula_diagnostic_elapsed = 0.0;
 
     for (i = 0; i < 2; i++)
     {
@@ -680,6 +682,11 @@ SimCarUpdateForces(tCar *car)
     F.M.y -= (car->wing[i].forces.z + car->aero.lift[i]) * car->wing[i].staticPos.x +
         car->wing[i].forces.x * car->wing[i].staticPos.z;
     }
+
+    F.F.x += car->aero.floor_drag;
+    F.F.z += car->aero.floor_downforce;
+    F.M.y -= car->aero.floor_downforce * (car->aero.floor_position.x - car->statGC.x) +
+        car->aero.floor_drag * (car->aero.floor_position.z - car->statGC.z);
 
     /* Rolling Resistance */
     v = car->DynGC.vel.xy;
@@ -1095,8 +1102,36 @@ SimCarUpdate(tCar *car, tSituation * /* s */)
 }
 
 void
-SimCarUpdate2(tCar *car, tSituation * /* s */)
+SimCarUpdate2(tCar *car, tSituation *situation)
 {
+    car->formula_diagnostic_elapsed += SimDeltaTime;
+    if (car->formula_diagnostic_telemetry && car->formula_diagnostic_elapsed >= 0.05)
+    {
+        car->formula_diagnostic_elapsed = 0.0;
+        GfLogInfo("Formula dynamics: time=%.6f car=%d speed=%.6f roll=%.6f roll_rate=%.6f pitch=%.6f lateral_acceleration=%.6f steering=%.6f throttle=%.6f brake=%.6f gear=%d engine_speed=%.6f engine_torque=%.6f engine_power=%.6f body_drag=%.6f front_wing_drag=%.6f rear_wing_drag=%.6f front_downforce=%.6f rear_downforce=%.6f density=%.6f damage=%d\n",
+                  situation->currentTime, car->carElt->index, car->DynGC.vel.x, car->DynGCg.pos.ax, car->DynGCg.vel.ax, car->DynGCg.pos.ay,
+                  car->DynGC.acc.y, car->steer.steer, car->ctrl->accelCmd, car->ctrl->brakeCmd,
+                  car->carElt->_gear, car->engine.rads, car->engine.Tq, car->engine.rads * car->engine.Tq,
+                  car->aero.drag, car->wing[0].forces.x, car->wing[1].forces.x,
+                  car->aero.lift[0] + car->wing[0].forces.z, car->aero.lift[1] + car->wing[1].forces.z,
+                  SimAirDensity, car->dammage);
+        GfLogInfo("Formula power balance: time=%.6f clutch_transfer=%.6f gear_ratio=%.6f floor_drag=%.6f floor_downforce=%.6f\n",
+                  situation->currentTime, car->transmission.clutch.transferValue, car->transmission.curOverallRatio,
+                  car->aero.floor_drag, car->aero.floor_downforce);
+        for (int wheel_index = 0; wheel_index < 4; ++wheel_index)
+        {
+            const tWheel& wheel = car->wheel[wheel_index];
+            GfLogInfo("Formula wheel: car=%d wheel=%d state=%d mesh_contact=%d load=%.6f travel=%.6f bar_force=%.6f steer=%.6f ground_height=%.6f normal_x=%.6f normal_y=%.6f normal_z=%.6f temperature=%.6f pressure=%.6f camber=%.6f wear=%.6f wheel_speed=%.6f hysteresis_energy=%.6f lateral_energy=%.6f longitudinal_energy=%.6f convection_energy=%.6f additional_cooling_energy=%.6f heat_capacity=%.6f elapsed=%.6f\n",
+                      car->carElt->index, wheel_index, wheel.state, wheel.ground_mesh_contact, wheel.forces.z,
+                      wheel.susp.x, wheel.axleFz, wheel.steer, wheel.zRoad,
+                      wheel.ground_mesh_normal.x, wheel.ground_mesh_normal.y, wheel.ground_mesh_normal.z,
+                      wheel.Ttire, wheel.currentPressure, wheel.camber, wheel.currentWear, wheel.spinVel * wheel.radius,
+                      wheel.hysteresis_energy, wheel.lateral_heating_energy, wheel.longitudinal_heating_energy,
+                      wheel.convection_energy, wheel.additional_cooling_energy, wheel.thermal_capacity, SimDeltaTime);
+            GfLogInfo("Formula wheel power: wheel=%d drive_torque=%.6f brake_torque=%.6f rolling_resistance=%.6f\n",
+                      wheel_index, wheel.driveTq, wheel.brake.Tq, wheel.rollRes);
+        }
+    }
     if ((SimTelemetry == car->carElt->index)
         || (car->ctrl->telemetryMode > 0))
         SimTelemetryOut(car);

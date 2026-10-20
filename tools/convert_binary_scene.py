@@ -88,7 +88,12 @@ class BinaryScene:
                 else:
                     positions = (homogeneous_positions @ world_transform.T)[:, :3]
                 indices = self.accessor(primitive['indices']).reshape(-1, 3) if 'indices' in primitive else numpy.arange(len(positions)).reshape(-1, 3)
-                texture_coordinates = self.accessor(primitive['attributes']['TEXCOORD_0']) if 'TEXCOORD_0' in primitive['attributes'] else numpy.zeros((len(positions), 2))
+                material = self.document.get('materials', [])[primitive['material']] if 'material' in primitive else {}
+                color_texture = material.get('pbrMetallicRoughness', {}).get('baseColorTexture', {})
+                coordinate_attribute = 'TEXCOORD_' + str(color_texture.get('texCoord', 0))
+                if color_texture and coordinate_attribute not in primitive['attributes']:
+                    raise ValueError('Base color texture requires missing coordinates: ' + coordinate_attribute)
+                texture_coordinates = self.accessor(primitive['attributes'][coordinate_attribute]) if coordinate_attribute in primitive['attributes'] else numpy.zeros((len(positions), 2))
                 if numpy.linalg.det(world_transform[:3, :3]) < 0:
                     indices = indices[:, ::-1]
                 yield node.get('name', 'geometry'), primitive.get('material', -1), positions, indices, texture_coordinates
@@ -110,13 +115,37 @@ class BinaryScene:
         return filenames
 
 
-def export_scene(source_path, destination_path, transformation, excluded_names=()):
+def export_scene(source_path, destination_path, transformation, excluded_names=(), material_texture_overrides=None, bake_untextured_colors=False):
     scene = BinaryScene(source_path)
     destination_path = pathlib.Path(destination_path)
     destination_path.parent.mkdir(parents=True, exist_ok=True)
     texture_filenames = scene.export_textures(destination_path.parent, destination_path.stem)
     primitives = list(scene.primitives(excluded_names))
     materials = scene.document.get('materials', [])
+    material_texture_filenames = {}
+    material_conversion_records = []
+    for material_index, material in enumerate(materials):
+        color_properties = material.get('pbrMetallicRoughness', {})
+        material_override = (material_texture_overrides or {}).get(material.get('name'))
+        if material_override:
+            texture_source = pathlib.Path(material_override['texture'])
+            filename = destination_path.stem + '_' + texture_source.name
+            shutil.copyfile(texture_source, destination_path.parent / filename)
+            material_texture_filenames[material_index] = filename
+            color_properties['baseColorFactor'] = material_override.get('color_factor', [1, 1, 1, 1])
+            material['pbrMetallicRoughness'] = color_properties
+            material_conversion_records.append({'material': material['name'], 'texture_source': str(texture_source),
+                'texture_sha256': hashlib.sha256(texture_source.read_bytes()).hexdigest(), 'output_texture': filename})
+        elif bake_untextured_colors and not color_properties.get('baseColorTexture'):
+            from PIL import Image
+            color = color_properties.get('baseColorFactor', [1, 1, 1, 1])
+            encoded_color = [round(255 * (12.92 * value if value <= 0.0031308 else 1.055 * value ** (1 / 2.4) - 0.055)) for value in color[:3]]
+            filename = destination_path.stem + '_material_' + str(material_index) + '_color.png'
+            Image.new('RGBA', (1, 1), tuple(encoded_color + [round(255 * color[3])])).save(destination_path.parent / filename)
+            material_texture_filenames[material_index] = filename
+            color_properties['baseColorFactor'] = [1, 1, 1, 1]
+            material['pbrMetallicRoughness'] = color_properties
+            material_conversion_records.append({'material': material['name'], 'constant_color': color, 'output_texture': filename})
     total_vertices = 0
     total_triangles = 0
     bounds = []
@@ -125,14 +154,17 @@ def export_scene(source_path, destination_path, transformation, excluded_names=(
         for material_index, material in enumerate(materials + [{}]):
             color = material.get('pbrMetallicRoughness', {}).get('baseColorFactor', [1, 1, 1, 1])
             emission = material.get('emissiveFactor', [0, 0, 0])
-            output.write(f'MATERIAL "material_{material_index}" rgb {color[0]} {color[1]} {color[2]} amb 0.4 0.4 0.4 emis {emission[0]} {emission[1]} {emission[2]} spec 0.08 0.08 0.08 shi 32 trans {1-color[3]}\n')
+            ambient = [0.4 * component for component in color[:3]] if bake_untextured_colors else [0.4, 0.4, 0.4]
+            output.write(f'MATERIAL "material_{material_index}" rgb {color[0]} {color[1]} {color[2]} amb {ambient[0]} {ambient[1]} {ambient[2]} emis {emission[0]} {emission[1]} {emission[2]} spec 0.08 0.08 0.08 shi 32 trans {1-color[3]}\n')
         output.write(f'OBJECT world\nkids {len(primitives)}\n')
         for name, material_index, positions, indices, texture_coordinates in primitives:
             positions = (numpy.column_stack((positions, numpy.ones(len(positions)))) @ transformation.T)[:, :3]
             material = materials[material_index] if material_index >= 0 else {}
             output.write(f'OBJECT poly\nname {json.dumps(name)}\n')
             texture = material.get('pbrMetallicRoughness', {}).get('baseColorTexture')
-            if texture:
+            if material_index in material_texture_filenames:
+                output.write(f'texture "{material_texture_filenames[material_index]}"\n')
+            elif texture:
                 image_index = scene.document['textures'][texture['index']]['source']
                 output.write(f'texture "{texture_filenames[image_index]}"\n')
             if material.get('alphaMode') == 'MASK':
@@ -154,7 +186,8 @@ def export_scene(source_path, destination_path, transformation, excluded_names=(
     return {'source': str(source_path), 'source_sha256': hashlib.sha256(pathlib.Path(source_path).read_bytes()).hexdigest(),
             'output': str(destination_path), 'output_sha256': hashlib.sha256(destination_path.read_bytes()).hexdigest(),
             'vertices': total_vertices, 'triangles': total_triangles, 'primitive_bounds': bounds,
-            'transformation': transformation.tolist(), 'excluded_nodes': list(excluded_names)}
+            'transformation': transformation.tolist(), 'excluded_nodes': list(excluded_names),
+            'material_conversions': material_conversion_records}
 
 
 def main():

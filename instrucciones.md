@@ -2,6 +2,24 @@
 
 Fecha: 20 de octubre de 2026.
 
+## Continuación implementada
+
+Estado actual antes del commit: diferencial con precarga independiente de 10 Nm, aceleración 0,30 y retención 0,70; presión solicitada de 160 psi guardada como presión absoluta por el motor. La comparación con Rust confirma diferencias de unidades, carcasa y respuesta combinada todavía sin resolver; ver `implementation/reports/williams_tire_model_comparison.md`. Los apartados anteriores de seguimiento conservan la secuencia de ajustes, no todos los valores actuales.
+
+Actualización aerodinámica y neumáticos: fondo 40% / alas 60% en la condición de referencia, con carga máxima total y centro de presión longitudinal conservados. Se corrige la exportación de caída de agarre y posición del pico lateral para coincidir con los objetivos del perfil de origen; mu permanece en 2,7. Pruebas nativas pasan, pero conducción y fidelidad histórica siguen pendientes. Ver `implementation/reports/williams_aerodynamics_and_grip.md`.
+
+Corrección autorizada tras la auditoría: se corrigieron altura de exportación/centro de gravedad, recorridos de suspensión, equivalencia lineal en rueda mediante relaciones de palanca medidas y reacción nativa de las barras. Ver `implementation/reports/williams_chassis_correction.md` para valores instalados, procedencia y pruebas. La auditoría previa conserva los valores anteriores; no describe ya la configuración candidata actual. La aceptación de vuelco en conducción sigue pendiente.
+
+Auditoría posterior de geometría/suspensión: ver `implementation/reports/williams_chassis_suspension_audit.md`. Batalla y trochas coinciden con el perfil; se confirmó un desfase vertical nominal de 50 mm, recorridos de suspensión mal convertidos y riesgos en la equivalencia de amortiguación/reacción de barras. La auditoría no modificó código, configuración física, binarios ni medios; incluye evidencia nativa y un orden de corrección concreto.
+
+Último ajuste solicitado: refrigeración por velocidad de neumáticos 1,0 → 0,25 y factor de histéresis 1,0 → 1,25 en las cuatro ruedas del Williams; bloqueo de diferencial en retención 0,10 → 0,20, conservando tracción 0,30. Las comparaciones térmicas nativas y la comprobación de duplicación del cierre pasan; todavía no equivalen a aceptación en conducción. Datos y condiciones en `implementation/reports/williams_physics_changes.md`.
+
+Seguimiento de materiales y setup: restauración de textura de carbono del chasis, corrección del canal UV del carbono del volante, ala trasera 16° → 17° y diferencial 1.5 WAY con bloqueo suave en retención. Se detectó y corrigió un signo desestabilizador del bloqueo en retención mediante opción exclusiva del Williams. Ver evidencia y límites en `implementation/reports/williams_physics_changes.md`; todavía requiere revisión visual y conducción.
+
+Seguimiento de controles: se corrigieron la selección de reversa (límite R/N y signo de relación), se aumentó el suavizado del mando con respuesta exponencial de 0,16 segundos y se activó la reducción de recorrido según velocidad. Configuración actual: aplicación/inversión/centrado 1,5/2/3 por segundo y sensibilidad por velocidad 0,018 por m/s. Ver el apartado de seguimiento en `implementation/reports/williams_physics_changes.md`; la aceptación de conducción física continúa pendiente.
+
+Se aplicó un candidato de dirección, contrato aerodinámico, fondo aproximado y correcciones térmicas con alcance del Williams. El detalle de archivos, pruebas, límites y aceptación pendiente está en `implementation/reports/williams_physics_changes.md`. Las barras y el factor de refrigeración conservan sus valores anteriores. Los cuatro problemas de conducción siguen pendientes de validación completa; no interpretar los resultados de compilación, pruebas nativas o arranque como aceptación física.
+
 ## Objetivo y alcance
 
 Investigar y resolver cuatro problemas del Williams FW19 en Fuji76-77: dirección excesivamente brusca con mando, vuelcos durante cambios rápidos de dirección en asfalto liso, enfriamiento demasiado rápido de neumáticos y velocidad punta baja. Resolver causas y validar el comportamiento del coche completo; no aceptar una mejora visual, una compilación o un cálculo aislado como prueba de conducción estable.

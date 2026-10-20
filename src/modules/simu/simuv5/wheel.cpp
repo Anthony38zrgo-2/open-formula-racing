@@ -79,6 +79,7 @@ void SimWheelConfig(tCar *car, int index)
 	wheel->latHeatFactor = GfParmGetNum(hdle, WheelSect[index], PRM_LATMUHEATING, (char*)NULL, 0.0f);				// default 0.0 [-]
 	wheel->longHeatFactor = GfParmGetNum(hdle, WheelSect[index], PRM_LONGMUHEATING, (char*)NULL, 0.0f);				// default 0.0 [-]
 	wheel->tireSpeedCoolFactor = GfParmGetNum(hdle, WheelSect[index], PRM_TIRESPDCOOLING, (char*)NULL, 0.0f);		// default 0.0 [-] but recommend 0.5-1.25 for most cars
+    wheel->corrected_thermal_load = GfParmGetNum(hdle, "Formula Controls", "correct thermal camber units", NULL, 0.0) > 0.0;
 	wheel->tireTreadDrainFactor = GfParmGetNum(hdle, WheelSect[index], PRM_TREADDRAINSPD, (char*)NULL, 0.0);		// default 0
     wheel->wearFactor = GfParmGetNum(hdle, WheelSect[index], PRM_WEAR, (char*)NULL, 1.0f);
 
@@ -1016,13 +1017,18 @@ void SimWheelUpdateTire(tCar *car, int index)
 		drainCooling = 0;
 	}
 
+    const tdble thermal_camber_degrees = wheel->corrected_thermal_load ? fabs(wheel->camber) * 180.0 / M_PI : fabs(wheel->camber * M_PI * 360.0);
     if (normalForce > wheel->opLoad)
     {
-        normalForce -= (wheel->pressure / 5894.6) * fabs(wheel->camber * M_PI * 360.0);
+        normalForce -= (wheel->pressure / 5894.6) * thermal_camber_degrees;
     }
     else
     {
-        normalForce += (wheel->pressure / 3894.6) * fabs(wheel->camber * M_PI * 360.0);
+        normalForce += (wheel->pressure / 3894.6) * thermal_camber_degrees;
+    }
+    if (wheel->corrected_thermal_load)
+    {
+        normalForce = wheel->forces.z > 0.0 ? MAX(0.0, normalForce) : 0.0;
     }
 
 	// Normalize slip. Not realistic, but prevents extreme spiking when high wheelspin occurs
@@ -1087,13 +1093,23 @@ void SimWheelUpdateTire(tCar *car, int index)
     // Calculate actual heat capacity
     const tdble cvNitrogen = 1041.0f - 296.8f;	// cv = cp - R, [J/(kg*Kelvin)]
     tdble heatCapacity = cpRubber * actualRubberMass + cvNitrogen * wheel->tireGasMass;
+    wheel->hysteresis_energy = energyGain;
+    wheel->lateral_heating_energy = latMod;
+    wheel->longitudinal_heating_energy = longMod;
+    wheel->convection_energy = energyLoss;
+    wheel->thermal_capacity = heatCapacity;
+    const tdble additional_temperature_difference = wheel->Ttire + deltaEnergy / heatCapacity - Tair;
+    wheel->additional_cooling_energy = wheel->coolingFactor * (wheel->corrected_thermal_load ? additional_temperature_difference : fabs(additional_temperature_difference)) * SimDeltaTime * heatCapacity;
 
     // Energy transfer into the tire
     wheel->Ttire += deltaEnergy / heatCapacity;
 
 	// Base cooling from lack of force
 	// static cooling, slowly cool tire down with low loads
-	wheel->Ttire -= ((wheel->coolingFactor) * (fabs(wheel->Ttire - Tair) * SimDeltaTime));
+    if (wheel->corrected_thermal_load)
+        wheel->Ttire -= wheel->additional_cooling_energy / heatCapacity;
+    else
+        wheel->Ttire -= wheel->coolingFactor * fabs(wheel->Ttire - Tair) * SimDeltaTime;
 
     if (wheel->Ttire > 473.15f)
         wheel->Ttire = 473.15f;

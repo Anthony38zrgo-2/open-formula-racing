@@ -49,6 +49,8 @@ SimDifferentialConfig(tCar *car, int index)
     tCarSetupItem *setupDCMaxSB = &(car->carElt->setup.differentialCoastMaxSlipBias[index]);
 
     differential->I     = GfParmGetNum(hdle, section, PRM_INERTIA, (char*)NULL, 0.1f);
+    differential->restoring_coast_lock = strcmp(GfParmGetStr(hdle, section, "restoring coast lock", "no"), "yes") == 0;
+    differential->preload_torque = MAX(0.0, GfParmGetNum(hdle, section, "preload torque", (char*)NULL, 0.0));
     differential->efficiency    = GfParmGetNum(hdle, section, PRM_EFFICIENCY, (char*)NULL, 1.0f);
     //differential->bias is unused as of 2015.11.15.
     differential->bias      = GfParmGetNum(hdle, section, PRM_BIAS, (char*)NULL, 0.1f);
@@ -345,6 +347,8 @@ SimDifferentialUpdate(tCar *car, tDifferential *differential, int first)
 
                 float pressure = tanh(rate*(spinVel1-spinVel0));
                 float bias = (DrTq >= 0 ? differential->dSlipMax : differential->dCoastSlipMax) * 0.5f* pressure;
+                if (DrTq < 0.0f && differential->restoring_coast_lock)
+                    bias = -bias;
                 float open = 1.0f;// - rate;
                 DrTq0 = DrTq*(0.5f+bias) + spiderTq*open;
                 DrTq1 = DrTq*(0.5f-bias) - spiderTq*open;
@@ -372,6 +376,21 @@ SimDifferentialUpdate(tCar *car, tDifferential *differential, int first)
         DrTq1 = (tdble) (DrTq / 2.0);
     }
 
+
+    if (differential->preload_torque > 0.0 &&
+        (differential->type == DIFF_15WAY_LSD || differential->type == DIFF_ELECTRONIC_LSD))
+    {
+        const tdble left_inertia = differential->outAxis[0]->I;
+        const tdble right_inertia = differential->outAxis[1]->I;
+        const tdble predicted_speed_difference = spinVel0 - spinVel1 + SimDeltaTime *
+            ((DrTq0 - inTq0) / left_inertia - (DrTq1 - inTq1) / right_inertia);
+        const tdble synchronization_torque = predicted_speed_difference /
+            (SimDeltaTime * (1.0 / left_inertia + 1.0 / right_inertia));
+        const tdble preload_transfer_torque = MAX(-differential->preload_torque,
+            MIN(differential->preload_torque, synchronization_torque));
+        DrTq0 -= preload_transfer_torque;
+        DrTq1 += preload_transfer_torque;
+    }
 
     ndot0 = SimDeltaTime * (DrTq0 - inTq0) / differential->outAxis[0]->I;
     spinVel0 += ndot0;

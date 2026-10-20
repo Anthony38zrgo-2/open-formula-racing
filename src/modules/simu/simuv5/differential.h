@@ -46,6 +46,8 @@ typedef struct
     tdble	dTqMax;
     tdble	dSlipMax;
     tdble   dCoastSlipMax;
+    bool restoring_coast_lock;
+    tdble preload_torque;
     tdble	lockInputTq;
     tdble	viscosity;
     tdble	viscomax;

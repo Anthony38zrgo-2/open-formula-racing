@@ -30,6 +30,25 @@ typedef struct
     tdble	Clift[2];	/* front & rear lift due to body not wings */
     tdble	Cd;		    /* for aspiration, value updated depending on wing angles */
     tdble	CdBody;	    /* for aspiration, value without wings, for variable wing angles */
+    bool whole_vehicle_reference;
+    tdble reference_drag_area;
+    tdble reference_wing_drag_area;
+    tdble floor_lift_area;
+    tdble floor_induced_drag_ratio;
+    tdble floor_choke_height;
+    tdble floor_optimal_height;
+    tdble floor_high_height;
+    tdble floor_front_clearance;
+    tdble floor_rear_clearance;
+    tdble floor_optimal_rake;
+    tdble floor_rake_window;
+    tdble floor_seal_roll;
+    tdble floor_downforce;
+    tdble floor_drag;
+    tdble soft_maximum_load_ratio;
+    tdble hard_maximum_load_ratio;
+    tdble hard_maximum_downforce;
+    t3Dd floor_position;
 } tAero;
 
 
@@ -69,6 +88,11 @@ typedef struct
     tdble   Kz1, Kz2, Kz3;
 
     int		WingType;	/* -1=None, 0=FLAT, 1=PROFILE, 2=THIN... */
+    int polar_point_count;
+    tdble polar_angles[16];
+    tdble polar_drag_coefficients[16];
+    tdble polar_lift_coefficients[16];
+    tdble polar_area;
 //<<< simuV4
 } tWing;
 

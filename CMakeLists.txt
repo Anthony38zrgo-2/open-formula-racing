@@ -168,6 +168,34 @@ target_link_libraries(validate_formula_pedal_controls tgf)
 ADD_SDL2_INCLUDEDIR()
 ADD_SDL2_LIBRARY(validate_formula_pedal_controls)
 
+add_executable(validate_formula_aerodynamics tools/validate_formula_aerodynamics.cpp
+    src/modules/simu/simuv5/aero.cpp src/modules/simu/simuv5/simulationOptions.cpp)
+target_include_directories(validate_formula_aerodynamics PRIVATE src/modules/simu/simuv5
+    src/interfaces src/libs/tgf src/libs/portability src/libs/math src/libs/robottools freesolid/include)
+target_link_libraries(validate_formula_aerodynamics tgf)
+
+add_executable(validate_formula_differential tools/validate_formula_differential.cpp src/modules/simu/simuv5/differential.cpp)
+target_include_directories(validate_formula_differential PRIVATE src/modules/simu/simuv5
+    src/interfaces src/libs/tgf src/libs/portability src/libs/math src/libs/robottools freesolid/include)
+target_link_libraries(validate_formula_differential tgf)
+
+add_executable(validate_williams_chassis tools/validate_williams_chassis.cpp
+    src/modules/simu/simuv5/axle.cpp src/modules/simu/simuv5/susp.cpp)
+target_include_directories(validate_williams_chassis PRIVATE src/modules/simu/simuv5
+    src/interfaces src/libs/tgf src/libs/portability src/libs/math src/libs/robottools freesolid/include)
+target_link_libraries(validate_williams_chassis tgf)
+
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    add_executable(validate_formula_tire_energy tools/validate_formula_tire_energy.cpp src/modules/simu/simuv5/wheel.cpp
+        src/modules/simu/simuv5/susp.cpp src/modules/simu/simuv5/brake.cpp src/modules/simu/simuv5/track_ground_mesh.cpp
+        src/modules/simu/simuv5/simulationOptions.cpp)
+    target_include_directories(validate_formula_tire_energy PRIVATE src/modules/simu/simuv5
+        src/interfaces src/libs/tgf src/libs/portability src/libs/math src/libs/robottools freesolid/include)
+    target_compile_options(validate_formula_tire_energy PRIVATE -ffunction-sections -fdata-sections)
+    target_link_options(validate_formula_tire_energy PRIVATE -Wl,--gc-sections)
+    target_link_libraries(validate_formula_tire_energy tgf robottools)
+endif()
+
 if(WIN32)
     add_executable(OpenFormula WIN32 tools/open_formula_launcher.cpp)
     set_target_properties(OpenFormula PROPERTIES CXX_STANDARD 17)

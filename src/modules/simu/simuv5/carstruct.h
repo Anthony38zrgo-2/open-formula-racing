@@ -40,6 +40,8 @@ typedef struct
     tCarElt	*carElt;
 
     tCarCtrl	preCtrl;
+    bool formula_diagnostic_telemetry;
+    double formula_diagnostic_elapsed;
 
     /* components */
     tAxle		axle[2];

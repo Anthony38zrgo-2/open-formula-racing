@@ -1,4 +1,5 @@
 #include "formula_gear_controls.h"
+#include "formula_steering_filter.h"
 
 #include <SDL.h>
 #include <algorithm>
@@ -17,6 +18,7 @@ struct FormulaGearControlState
     double previous_throttle = 0.0;
     double previous_brake = 0.0;
     double previous_steering = 0.0;
+    double steering_diagnostic_elapsed = 0.0;
 };
 
 std::map<int, FormulaGearControlState> formula_gear_control_states;
@@ -61,7 +63,7 @@ void resetFormulaGearControls(tCarElt* car)
     if (!formulaGearControlsEnabled(car))
         return;
     discoverFormulaGameController(car);
-    GfLogInfo("Formula gear controls: keyboard A shifts up, Z shifts down; sequential gears N through 6\n");
+    GfLogInfo("Formula gear controls: keyboard A shifts up, Z shifts down; sequential gears R, N through 6\n");
 }
 
 bool applyFormulaGearControls(tCarElt* car, bool keyboard_shift_up, bool keyboard_shift_down, double current_time)
@@ -80,7 +82,7 @@ bool applyFormulaGearControls(tCarElt* car, bool keyboard_shift_up, bool keyboar
     const bool shift_down = keyboard_shift_down || (controller_shift_down && !state.controller_shift_down);
     if (shift_up != shift_down)
     {
-        car->_gearCmd = std::max(0, std::min(car->_gearNb - 1, car->_gearCmd + (shift_up ? 1 : -1)));
+        car->_gearCmd = std::max(-car->_gearOffset, std::min(car->_gearNb - 1, car->_gearCmd + (shift_up ? 1 : -1)));
         GfLogInfo("Formula gear command: %d (%s)\n", car->_gearCmd, keyboard_shift_up || keyboard_shift_down ? "keyboard" : "controller");
     }
     state.controller_shift_up = controller_shift_up;
@@ -121,11 +123,28 @@ void applyFormulaSteeringControls(tCarElt* car, bool keyboard_left, bool keyboar
     const double right_strength = keyboard_right ? 1.0 : (raw_axis > 0.0 ? controller_strength : 0.0);
     const double steering_axis = left_strength - right_strength;
     const double deadzoned_strength = std::max(0.0, (std::abs(steering_axis) - 0.05) / 0.95);
-    const double steering_target = std::copysign(std::pow(deadzoned_strength, 1.8), steering_axis);
+    double steering_target = std::copysign(std::pow(deadzoned_strength, 1.8), steering_axis);
     FormulaGearControlState& state = formula_gear_control_states[car->index];
-    if (steering_target != 0.0)
+    const double application_rate = std::max(0.01, static_cast<double>(GfParmGetNum(car->_carHandle, "Formula Controls", "steering application rate", nullptr, 6.85)));
+    const double reversal_rate = std::max(0.01, static_cast<double>(GfParmGetNum(car->_carHandle, "Formula Controls", "steering reversal rate", nullptr, 6.85)));
+    const double centering_rate = std::max(0.01, static_cast<double>(GfParmGetNum(car->_carHandle, "Formula Controls", "steering centering rate", nullptr, 6.85)));
+    const double speed_sensitivity = std::max(0.0, static_cast<double>(GfParmGetNum(car->_carHandle, "Formula Controls", "steering speed sensitivity", nullptr, 0.0)));
+    const double response_seconds = std::max(0.0, static_cast<double>(GfParmGetNum(car->_carHandle, "Formula Controls", "steering response time", nullptr, 0.0)));
+    if (!keyboard_left && !keyboard_right)
+        steering_target /= 1.0 + speed_sensitivity * std::abs(car->_speed_x);
+    if (keyboard_left || keyboard_right)
         state.previous_steering = steering_target;
     else
-        state.previous_steering = std::copysign(std::max(0.0, std::abs(state.previous_steering) - std::max(0.0, delta_time) * 6.85), state.previous_steering);
+        state.previous_steering = advanceFormulaSteering(state.previous_steering, steering_target, delta_time,
+                                                       application_rate, reversal_rate, centering_rate, response_seconds);
+    state.steering_diagnostic_elapsed += std::max(0.0, delta_time);
+    if (GfParmGetNum(car->_carHandle, "Formula Controls", "diagnostic telemetry", nullptr, 0.0) > 0.0 &&
+        state.steering_diagnostic_elapsed >= 0.05)
+    {
+        state.steering_diagnostic_elapsed = 0.0;
+        GfLogInfo("Formula steering: car=%d raw=%.6f target=%.6f filtered=%.6f speed=%.6f elapsed=%.6f attached=%d\n",
+                  car->index, raw_axis, steering_target, state.previous_steering, car->_speed_x, delta_time,
+                  formula_game_controller != nullptr);
+    }
     car->_steerCmd = static_cast<float>(state.previous_steering);
 }

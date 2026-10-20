@@ -1,0 +1,19 @@
+{
+  "source_commit": "f3efcf246c2a2abf62477037ed0243f2f9a93a9b",
+  "source_files": {
+    "game/data/vehicles/f1_1997/williams/profiles/hockenheim/suspension.json": "324c4c167053a4f548ac439f4de2f1aadd4439ce65f7783018364cc9ccfcbf1e",
+    "game/crates/vehicle-physics-engine/src/suspension_kinematics.rs": "8674a0c02d8bc0eb799d57e8ad10f7a1bcb94796c7f52330cd86a3c45eb5b9a9",
+    "game/crates/vehicle-physics-engine/src/suspension_geo_config.rs": "922b2a8b6623152ba601a2b605257897fb00f8f7548984422c0ce69a4e5d6c7e"
+  },
+  "representation": "constant motion ratio at design rest; native spring preload balances configured vehicle weight; source preload derivative is not reproduced",
+  "axles": {
+    "front": {
+      "motion_ratio": 0.8759227555360516,
+      "left_right_difference": 0.0
+    },
+    "rear": {
+      "motion_ratio": 0.37049714771142384,
+      "left_right_difference": 0.0
+    }
+  }
+}

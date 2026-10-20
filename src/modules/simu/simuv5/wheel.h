@@ -139,6 +139,13 @@ typedef struct
     tDynAxis	feedBack;
 
     tdble	preFn, preFt;
+    tdble hysteresis_energy;
+    tdble lateral_heating_energy;
+    tdble longitudinal_heating_energy;
+    tdble convection_energy;
+    tdble additional_cooling_energy;
+    tdble thermal_capacity;
+    bool corrected_thermal_load;
 } tWheel;
 
 #endif /* _WHEEL_H__ */
