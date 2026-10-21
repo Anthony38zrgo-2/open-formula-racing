@@ -74,6 +74,8 @@ Arranque nativo: `distribution/OpenFormula.exe` cargó el Williams/Fuji con el m
 
 ## 7. Estado por fase
 
+> Actualización posterior (Etapa A): se corrigió el selector `legacy` y se restauró el integrador de contacto de `8531ccb` como referencia estable en reposo. La comparación neutral a 500 Hz y el estado efectivo están en `implementation/reports/williams_idle_oscillation_stage_a.md`. La Etapa B del contrato vertical sigue abierta; el intento y sus límites están en `implementation/reports/williams_idle_oscillation_stage_b.md`.
+
 | Fase | Estado | Evidencia |
 | --- | --- | --- |
 | TIRE-01 | Completada | contratos, unidades, selector, presión explícita, reset y mapa de archivos |

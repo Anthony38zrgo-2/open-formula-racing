@@ -498,27 +498,33 @@ double GetWheelDamage(tWheel* wheel)
 	return wheel->rotational_damage_x;
 }
 
-void SimWheelUpdateRide(tCar *car, int index)
+void SimWheelUpdateRoad(tCar *car, int index)
 {
     tWheel *wheel = &(car->wheel[index]);
-    tdble Zroad;
-
-    // compute suspension travel
-    RtTrackGlobal2Local(car->trkPos.seg, wheel->pos.x, wheel->pos.y, &(wheel->trkPos), TR_LPOS_SEGMENT);
-    wheel->zRoad = Zroad = RtTrackHeightL(&(wheel->trkPos));
+    RtTrackGlobal2Local(car->trkPos.seg, wheel->pos.x, wheel->pos.y, &(wheel->trkPos),
+        TR_LPOS_SEGMENT);
+    wheel->zRoad = RtTrackHeightL(&(wheel->trkPos));
     wheel->ground_friction = wheel->trkPos.seg->surface->kFriction;
     wheel->ground_rolling_resistance = wheel->trkPos.seg->surface->kRollRes;
     TrackGroundSample ground_sample;
-    wheel->ground_mesh_contact = simulation_track_ground_mesh.sample(wheel->pos.x, wheel->pos.y, wheel->pos.z, ground_sample);
+    wheel->ground_mesh_contact = simulation_track_ground_mesh.sample(wheel->pos.x,
+        wheel->pos.y, wheel->pos.z, ground_sample);
     if (wheel->ground_mesh_contact)
     {
-        wheel->zRoad = Zroad = ground_sample.height;
+        wheel->zRoad = ground_sample.height;
         wheel->ground_mesh_normal.x = ground_sample.normal[0];
         wheel->ground_mesh_normal.y = ground_sample.normal[1];
         wheel->ground_mesh_normal.z = ground_sample.normal[2];
         wheel->ground_friction = ground_sample.friction;
         wheel->ground_rolling_resistance = ground_sample.rolling_resistance;
     }
+}
+
+void SimWheelUpdateRide(tCar *car, int index)
+{
+    tWheel *wheel = &(car->wheel[index]);
+    SimWheelUpdateRoad(car, index);
+    tdble Zroad = wheel->zRoad;
 
     // Wheel susp.x is not the wheel movement, look at SimSuspCheckIn, it becomes there scaled with
     // susp->spring.bellcrank, so we invert this here.
@@ -620,6 +626,11 @@ static void SimWheelUpdateDriverAssists(tCar *car, int index)
             wheel->brake.ABS = 1.0f;
         }
     }
+}
+
+void SimWheelUpdateDriverAssistsForCoupled(tCar *car, int index)
+{
+    SimWheelUpdateDriverAssists(car, index);
 }
 
 void SimWheelUpdateForce(tCar *car, int index)

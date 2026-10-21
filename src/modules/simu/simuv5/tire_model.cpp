@@ -80,6 +80,13 @@ void SimTireModelResetWheel(tCar *car, int index, bool new_tire)
     TireThermalModelMechanicalModifiers(state.thermal, configuration.thermal[axle],
         configuration.pressure, index, modifiers);
     TireContactModelReset(state.contact, configuration.contact[axle], modifiers);
+    double initial_deflection = wheel->weight0 / fmax(state.contact.vertical_stiffness, 1.0);
+    state.contact.deflection = ClampValue(initial_deflection, 0.0, state.contact.maximum_deflection);
+    state.contact.deflection_velocity = 0.0;
+    state.contact.effective_radius = configuration.contact[axle].radius_meters
+        - state.contact.deflection * ClampValue(configuration.contact[axle].rolling_radius_deflection_factor, 0.0, 1.0);
+    state.contact.effective_radius = ClampValue(state.contact.effective_radius,
+        configuration.contact[axle].radius_meters * 0.86, configuration.contact[axle].radius_meters);
     TireForceModelReset(state.force, configuration.force[axle], state.contact.effective_radius);
     TireWearModelReset(state.wear, configuration.wear[axle]);
     state.initialized = 1;
@@ -119,15 +126,19 @@ void SimTireModelConfigure(tCar *car)
         wheel_mass_kilograms[index] = car->wheel[index].mass;
         radius_meters[index] = car->carElt->_wheelRadius(index);
     }
-    car->formula_tire_model_enabled = TireModelConfigurationRead(car->formula_tire_configuration,
+    bool configuration_valid = TireModelConfigurationRead(car->formula_tire_configuration,
         car->params, static_load_newtons, radius_meters, width_meters, wheel_mass_kilograms,
-        SimAirPressure, Tair) ? 1 : 0;
+        SimAirPressure, Tair);
+    car->formula_tire_model_enabled = (configuration_valid
+        && car->formula_tire_configuration.enabled) ? 1 : 0;
     if (!car->formula_tire_model_enabled)
     {
-        GfLogInfo("SimuV5 tire model: legacy\n");
+        GfLogInfo("SimuV5 tire model: legacy (configuration_valid=%d enabled=%d)\n",
+            configuration_valid ? 1 : 0, car->formula_tire_configuration.enabled);
         return;
     }
-    GfLogInfo("SimuV5 tire model: transient coupled\n");
+    GfLogInfo("SimuV5 tire model: transient coupled (configuration_valid=%d enabled=%d)\n",
+        configuration_valid ? 1 : 0, car->formula_tire_configuration.enabled);
     GfLogInfo("Coupled tire thermal initial front=%.3f C rear=%.3f C ambient=%.3f C\n",
         car->formula_tire_configuration.thermal[0].initial_temperature_celsius,
         car->formula_tire_configuration.thermal[1].initial_temperature_celsius,
@@ -138,7 +149,52 @@ void SimTireModelConfigure(tCar *car)
     }
 }
 
-void SimTireModelUpdateWheel(tCar *car, int index)
+static void BuildTireForceInput(tCar *car, int index, double normal_force_newtons,
+    const TireContactOutput& contact_output, double elapsed_seconds, TireForceInput& force_input)
+{
+    tWheel *wheel = &car->wheel[index];
+    TireWheelModelState& state = wheel->formula_tire_model;
+    int axle = index / 2;
+    TireModelConfiguration& configuration = car->formula_tire_configuration;
+    TireMechanicalModifiers modifiers;
+    TireThermalModelMechanicalModifiers(state.thermal, configuration.thermal[axle],
+        configuration.pressure, index, modifiers);
+    double waz = wheel->steer + wheel->staticPos.az;
+    double cos_angle = cos(waz);
+    double sin_angle = sin(waz);
+    double forward_velocity = wheel->bodyVel.x * cos_angle + wheel->bodyVel.y * sin_angle;
+    double lateral_velocity = -wheel->bodyVel.x * sin_angle + wheel->bodyVel.y * cos_angle;
+    double wet_scale = 1.0 - (1.0 - ClampValue(configuration.wet_grip_scale, 0.0, 1.0))
+        * ClampValue((double)SimRain / 3.0, 0.0, 1.0);
+
+    force_input = {};
+    force_input.normal_force_newtons = normal_force_newtons;
+    force_input.surface_friction_multiplier = wheel->ground_friction;
+    force_input.surface_stiffness = ClampValue(5.0 * wheel->ground_friction, 0.15, 15.0);
+    force_input.surface_rolling_resistance = wheel->ground_rolling_resistance;
+    force_input.effective_radius_meters = contact_output.effective_radius_meters;
+    force_input.forward_velocity_meters_per_second = forward_velocity;
+    force_input.lateral_velocity_meters_per_second = lateral_velocity;
+    force_input.spin_velocity_radians_per_second = wheel->spinVel;
+    force_input.camber_radians = wheel->relPos.ax;
+    force_input.contact_fraction = contact_output.contact_fraction;
+    force_input.contact_patch_ratio = contact_output.contact_patch_meters
+        / fmax(configuration.force[axle].contact_patch_meters, 0.03);
+    force_input.load_sensitivity_scale = contact_output.load_sensitivity_scale;
+    force_input.thermal_grip_scale = modifiers.grip_scale;
+    force_input.wear_grip_scale = state.wear.wear_grip_scale;
+    force_input.external_grip_scale = wet_scale;
+    force_input.force_stiffness_scale = modifiers.force_stiffness_scale;
+    force_input.relaxation_length_scale = modifiers.relaxation_length_scale;
+    force_input.pneumatic_trail_scale = modifiers.pneumatic_trail_scale;
+    force_input.rolling_resistance_scale = modifiers.rolling_resistance_scale;
+    force_input.elapsed_seconds = elapsed_seconds;
+    force_input.wheel_right = index % 2 == 0 ? 1 : 0;
+}
+
+static void SimTireModelUpdateWheelInternal(tCar *car, int index, int use_vertical_state,
+    double normal_force_override, double deflection_override,
+    double deflection_velocity_override, int grounded_override)
 {
     tWheel *wheel = &car->wheel[index];
     TireWheelModelState& state = wheel->formula_tire_model;
@@ -149,6 +205,10 @@ void SimTireModelUpdateWheel(tCar *car, int index)
     {
         SimTireModelResetWheel(car, index, false);
     }
+    if (use_vertical_state)
+    {
+        wheel->forces.z = (tdble)normal_force_override;
+    }
 
     TireMechanicalModifiers modifiers;
     TireThermalModelMechanicalModifiers(state.thermal, configuration.thermal[axle],
@@ -158,46 +218,27 @@ void SimTireModelUpdateWheel(tCar *car, int index)
     contact_input.normal_force_newtons = wheel->forces.z;
     contact_input.base_contact_patch_meters = base_contact_patch;
     contact_input.load_sensitivity_exponent = configuration.force[axle].load_sensitivity_exponent;
-    contact_input.elapsed_seconds = elapsed;
-    contact_input.grounded = wheel->formula_tire_model_grounded;
+    contact_input.elapsed_seconds = use_vertical_state ? 0.0 : elapsed;
+    contact_input.grounded = use_vertical_state
+        ? grounded_override : wheel->formula_tire_model_grounded;
+    if (use_vertical_state)
+    {
+        state.contact.deflection = std::max(deflection_override, 0.0);
+        state.contact.deflection_velocity = deflection_velocity_override;
+    }
     TireContactOutput contact_output;
     TireContactModelUpdate(state.contact, configuration.contact[axle], modifiers, contact_input,
         contact_output);
 
+    double vehicle_speed = sqrt(wheel->bodyVel.x * wheel->bodyVel.x
+        + wheel->bodyVel.y * wheel->bodyVel.y);
+    TireForceInput force_input;
+    BuildTireForceInput(car, index, wheel->forces.z, contact_output, elapsed, force_input);
+    TireForceOutput force_output;
+    TireForceModelEvaluate(state.force, configuration.force[axle], force_input, force_output);
     double waz = wheel->steer + wheel->staticPos.az;
     double cos_angle = cos(waz);
     double sin_angle = sin(waz);
-    double forward_velocity = wheel->bodyVel.x * cos_angle + wheel->bodyVel.y * sin_angle;
-    double lateral_velocity = -wheel->bodyVel.x * sin_angle + wheel->bodyVel.y * cos_angle;
-    double vehicle_speed = sqrt(wheel->bodyVel.x * wheel->bodyVel.x
-        + wheel->bodyVel.y * wheel->bodyVel.y);
-    double wet_scale = 1.0 - (1.0 - ClampValue(configuration.wet_grip_scale, 0.0, 1.0))
-        * ClampValue((double)SimRain / 3.0, 0.0, 1.0);
-
-    TireForceInput force_input;
-    force_input.normal_force_newtons = wheel->forces.z;
-    force_input.surface_friction_multiplier = wheel->ground_friction;
-    force_input.surface_stiffness = ClampValue(5.0 * wheel->ground_friction, 0.15, 15.0);
-    force_input.surface_rolling_resistance = wheel->ground_rolling_resistance;
-    force_input.effective_radius_meters = contact_output.effective_radius_meters;
-    force_input.forward_velocity_meters_per_second = forward_velocity;
-    force_input.lateral_velocity_meters_per_second = lateral_velocity;
-    force_input.spin_velocity_radians_per_second = wheel->spinVel;
-    force_input.camber_radians = wheel->relPos.ax;
-    force_input.contact_fraction = contact_output.contact_fraction;
-    force_input.contact_patch_ratio = contact_output.contact_patch_meters / fmax(base_contact_patch, 0.03);
-    force_input.load_sensitivity_scale = contact_output.load_sensitivity_scale;
-    force_input.thermal_grip_scale = modifiers.grip_scale;
-    force_input.wear_grip_scale = state.wear.wear_grip_scale;
-    force_input.external_grip_scale = wet_scale;
-    force_input.force_stiffness_scale = modifiers.force_stiffness_scale;
-    force_input.relaxation_length_scale = modifiers.relaxation_length_scale;
-    force_input.pneumatic_trail_scale = modifiers.pneumatic_trail_scale;
-    force_input.rolling_resistance_scale = modifiers.rolling_resistance_scale;
-    force_input.elapsed_seconds = elapsed;
-    force_input.wheel_right = index % 2 == 0 ? 1 : 0;
-    TireForceOutput force_output;
-    TireForceModelEvaluate(state.force, configuration.force[axle], force_input, force_output);
 
     wheel->forces.x = (tdble)(force_output.longitudinal_force_newtons * cos_angle
         - force_output.lateral_force_newtons * sin_angle);
@@ -312,4 +353,55 @@ void SimTireModelUpdateWheel(tCar *car, int index)
         + configuration.thermal[axle].carcass_heat_capacity_joules_per_kelvin
         + configuration.thermal[axle].gas_heat_capacity_joules_per_kelvin);
     SimTireModelPublishWheel(car, index);
+}
+
+void SimTireModelUpdateWheel(tCar *car, int index)
+{
+    SimTireModelUpdateWheelInternal(car, index, 0, 0.0, 0.0, 0.0, 0);
+}
+
+void SimTireModelUpdateWheelWithVerticalState(tCar *car, int index,
+    double normal_force_newtons, double deflection_meters,
+    double deflection_velocity_meters_per_second, int grounded)
+{
+    SimTireModelUpdateWheelInternal(car, index, 1, normal_force_newtons,
+        deflection_meters, deflection_velocity_meters_per_second, grounded);
+}
+
+void SimTireModelEvaluateProvisionalWheel(tCar *car, int index,
+    double normal_force_newtons, double* force_x_newtons, double* force_y_newtons)
+{
+    if (force_x_newtons == NULL || force_y_newtons == NULL)
+    {
+        return;
+    }
+    *force_x_newtons = 0.0;
+    *force_y_newtons = 0.0;
+    tWheel* wheel = &car->wheel[index];
+    TireWheelModelState& state = wheel->formula_tire_model;
+    if (!car->formula_tire_model_enabled || !state.initialized)
+    {
+        return;
+    }
+    int axle = index / 2;
+    TireContactOutput contact_output = {};
+    contact_output.effective_radius_meters = state.contact.effective_radius;
+    contact_output.contact_patch_meters = state.contact.contact_patch;
+    contact_output.load_sensitivity_scale = state.contact.load_sensitivity_scale;
+    contact_output.contact_fraction = state.contact.contact_fraction;
+    contact_output.maximum_deflection_meters = state.contact.maximum_deflection;
+    TireForceInput force_input;
+    BuildTireForceInput(car, index, normal_force_newtons, contact_output,
+        (double)SimDeltaTime, force_input);
+    TireForceState force_state = state.force;
+    TireForceOutput force_output;
+    TireForceModelEvaluate(force_state, car->formula_tire_configuration.force[axle],
+        force_input, force_output);
+    double waz = wheel->steer + wheel->staticPos.az;
+    double cos_angle = cos(waz);
+    double sin_angle = sin(waz);
+    *force_x_newtons = force_output.longitudinal_force_newtons * cos_angle
+        - force_output.lateral_force_newtons * sin_angle;
+    *force_y_newtons = force_output.longitudinal_force_newtons * sin_angle
+        + force_output.lateral_force_newtons * cos_angle;
 }

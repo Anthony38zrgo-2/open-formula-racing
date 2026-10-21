@@ -611,6 +611,9 @@ SimUpdate(tSituation *s, double deltaTime)
         ctrlCheck(car);
         CHECK(car);
 
+        SimCarApplyDiagnosticControls(car, s);
+        CHECK(car);
+
         SimInstantReConfig(car);
         CHECK(car);
 
@@ -643,21 +646,28 @@ SimUpdate(tSituation *s, double deltaTime)
             }
             CHECK(car);
 
-            for (i = 0; i < 4; i++)
+            if (car->formula_vertical_solver_enabled)
             {
-                SimWheelUpdateRide(car, i);
+                SimCarVerticalCoupledUpdate(car, s);
             }
-            CHECK(car);
-
-            for (i = 0; i < 2; i++)
+            else
             {
-                SimAxleUpdate(car, i);
-            }
-            CHECK(car);
+                for (i = 0; i < 4; i++)
+                {
+                    SimWheelUpdateRide(car, i);
+                }
+                CHECK(car);
 
-            for (i = 0; i < 4; i++)
-            {
-                SimWheelUpdateForce(car, i);
+                for (i = 0; i < 2; i++)
+                {
+                    SimAxleUpdate(car, i);
+                }
+                CHECK(car);
+
+                for (i = 0; i < 4; i++)
+                {
+                    SimWheelUpdateForce(car, i);
+                }
             }
             CHECK(car);
 
@@ -798,6 +808,8 @@ SimUpdateSingleCar(int index, double deltaTime,tSituation *s)
     CHECK(car);
     ctrlCheck(car);
     CHECK(car);
+    SimCarApplyDiagnosticControls(car, s);
+    CHECK(car);
     SimInstantReConfig(car);
     CHECK(car);
     SimSteerUpdate(car);
@@ -817,16 +829,23 @@ SimUpdateSingleCar(int index, double deltaTime,tSituation *s)
         SimWingUpdate(car, i, s);
     }
     CHECK(car);
-    for (i = 0; i < 4; i++){
-        SimWheelUpdateRide(car, i);
+    if (car->formula_vertical_solver_enabled)
+    {
+        SimCarVerticalCoupledUpdate(car, s);
     }
-    CHECK(car);
-    for (i = 0; i < 2; i++){
-        SimAxleUpdate(car, i);
-    }
-    CHECK(car);
-    for (i = 0; i < 4; i++){
-        SimWheelUpdateForce(car, i);
+    else
+    {
+        for (i = 0; i < 4; i++){
+            SimWheelUpdateRide(car, i);
+        }
+        CHECK(car);
+        for (i = 0; i < 2; i++){
+            SimAxleUpdate(car, i);
+        }
+        CHECK(car);
+        for (i = 0; i < 4; i++){
+            SimWheelUpdateForce(car, i);
+        }
     }
     CHECK(car);
     SimTransmissionUpdate(car);

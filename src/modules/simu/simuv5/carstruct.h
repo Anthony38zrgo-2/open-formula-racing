@@ -32,6 +32,7 @@
 #include "engine.h"
 #include "simulationOptions.h"
 #include "tire_model_configuration.h"
+#include "tire_vertical_solver.h"
 
 typedef struct
 {
@@ -43,8 +44,28 @@ typedef struct
     tCarCtrl	preCtrl;
     bool formula_diagnostic_telemetry;
     double formula_diagnostic_elapsed;
+    double formula_diagnostic_interval;
     TireModelConfiguration formula_tire_configuration;
     int formula_tire_model_enabled;
+    int formula_vertical_solver_enabled;
+    int formula_vertical_solver_initialized;
+    TireVerticalSolverState formula_vertical_state;
+    double formula_vertical_previous_ground_height[4];
+    double formula_vertical_ground_velocity[4];
+    double formula_vertical_energy_joules;
+    double formula_vertical_residual;
+    int formula_vertical_newton_iterations;
+    int formula_vertical_active_constraint_count;
+    int formula_vertical_diagnostic_every_step;
+    int formula_diagnostic_controls_enabled;
+    int formula_vertical_external_moment_source;
+    double formula_vertical_substep_seconds;
+    double formula_vertical_time;
+    double formula_diagnostic_bump_amplitude_meters;
+    double formula_diagnostic_bump_frequency_hertz;
+    double formula_diagnostic_bump_duration_seconds;
+    double formula_diagnostic_slope;
+    double formula_vertical_start_x;
 
     /* components */
     tAxle		axle[2];

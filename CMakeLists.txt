@@ -208,6 +208,28 @@ target_include_directories(validate_formula_tire_thermal PRIVATE src/modules/sim
     src/interfaces src/libs/tgf src/libs/portability src/libs/math src/libs/robottools)
 target_link_libraries(validate_formula_tire_thermal tgf)
 
+add_executable(validate_formula_tire_selector tools/validate_formula_tire_selector.cpp
+    src/modules/simu/simuv5/tire_model_configuration.cpp)
+target_include_directories(validate_formula_tire_selector PRIVATE src/modules/simu/simuv5
+    src/interfaces src/libs/tgf src/libs/portability src/libs/math src/libs/robottools)
+target_link_libraries(validate_formula_tire_selector tgf)
+
+add_executable(validate_formula_tire_geometry tools/validate_formula_tire_geometry.cpp
+    src/modules/simu/simuv5/tire_vertical_geometry.cpp)
+target_include_directories(validate_formula_tire_geometry PRIVATE src/modules/simu/simuv5
+    src/interfaces src/libs/tgf src/libs/portability src/libs/math src/libs/robottools)
+target_link_libraries(validate_formula_tire_geometry tgf)
+
+add_executable(validate_formula_tire_vertical_system tools/validate_formula_tire_vertical_system.cpp
+    src/modules/simu/simuv5/tire_vertical_solver.cpp
+    src/modules/simu/simuv5/tire_vertical_geometry.cpp
+    src/modules/simu/simuv5/tire_model_configuration.cpp
+    src/modules/simu/simuv5/susp.cpp
+    src/modules/simu/simuv5/axle.cpp)
+target_include_directories(validate_formula_tire_vertical_system PRIVATE src/modules/simu/simuv5
+    src/interfaces src/libs/tgf src/libs/portability src/libs/math src/libs/robottools freesolid/include)
+target_link_libraries(validate_formula_tire_vertical_system tgf)
+
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     add_executable(validate_formula_tire_energy tools/validate_formula_tire_energy.cpp src/modules/simu/simuv5/wheel.cpp
         src/modules/simu/simuv5/susp.cpp src/modules/simu/simuv5/brake.cpp src/modules/simu/simuv5/track_ground_mesh.cpp

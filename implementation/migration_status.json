@@ -38,6 +38,8 @@
   "xbox_semantic_gear_mapping_installed": true,
   "initial_delivery_complete": false,
   "remaining_validation": [
+    "Stage B: complete full-car validation on curbs, slopes, pits and sustained driving, plus human acceptance; neutral and basic longitudinal/lateral diagnostics are validated",
+    "Repair contact convergence bench and add coupled wheel-suspension regression",
     "Human driving acceptance of the coupled tire model on Fuji, including rollover, wheel hop and vibration checks",
     "Complete keyboard and Xbox input parity including axis shaping",
     "Native track road bands, curbs, barriers and corner-cut rules",
@@ -178,12 +180,173 @@
     "coupled_tire_model_brake_heat_coupled": false,
     "coupled_tire_model_report": "implementation/reports/williams_coupled_tire_model.md",
     "coupled_tire_model_source_commit": "f3efcf246c2a2abf62477037ed0243f2f9a93a9b",
-    "coupled_tire_model_build_sha256": "8821A29120AF2FFD53A56205832E069D9AA2B566562D0A561D16EADFD010CF6B",
+    "coupled_tire_model_build_sha256": "B14FB36D0286DCE4FA6F0A53531C214BB911DE56224AD84F4A5658353DBC9927",
     "coupled_tire_model_candidate_xml_sha256": "66FD0A8D05AF00C291C4647D0DDEC3A401B1D51423871AE49BA68B3CBCFDA426",
-    "coupled_tire_model_distribution_sha256": "8821A29120AF2FFD53A56205832E069D9AA2B566562D0A561D16EADFD010CF6B",
+    "coupled_tire_model_distribution_sha256": "B14FB36D0286DCE4FA6F0A53531C214BB911DE56224AD84F4A5658353DBC9927",
     "coupled_tire_model_distribution_manifest": "distribution/distribution_manifest.json",
     "coupled_tire_model_tire07_status": "partial: equations adapted and calibrated at 130 kPa gauge; Rust core not executed and equivalence not claimed",
-    "coupled_tire_model_tire08_status": "technical delivery complete; human driving acceptance pending"
+    "coupled_tire_model_tire08_status": "technical delivery complete; human driving acceptance pending",
+    "idle_oscillation_selector_fixed": true,
+    "idle_oscillation_contact_reference_restored": true,
+    "idle_oscillation_stage_a_validation_passed": true,
+    "idle_oscillation_stage_a_roll_rms_degrees_coupled": 0.00012248493595694412,
+    "idle_oscillation_stage_a_roll_rms_degrees_legacy": 0.00041118383410306496,
+    "idle_oscillation_stage_a_front_load_range_newtons_coupled": [
+      1270.3,
+      1404.9
+    ],
+    "idle_oscillation_stage_a_front_load_range_newtons_legacy": [
+      1282.9,
+      1386.5
+    ],
+    "idle_oscillation_stage_a_zero_load_fraction_coupled": 0.0,
+    "idle_oscillation_stage_a_zero_load_fraction_legacy": 0.0,
+    "idle_oscillation_stage_a_selector_test_passed": true,
+    "idle_oscillation_stage_a_report": "implementation/reports/williams_idle_oscillation_stage_a.md",
+    "idle_oscillation_stage_a_diagnostic_library_sha256": "D91C718FDAD2F40FC0D029CD06B128CDFFCFE4307BD36AA015773ECFB927CE22",
+    "idle_oscillation_stage_a_build_sha256": "B14FB36D0286DCE4FA6F0A53531C214BB911DE56224AD84F4A5658353DBC9927",
+    "idle_oscillation_stage_b_vertical_contract_validated": false,
+    "idle_oscillation_stage_b_coupled_bench_passed": true,
+    "idle_oscillation_human_acceptance_passed": false,
+    "idle_oscillation_stage_b_isolated_solver_validated": true,
+    "idle_oscillation_stage_b_full_vehicle_validated": false,
+    "idle_oscillation_stage_b_status": "partial: Gate 1 geometry, Gate 2 coupled bench and Gate 3 neutral plus diagnostic acceleration/braking/reverse/steering validated; contact velocity correction and provisional moment predictor-corrector installed; bump behavior partial; distribution routed for user testing; curbs, slopes, pits, sustained high-speed aero and human acceptance pending",
+    "idle_oscillation_stage_b_report": "implementation/reports/williams_idle_oscillation_stage_b.md",
+    "idle_oscillation_stage_b_geometry_report": "implementation/reports/williams_idle_oscillation_stage_b_gate1.md",
+    "idle_oscillation_stage_b_gate2_report": "implementation/reports/williams_idle_oscillation_stage_b_gate2.md",
+    "idle_oscillation_stage_b_gate3_report": "implementation/reports/williams_idle_oscillation_stage_b_gate3.md",
+    "idle_oscillation_stage_b_experimental_solver": "src/modules/simu/simuv5/tire_vertical_model.cpp/.h (standalone test only)",
+    "idle_oscillation_stage_b_bench_checks_passed": 10,
+    "idle_oscillation_stage_b_geometry_contract_validated": true,
+    "idle_oscillation_stage_b_geometry_adapter_installed": true,
+    "idle_oscillation_stage_b_geometry_production_integrated": false,
+    "idle_oscillation_stage_b_geometry_bench_checks_passed": 144,
+    "idle_oscillation_stage_b_geometry_bench": "tools/validate_formula_tire_geometry.cpp",
+    "idle_oscillation_stage_b_geometry_adapter_source": "src/modules/simu/simuv5/tire_vertical_geometry.cpp/.h",
+    "idle_oscillation_stage_b_geometry_loaded_front_wheel_x_meters": 1.60395001273,
+    "idle_oscillation_stage_b_geometry_loaded_rear_wheel_x_meters": -1.28604997296,
+    "idle_oscillation_stage_b_geometry_notes": "Gate 1 only: loaded and recentered Williams geometry validated; production remains Stage A; Gate 2 solver bench validated",
+    "idle_oscillation_stage_b_coupled_solver_source": "src/modules/simu/simuv5/tire_vertical_solver.cpp/.h",
+    "idle_oscillation_stage_b_coupled_solver_compiled": true,
+    "idle_oscillation_stage_b_coupled_solver_production_integrated": false,
+    "idle_oscillation_stage_b_coupled_bench": "tools/validate_formula_tire_vertical_system.cpp",
+    "idle_oscillation_stage_b_coupled_bench_checks_passed": 208,
+    "idle_oscillation_stage_b_coupled_bench_jacobian_error": 1.63377263e-06,
+    "idle_oscillation_stage_b_coupled_bench_loaded_total_mass_kilograms": 612.6,
+    "idle_oscillation_stage_b_coupled_bench_front_load_newtons": 1337.137313,
+    "idle_oscillation_stage_b_coupled_bench_rear_load_newtons": 1667.665686,
+    "idle_oscillation_stage_b_coupled_bench_notes": "Gate 2 only: stand-alone seven-degree-of-freedom solver and four-wheel bench validated; not wired into wheel.cpp; production remains Stage A; full-car and Fuji pending",
+    "idle_oscillation_stage_b_full_car_integration_implemented": true,
+    "idle_oscillation_stage_b_full_car_neutral_validated": true,
+    "idle_oscillation_stage_b_full_car_driving_validated": false,
+    "idle_oscillation_stage_b_full_car_reference_regression_passed": true,
+    "idle_oscillation_stage_b_full_car_selector": "Formula Controls / vertical integration = coupled seven degree of freedom (diagnostic only; default reference)",
+    "idle_oscillation_stage_b_full_car_condition": "Williams/Fuji, controls neutral, clutch disengaged, neutral, transient coupled tire model, 130 kPa gauge, 2 s transient excluded, 500 Hz vertical substeps",
+    "idle_oscillation_stage_b_full_car_coupled_roll_rms_degrees": 0.0,
+    "idle_oscillation_stage_b_full_car_coupled_roll_rms_degrees_max": 3.0172552779340044e-05,
+    "idle_oscillation_stage_b_full_car_coupled_front_load_range_newtons": [
+      1336.590092,
+      1336.771354
+    ],
+    "idle_oscillation_stage_b_full_car_coupled_rear_load_range_newtons": [
+      1667.001504,
+      1667.190688
+    ],
+    "idle_oscillation_stage_b_full_car_coupled_zero_load_fraction": 0.0,
+    "idle_oscillation_stage_b_full_car_coupled_residual_max": 1e-07,
+    "idle_oscillation_stage_b_full_car_reference_roll_rms_degrees": 0.0001398527783304986,
+    "idle_oscillation_stage_b_full_car_reference_front_load_range_newtons": [
+      1271.11084,
+      1394.320312
+    ],
+    "idle_oscillation_stage_b_full_car_reference_rear_load_range_newtons": [
+      1649.320068,
+      1679.870117
+    ],
+    "idle_oscillation_stage_b_full_car_reference_zero_load_fraction": 0.0,
+    "idle_oscillation_stage_b_full_car_production_integrated": true,
+    "idle_oscillation_stage_b_full_car_production_accepted": false,
+    "idle_oscillation_stage_b_full_car_distribution_promoted_for_testing": true,
+    "idle_oscillation_stage_b_full_car_distribution_dll_sha256": "1BF9905B7D96101D44ACE50A0E680F09A9BE6F4FFED7B7FF2C7455B76EE896FB",
+    "idle_oscillation_stage_b_full_car_distribution_xml_sha256": "25149E890634A095A95D16DC09AA5EA8E0B7F3D70B239F93052697F3C68E6D6B",
+    "idle_oscillation_stage_b_full_car_distribution_manifest_sha256": "8B270AD2DECB11463DE10A73C916255EA205FF9A73040E0C482FDB24EB275841",
+    "idle_oscillation_stage_b_full_car_distribution_selector": "Formula Controls / vertical integration = coupled seven degree of freedom",
+    "idle_oscillation_stage_b_full_car_distribution_telemetry_enabled": false,
+    "idle_oscillation_stage_b_full_car_distribution_diagnostic_controls_enabled": false,
+    "idle_oscillation_stage_b_full_car_distribution_restore_script": "D:/open-formula-migration-evidence/vertical-stage-b-gate3-20261020/restore_stage_a_distribution.ps1",
+    "idle_oscillation_stage_b_full_car_distribution_promotion_notes": "Promoted to distribution at explicit user request for manual testing; includes contact velocity correction and provisional moment predictor-corrector; Stage A DLL/XML/manifest backed up; not accepted; bump/downhill, curbs, pits, sustained high-speed aero and human acceptance pending",
+    "idle_oscillation_stage_b_full_car_contact_velocity_correction_installed": true,
+    "idle_oscillation_stage_b_full_car_contact_velocity_correction_scope": "new coupled route only",
+    "idle_oscillation_stage_b_full_car_provisional_moment_coupling_installed": true,
+    "idle_oscillation_stage_b_full_car_provisional_moment_corrector_iterations": 1,
+    "idle_oscillation_stage_b_full_car_external_moment_source_default": "provisional predictor-corrector",
+    "idle_oscillation_stage_b_full_car_bump_test_status": "partial: predictor-corrector reduces zero-load and peak loads versus naive provisional; severe synthetic bumps still lose contact; real Fuji last corner pending",
+    "idle_oscillation_stage_b_full_car_bump_test_coupled_roll_rms_degrees": 3.79579792320461,
+    "idle_oscillation_stage_b_full_car_bump_test_coupled_zero_load_fraction_front": 0.01686469911843618,
+    "idle_oscillation_stage_b_full_car_bump_test_coupled_front_peak_newtons": 3287.390362,
+    "idle_oscillation_stage_b_full_car_bump_test_previous_roll_rms_degrees": 3.551144597494313,
+    "idle_oscillation_stage_b_full_car_bump_test_previous_front_peak_newtons": 3464.27516,
+    "idle_oscillation_stage_b_full_car_bump_test_naive_provisional_roll_rms_degrees": 5.812408812056643,
+    "idle_oscillation_stage_b_full_car_bump_test_naive_provisional_front_peak_newtons": 4036.050886,
+    "idle_oscillation_stage_b_full_car_external_moments_integrated": true,
+    "idle_oscillation_stage_b_full_car_controls_validated": true,
+    "idle_oscillation_stage_b_full_car_driving_sequence_validated": true,
+    "idle_oscillation_stage_b_full_car_curbs_slopes_pits_validated": false,
+    "idle_oscillation_stage_b_full_car_driving_speed_range_meters_per_second": [
+      -4.098742,
+      6.572777
+    ],
+    "idle_oscillation_stage_b_full_car_driving_gears_observed": [
+      -1,
+      0,
+      1,
+      2
+    ],
+    "idle_oscillation_stage_b_full_car_driving_front_load_range_newtons": [
+      177.762665,
+      2541.592773
+    ],
+    "idle_oscillation_stage_b_full_car_driving_rear_load_range_newtons": [
+      1044.67749,
+      2416.872559
+    ],
+    "idle_oscillation_stage_b_full_car_driving_zero_load_fraction": 0.0,
+    "idle_oscillation_stage_b_full_car_driving_roll_range_radians": [
+      -0.000378,
+      0.000387
+    ],
+    "idle_oscillation_stage_b_full_car_driving_pitch_range_radians": [
+      -0.010453,
+      0.014082
+    ],
+    "idle_oscillation_stage_b_full_car_driving_reference_speed_range_meters_per_second": [
+      -4.152533,
+      6.559568
+    ],
+    "idle_oscillation_stage_b_full_car_driving_reference_front_load_range_newtons": [
+      0.0,
+      3591.757568
+    ],
+    "idle_oscillation_stage_b_full_car_driving_reference_rear_load_range_newtons": [
+      0.0,
+      2469.954102
+    ],
+    "idle_oscillation_stage_b_full_car_driving_reference_zero_load_fraction_front": 0.005221932114882507,
+    "idle_oscillation_stage_b_full_car_driving_reference_zero_load_fraction_rear": 0.0013054830287206266,
+    "idle_oscillation_stage_b_full_car_driving_reference_pitch_range_radians": [
+      -0.012827,
+      0.016913
+    ],
+    "idle_oscillation_stage_b_full_car_driving_reference_roll_range_radians": [
+      -0.000388,
+      0.000417
+    ],
+    "idle_oscillation_stage_b_full_car_driving_residual_max": 1e-07,
+    "idle_oscillation_stage_b_full_car_driving_damage": 0,
+    "idle_oscillation_stage_b_full_car_diagnostic_dll_sha256_neutral": "BBAA5A6820C1BDFADD9614327F9C538C5284A86549ADFEA88E0CC7693E6F757B",
+    "idle_oscillation_stage_b_full_car_diagnostic_dll_sha256_driving": "D72DBFDDFBCF1C1B7078712A9A0200EFB11D0E275F931B916386B88540D09E38",
+    "idle_oscillation_stage_b_full_car_notes": "Gate 3: neutral and diagnostic acceleration/gear change/braking to zero/reverse/small steer validated; contact velocity includes roll/pitch and provisional predictor-corrector moments are implemented; selected in the local distribution for manual testing with Stage A backup; curbs, slopes, pits, sustained high-speed aero and human acceptance pending",
+    "idle_oscillation_stage_b_human_acceptance_passed": false
   },
   "upstream_reference_commit_fetched_and_version_verified": true,
   "upstream_declared_version": "2.4.2",
