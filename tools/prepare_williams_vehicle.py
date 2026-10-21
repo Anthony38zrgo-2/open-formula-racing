@@ -18,7 +18,7 @@ def find_section(parent, name):
     return existing if existing is not None else element_tree.SubElement(parent, 'section', name=name)
 
 
-def set_number(parent, name, value, unit=None):
+def set_number(parent, name, value, unit=None, minimum=None, maximum=None):
     existing = parent.find("attnum[@name='" + name + "']")
     if existing is None:
         existing = element_tree.SubElement(parent, 'attnum')
@@ -27,6 +27,10 @@ def set_number(parent, name, value, unit=None):
     existing.set('val', f'{value:.12g}')
     if unit:
         existing.set('unit', unit)
+    if minimum is not None:
+        existing.set('min', f'{minimum:.12g}')
+    if maximum is not None:
+        existing.set('max', f'{maximum:.12g}')
 
 
 def set_text(parent, name, value):
@@ -94,9 +98,10 @@ def configure_tire_grip(document, tires):
             set_number(wheel, 'load factor max', 1.6)
 
 
-def configure_coupled_tires(document, tires):
+def configure_coupled_tires(document, tires, arguments):
     controls = find_section(document, 'Formula Controls')
     set_text(controls, 'tire model', 'transient coupled')
+    set_text(controls, 'vertical integration', 'coupled seven degree of freedom')
     formula_tires = find_section(document, 'Formula Tires')
     set_number(formula_tires, 'schema version', 1)
     set_text(formula_tires, 'pressure convention', 'gauge')
@@ -109,9 +114,8 @@ def configure_coupled_tires(document, tires):
     set_number(formula_tires, 'compliance sensitivity', tires['pressure_mechanics']['compliance_sensitivity'])
     set_number(formula_tires, 'response sensitivity', tires['pressure_mechanics']['response_sensitivity'])
     set_number(formula_tires, 'rolling resistance sensitivity', tires['pressure_mechanics']['rolling_resistance_sensitivity'])
-    for wheel_name, pressure in [('front right', 130000), ('front left', 130000),
-                                 ('rear right', 130000), ('rear left', 130000)]:
-        set_number(formula_tires, 'cold pressure ' + wheel_name, pressure, 'Pa')
+    for wheel_name in ['front right', 'front left', 'rear right', 'rear left']:
+        set_number(formula_tires, 'cold pressure ' + wheel_name, arguments.tire_pressure_kpa_gauge * 1000.0, 'Pa')
     for wheel_name, pressure in [('front right', 160000), ('front left', 160000),
                                  ('rear right', 150000), ('rear left', 150000)]:
         set_number(formula_tires, 'reference hot pressure ' + wheel_name, pressure, 'Pa')
@@ -178,7 +182,7 @@ def configure_coupled_tires(document, tires):
                 value *= 1000.0
                 unit = 'Pa'
             if parameter_name == 'initial temperature':
-                value = 25.0
+                value = arguments.tire_initial_temperature
             if source_name_key in ['initial_temperature_c', 'ambient_fallback_c', 'track_fallback_c',
                                    'optimal_tread_temperature_c', 'overheat_tread_temperature_c',
                                    'optimal_carcass_temperature_c']:
@@ -228,11 +232,31 @@ def main():
     parser.add_argument('--rear-anti-roll-stiffness', type=float, default=80000.0)
     parser.add_argument('--tire-speed-cooling-factor', type=float, default=0.25)
     parser.add_argument('--tire-hysteresis-factor', type=float, default=1.25)
+    parser.add_argument('--rear-ride-height', type=float, default=0.045)
+    parser.add_argument('--tire-initial-temperature', type=float, default=80.0)
+    parser.add_argument('--tire-pressure-kpa-gauge', type=float, default=100.0)
+    parser.add_argument('--rear-toe-degrees', type=float, default=0.2)
+    parser.add_argument('--front-camber-degrees', type=float, default=-3.0)
+    parser.add_argument('--rear-camber-degrees', type=float, default=-1.0)
+    parser.add_argument('--brake-max-pressure', type=float, default=20000000.0)
+    parser.add_argument('--front-brake-bias', type=float, default=0.64)
+    parser.add_argument('--power-slip-bias', type=float, default=0.10)
+    parser.add_argument('--coast-slip-bias', type=float, default=0.30)
+    parser.add_argument('--engine-brake-linear-coefficient', type=float, default=0.03)
+    parser.add_argument('--engine-brake-constant-coefficient', type=float, default=0.0525)
+    parser.add_argument('--steering-speed-response', type=float, default=0.012)
     arguments = parser.parse_args()
     if not all(math.isfinite(value) and value >= 0.0 for value in
                [arguments.front_anti_roll_stiffness, arguments.rear_anti_roll_stiffness, arguments.tire_speed_cooling_factor,
-                arguments.tire_hysteresis_factor]):
+                arguments.tire_hysteresis_factor, arguments.rear_ride_height, arguments.tire_pressure_kpa_gauge,
+                arguments.brake_max_pressure, arguments.front_brake_bias, arguments.power_slip_bias,
+                arguments.coast_slip_bias, arguments.engine_brake_linear_coefficient,
+                arguments.engine_brake_constant_coefficient, arguments.steering_speed_response]):
         parser.error('Calibration candidate parameters must be finite and nonnegative')
+    if not all(math.isfinite(value) for value in
+               [arguments.tire_initial_temperature, arguments.rear_toe_degrees,
+                arguments.front_camber_degrees, arguments.rear_camber_degrees]):
+        parser.error('Temperature, toe and camber parameters must be finite')
     source_root = pathlib.Path(arguments.source_root)
     data_root = pathlib.Path(arguments.data_root)
     destination_directory = pathlib.Path(arguments.destination)
@@ -315,6 +339,7 @@ def main():
     for parameter_name, parameter_value in [('steering application rate', 1.5), ('steering reversal rate', 2.0),
                                              ('steering centering rate', 3.0), ('steering speed sensitivity', 0.018),
                                              ('steering response time', 0.16),
+                                             ('steering speed response', arguments.steering_speed_response),
                                              ('diagnostic telemetry', 0.0), ('correct thermal camber units', 1.0)]:
         set_number(find_section(document, 'Formula Controls'), parameter_name, parameter_value)
     for feature in ['enable abs', 'enable tcl', 'enable esp']:
@@ -334,7 +359,9 @@ def main():
     engine = find_section(document, 'Engine')
     for attribute, value, unit in [('capacity', 3, 'l'), ('cylinders', 10, None), ('inertia', powertrain['motor_moment'], 'kg.m2'),
                                    ('revs maxi', powertrain['max_rpm'] + 500, 'rpm'), ('revs limiter', powertrain['max_rpm'], 'rpm'),
-                                   ('tickover', powertrain['idle_rpm'], 'rpm'), ('fuel cons factor', 1.0, None)]:
+                                   ('tickover', powertrain['idle_rpm'], 'rpm'), ('fuel cons factor', 1.0, None),
+                                   ('brake linear coefficient', arguments.engine_brake_linear_coefficient, None),
+                                   ('brake coefficient', arguments.engine_brake_constant_coefficient, None)]:
         set_number(engine, attribute, value, unit)
     set_text(engine, 'turbo', 'false')
     data_points = find_section(engine, 'data points')
@@ -362,15 +389,15 @@ def main():
     set_number(differential, 'ratio', powertrain['final_drive'])
     set_number(differential, 'locking input torque', 90, 'N.m')
     set_number(differential, 'preload torque', 10, 'N.m')
-    set_number(differential, 'max slip bias', 0.3)
-    set_number(differential, 'coast max slip bias', 0.7)
+    set_number(differential, 'max slip bias', arguments.power_slip_bias)
+    set_number(differential, 'coast max slip bias', arguments.coast_slip_bias)
     steer = find_section(document, 'Steer')
     set_number(steer, 'steer lock', profile['steering']['steering']['max_steering_angle'], 'rad')
     set_number(steer, 'steering wheel rotation', 2 * math.pi, 'rad')
     set_number(steer, 'max steer speed', profile['steering']['steering']['steering_speed'], 'rad/s')
     brake_system = find_section(document, 'Brake System')
-    set_number(brake_system, 'front-rear brake repartition', profile['brakes']['brakes']['front_brake_bias'])
-    set_number(brake_system, 'max pressure', 25000000, 'Pa')
+    set_number(brake_system, 'front-rear brake repartition', arguments.front_brake_bias, None, 0.55, 0.70)
+    set_number(brake_system, 'max pressure', arguments.brake_max_pressure, 'Pa')
     set_number(brake_system, 'emergency brake pressure', 0, 'Pa')
     for axle_name, hub in [('front', front_hub), ('rear', rear_hub)]:
         axle = find_section(document, axle_name.title() + ' Axle')
@@ -380,17 +407,24 @@ def main():
         physical_suspension = suspension['geometry_physical'][axle_name]
         suspension_motion_ratio = suspension_reference['axles'][axle_name]['motion_ratio']
         wheel_rate_multiplier = suspension_motion_ratio ** 2
+        ride_height = native_reference_clearance if axle_name == 'front' else arguments.rear_ride_height
+        camber = math.radians(arguments.front_camber_degrees if axle_name == 'front' else arguments.rear_camber_degrees)
         for side_name, sign in [('Right', -1), ('Left', 1)]:
             wheel = find_section(document, axle_name.title() + ' ' + side_name + ' Wheel')
             tire = tires[axle_name]
+            toe = suspension[axle_name]['toe']
+            if axle_name == 'rear':
+                toe = math.radians(arguments.rear_toe_degrees) * (-1.0 if side_name == 'Left' else 1.0)
             set_number(wheel, 'tire speed cooling factor', arguments.tire_speed_cooling_factor)
             set_number(wheel, 'hysteresis', arguments.tire_hysteresis_factor)
+            set_number(wheel, 'initial temperature', arguments.tire_initial_temperature, 'C')
             for attribute, value, unit in [('ypos', sign * abs(hub[0]), 'm'), ('rim diameter', 0.3302, 'm'),
                                            ('tire width', tire['width'], 'm'), ('tire height-width ratio', (tire['radius'] - 0.1651) / tire['width'], None),
                                            ('mass', tire['wheel_mass'], 'kg'), ('inertia', 0.6 * tire['wheel_mass'] * tire['radius'] ** 2, 'kg.m2'),
-                                           ('ride height', native_reference_clearance, 'm'), ('camber', suspension[axle_name]['camber'], 'rad'),
-                                           ('toe', suspension[axle_name]['toe'], 'rad'), ('mu', tires['surfaces']['Road']['friction'], None),
-                                           ('stiffness', 18, None), ('pressure', 1103161.16691, 'Pa')]:
+                                           ('ride height', ride_height, 'm'), ('camber', camber, 'rad'),
+                                           ('toe', toe, 'rad'), ('mu', tires['surfaces']['Road']['friction'], None),
+                                           ('stiffness', 18, None),
+                                           ('pressure', arguments.tire_pressure_kpa_gauge * 1000.0 + 101325.0, 'Pa')]:
                 set_number(wheel, attribute, value, unit)
             corner_suspension = find_section(document, axle_name.title() + ' ' + side_name + ' Suspension')
             for attribute, value, unit in [('spring', physical_suspension['spring_rate_N_per_m'] * wheel_rate_multiplier, 'N/m'),
@@ -400,8 +434,8 @@ def main():
                                            ('fast rebound', physical_suspension['damper_rebound_Ns_per_m'] * physical_suspension['damper_fast_factor'] * wheel_rate_multiplier, 'N/m/s'),
                                            ('bump limit velocity', physical_suspension['damper_knee_m_per_s'] / suspension_motion_ratio, 'm/s'),
                                            ('rebound limit velocity', physical_suspension['damper_knee_m_per_s'] / suspension_motion_ratio, 'm/s'),
-                                           ('suspension course', native_reference_clearance + physical_suspension['wheel_droop_m'], 'm'),
-                                           ('bellcrank', 1, None), ('packers', native_reference_clearance - physical_suspension['wheel_bump_m'], 'm')]:
+                                           ('suspension course', ride_height + physical_suspension['wheel_droop_m'], 'm'),
+                                           ('bellcrank', 1, None), ('packers', ride_height - physical_suspension['wheel_bump_m'], 'm')]:
                 set_number(corner_suspension, attribute, value, unit)
             brake = find_section(document, axle_name.title() + ' ' + side_name + ' Brake')
             rotor_diameter = profile['brakes']['brakes']['thermal'][axle_name]['rotor_outer_diameter_m']
@@ -456,7 +490,7 @@ def main():
                floor_profile['lift_area_m2'] * floor_profile['induced_drag_ratio'], 'm2')
     configure_aerodynamic_load_distribution(document)
     configure_tire_grip(document, tires)
-    configure_coupled_tires(document, tires)
+    configure_coupled_tires(document, tires, arguments)
     source_audio = source_root / 'game/sounds/banks/v10-v2-bank/engine_powered_maximum_loop.wav'
     source_audio_digest = hashlib.sha256(source_audio.read_bytes()).hexdigest()
     if source_audio_digest != '9bec0ea0aef8424b7062ab18471e849e660c906c609848a5a3adb8ff1411414c':
@@ -474,21 +508,40 @@ def main():
     report = {'dry_mass_kilograms': mass, 'chassis_mass_kilograms': chassis['vehicle_mass'], 'wheel_mass_kilograms': mass - chassis['vehicle_mass'],
               'vertical_mesh_offset_meters': vertical_offset, 'audio_sha256': source_audio_digest, 'audio_format': audio_description,
               'native_reference_clearance': native_reference_clearance,
+              'rear_ride_height': arguments.rear_ride_height,
               'source_ground_offset': source_ground_offset,
               'suspension_reference': suspension_reference,
               'audio_reference_revolutions_per_minute': sample['reference_revolutions_per_minute'], 'geometry': conversion_reports,
               'adapted_parameters': ['native tire force curve', 'wheel stiffness', 'differential slip bias', 'wheel inertia', 'native suspension bellcrank', 'native wing polar'],
+              'setup_overrides': {
+                  'front_ride_height_meters': native_reference_clearance,
+                  'rear_ride_height_meters': arguments.rear_ride_height,
+                  'front_camber_degrees': arguments.front_camber_degrees,
+                  'rear_camber_degrees': arguments.rear_camber_degrees,
+                  'rear_toe_degrees_per_wheel': arguments.rear_toe_degrees,
+                  'tire_initial_temperature_celsius': arguments.tire_initial_temperature,
+                  'tire_cold_pressure_kpa_gauge': arguments.tire_pressure_kpa_gauge,
+                  'brake_max_pressure_pascals': arguments.brake_max_pressure,
+                  'front_brake_bias': arguments.front_brake_bias,
+                  'engine_brake_linear_coefficient': arguments.engine_brake_linear_coefficient,
+                  'engine_brake_constant_coefficient': arguments.engine_brake_constant_coefficient,
+                  'rear_differential_power_slip_bias': arguments.power_slip_bias,
+                  'rear_differential_coast_slip_bias': arguments.coast_slip_bias,
+                  'steering_speed_response': arguments.steering_speed_response,
+                  'validated': False},
               'coupled_tire_model': {
                   'selector': 'transient coupled',
                   'schema_version': 1,
                   'pressure_convention': 'gauge',
                   'pressure_unit': 'Pa',
-                  'cold_pressure_pascals': {'front_right': 130000, 'front_left': 130000,
-                                            'rear_right': 130000, 'rear_left': 130000},
+                  'cold_pressure_pascals': {'front_right': arguments.tire_pressure_kpa_gauge * 1000.0,
+                                            'front_left': arguments.tire_pressure_kpa_gauge * 1000.0,
+                                            'rear_right': arguments.tire_pressure_kpa_gauge * 1000.0,
+                                            'rear_left': arguments.tire_pressure_kpa_gauge * 1000.0},
                   'reference_hot_pressure_pascals': {'front_right': 160000, 'front_left': 160000,
                                                      'rear_right': 150000, 'rear_left': 150000},
                   'reference_temperature_kelvin': 298.15,
-                  'initial_temperature_celsius': 25.0,
+                  'initial_temperature_celsius': arguments.tire_initial_temperature,
                   'source_reference': 'Formula90s tires.json and tire.rs/tire_thermals.rs/tire_wear.rs',
                   'calibration_validated': False},
               'calibration_candidate': {'front_anti_roll_stiffness': arguments.front_anti_roll_stiffness,

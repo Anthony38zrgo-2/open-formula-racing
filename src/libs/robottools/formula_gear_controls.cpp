@@ -130,13 +130,20 @@ void applyFormulaSteeringControls(tCarElt* car, bool keyboard_left, bool keyboar
     const double centering_rate = std::max(0.01, static_cast<double>(GfParmGetNum(car->_carHandle, "Formula Controls", "steering centering rate", nullptr, 6.85)));
     const double speed_sensitivity = std::max(0.0, static_cast<double>(GfParmGetNum(car->_carHandle, "Formula Controls", "steering speed sensitivity", nullptr, 0.0)));
     const double response_seconds = std::max(0.0, static_cast<double>(GfParmGetNum(car->_carHandle, "Formula Controls", "steering response time", nullptr, 0.0)));
-    if (!keyboard_left && !keyboard_right)
+    const double speed_response = std::max(0.0, static_cast<double>(GfParmGetNum(car->_carHandle, "Formula Controls", "steering speed response", nullptr, 0.0)));
+    const bool keyboard_steering = keyboard_left || keyboard_right;
+    if (!keyboard_steering)
         steering_target /= 1.0 + speed_sensitivity * std::abs(car->_speed_x);
-    if (keyboard_left || keyboard_right)
+    const double speed_response_factor = 1.0 + speed_response * std::abs(car->_speed_x);
+    const double effective_application = application_rate / speed_response_factor;
+    const double effective_reversal = reversal_rate / speed_response_factor;
+    const double effective_centering = centering_rate / speed_response_factor;
+    const double effective_response = response_seconds * speed_response_factor;
+    if (keyboard_steering && std::abs(car->_speed_x) < 5.0)
         state.previous_steering = steering_target;
     else
         state.previous_steering = advanceFormulaSteering(state.previous_steering, steering_target, delta_time,
-                                                       application_rate, reversal_rate, centering_rate, response_seconds);
+                                                       effective_application, effective_reversal, effective_centering, effective_response);
     state.steering_diagnostic_elapsed += std::max(0.0, delta_time);
     if (GfParmGetNum(car->_carHandle, "Formula Controls", "diagnostic telemetry", nullptr, 0.0) > 0.0 &&
         state.steering_diagnostic_elapsed >= 0.05)
