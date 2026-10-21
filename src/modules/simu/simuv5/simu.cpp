@@ -251,6 +251,57 @@ SimReConfig(tCarElt *carElt)
 
     tCar *car = &(SimCarTable[carElt->index]);
 
+    if (carElt->pitcmd.setupChanged)
+    {
+        TireThermalState previous_thermal[4];
+        TireWearState previous_wear[4];
+        for (int wheel_index = 0; wheel_index < 4; ++wheel_index)
+        {
+            previous_thermal[wheel_index] = car->wheel[wheel_index].formula_tire_model.thermal;
+            previous_wear[wheel_index] = car->wheel[wheel_index].formula_tire_model.wear;
+        }
+        car->DynGCg = car->DynGC = carElt->_DynGC;
+        car->preDynGC = car->DynGCg;
+        car->trkPos = carElt->_trkPos;
+        car->Cosz = cos(car->DynGCg.pos.az);
+        car->Sinz = sin(car->DynGCg.pos.az);
+        car->transmission.gearbox.gear = 0;
+        car->transmission.gearbox.gearNext = 0;
+        car->transmission.gearbox.timeToEngage = 0.0;
+        car->steer.steer = 0.0;
+        SimCarReConfig(car);
+        car->transmission.differential[1].preload_torque = std::max(0.0,
+            (double)GfParmGetNum(car->params, SECT_REARDIFFERENTIAL, "preload torque", nullptr, 0.0));
+        SimTireModelConfigure(car);
+        for (int wheel_index = 0; wheel_index < 4; ++wheel_index)
+        {
+            tWheel& wheel = car->wheel[wheel_index];
+            if (carElt->pitcmd.tireChange != tCarPitCmd::ALL)
+            {
+                wheel.formula_tire_model.thermal = previous_thermal[wheel_index];
+                wheel.formula_tire_model.wear = previous_wear[wheel_index];
+            }
+            wheel.spinVel = wheel.prespinVel = 0.0;
+            wheel.in.spinVel = wheel.feedBack.spinVel = 0.0;
+            wheel.in.Tq = wheel.feedBack.Tq = wheel.spinTq = 0.0;
+            wheel.steer = 0.0;
+            wheel.forces = {};
+            wheel.torques = {};
+            SimTireModelPublishWheel(car, wheel_index);
+        }
+        car->formula_vertical_solver_initialized = 0;
+        car->formula_vertical_time = 0.0;
+        car->blocked = car->collision = 0;
+        SimCarUpdateWheelPos(car);
+        carElt->pub.DynGCg = car->DynGCg;
+        sgMakeCoordMat4(carElt->pub.posMat, carElt->_pos_X, carElt->_pos_Y,
+            carElt->_pos_Z - carElt->_statGC_z, (float)RAD2DEG(carElt->_yaw), 0.0f, 0.0f);
+        carElt->pitcmd.setupChanged = false;
+        carElt->pitcmd.tireChange = tCarPitCmd::NONE;
+        GfLogInfo("Formula garage physics: setup applied, chassis and wheel motion reset\n");
+        return;
+    }
+
     if (carElt->pitcmd.fuel > 0)
     {
         car->fuel += carElt->pitcmd.fuel;

@@ -27,6 +27,7 @@
 #include "legacymenu.h"
 #include "exitmenu.h"
 #include "racescreens.h"
+#include "formula_garage_menu.h"
 
 #include <graphic.h>
 #include <playerpref.h>
@@ -247,6 +248,13 @@ rmStopRaceMenu(const tButtonDesc aButtons[], int nButtons, int nCancelIndex)
     void *hmenu = GfuiMenuLoad("stopracemenu.xml");
 
     GfuiMenuCreateStaticControls(hscreen, hmenu);
+
+    if (FormulaGarageAvailable())
+    {
+        GfuiButtonCreate(hscreen, "RETURN TO PITS", GFUI_FONT_MEDIUM,
+            320, 420, 280, GFUI_ALIGN_HC, GFUI_MOUSE_UP, nullptr,
+            FormulaGarageReturnToPit, nullptr, nullptr, nullptr);
+    }
 
     // Create buttons from menu properties and button template.
     const int xpos = (int)GfuiMenuGetNumProperty(hmenu, "xButton", 270);

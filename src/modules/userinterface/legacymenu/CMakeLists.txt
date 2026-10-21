@@ -67,7 +67,7 @@ SET(RACESCREENS_SOURCES ${RS}/raceselectmenu.cpp
                         ${RS}/raceparamsmenu.cpp ${RS}/carsetupmenu.cpp
                         ${RS}/raceloadingmenu.cpp ${RS}/racerunningmenus.cpp
                         ${RS}/raceoptimizationmenu.cpp
-                        ${RS}/racestopmenu.cpp ${RS}/racestartmenu.cpp ${RS}/racepitmenu.cpp
+                        ${RS}/racestopmenu.cpp ${RS}/racestartmenu.cpp ${RS}/racepitmenu.cpp ${RS}/formula_garage_menu.cpp
                         ${RS}/raceresultsmenus.cpp ${RS}/racenexteventmenu.cpp)
 IF(OPTION_CLIENT_SERVER)
    SET(RACESCREENS_SOURCES ${RACESCREENS_SOURCES} ${RS}/csnetworkingmenu.cpp
@@ -102,7 +102,7 @@ ELSE(OPTION_CLIENT_SERVER)
    SET(NETWORKING_LIB networking)
 ENDIF(OPTION_CLIENT_SERVER)
 
-ADD_SDLIB_INCLUDEDIR(math portability tgf tgfclient tgfdata ${NETWORKING_INC})
+ADD_SDLIB_INCLUDEDIR(math portability tgf tgfclient tgfdata robottools ${NETWORKING_INC})
 
 ADD_PLIB_INCLUDEDIR()
 ADD_SDL2_INCLUDEDIR()
@@ -143,6 +143,7 @@ ADD_SDLIB_LIBRARY(legacymenu
     tgf
     tgfclient
     tgfdata
+    robottools
     ${NETWORKING_LIB}
     minizip::minizip
     rhash::rhash

@@ -102,6 +102,8 @@ public:
 	// WIP : dedicated situation setters, for commanding the race engine from the outside.
 	virtual void setPitCommand(int nCarIndex, const struct CarPitCmd* pPitCmd);
 
+    virtual bool applyGarageSetup(int carIndex);
+
 	// Accessor to the singleton.
 	static StandardGame& self();
 

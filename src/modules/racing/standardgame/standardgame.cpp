@@ -392,3 +392,20 @@ void StandardGame::setPitCommand(int nCarIndex, const struct CarPitCmd* pPitCmd)
 {
 	ReSituation::self().setPitCommand(nCarIndex, pPitCmd);
 }
+
+
+bool StandardGame::applyGarageSetup(int carIndex)
+{
+    stop();
+    tRmInfo* information = inData();
+    for (int index = 0; index < information->s->_ncars; ++index)
+    {
+        tCarElt* car = information->s->cars[index];
+        if (car->index == carIndex)
+        {
+            physicsEngine().reconfigureCar(car);
+            return true;
+        }
+    }
+    return false;
+}

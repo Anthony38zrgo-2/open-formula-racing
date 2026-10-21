@@ -84,6 +84,8 @@ public:
 	virtual void accelerateTime(double fMultFactor) = 0;
 	virtual void setPitCommand(int nCarIndex, const struct CarPitCmd* pPitCmd) = 0;
 
+    virtual bool applyGarageSetup(int carIndex) { return false; }
+
 };
 
 #include <iuserinterface.h>

@@ -36,6 +36,7 @@
 
 #include "legacymenu.h"
 #include "racescreens.h"
+#include "formula_garage_menu.h"
 
 
 static void	*rmScreenHandle = 0;
@@ -282,6 +283,8 @@ rmUpdateRaceMessages()
 static void
 rmRedisplay()
 {
+    if (FormulaGarageCheckArrival())
+        return;
 	// Process any pending (human) pit request.
 	const bool bPitRequested = RmCheckPitRequest();
 

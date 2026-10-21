@@ -39,6 +39,7 @@
 #include "racescreens.h"
 
 #include "legacymenu.h"
+#include "racescreens/formula_garage_menu.h"
 #include "displayconfig.h"
 
 
@@ -433,6 +434,7 @@ bool LegacyMenu::onRaceStartingPaused(){
 
 void LegacyMenu::onRaceStarted()
 {
+    FormulaGarageSessionStart();
 	// Shutdown the loading screen if not already done.
 	shutdownLoadingScreen();
 
@@ -478,6 +480,7 @@ bool LegacyMenu::onRaceCooldownStarting(){
 
 void LegacyMenu::onRaceFinishing()
 {
+    FormulaGarageShutdown();
     if (_piRaceEngine->inData()->_displayMode == RM_DISP_MODE_NORMAL)
 	{
 		shutdownSound();
