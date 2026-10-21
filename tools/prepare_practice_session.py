@@ -5,6 +5,7 @@ import shutil
 import xml.etree.ElementTree as element_tree
 
 from prepare_williams_vehicle import find_section, set_number, set_text
+from configure_game_fonts import configure_font_settings
 
 
 def write_document(document, path):
@@ -38,6 +39,7 @@ def main():
     set_number(window_properties, 'fullscreen', 0)
     set_number(window_properties, 'maximized', 0)
     write_document(screen, destination / 'config/screen.xml')
+    configure_font_settings(destination / 'config')
     engine = element_tree.parse(destination / 'config/raceengine.xml').getroot()
     modules = find_section(engine, 'Modules')
     set_text(modules, 'graphic', 'osggraph')

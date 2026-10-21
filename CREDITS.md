@@ -82,3 +82,7 @@ Para cerrar los créditos faltan la identificación del autor original de la bas
 Si eres autor o puedes aportar documentación, abre una incidencia en este repositorio para corregir la atribución o aportar la referencia correspondiente. Se conservarán los avisos originales y se actualizará esta relación sin inventar permisos o autorías.
 
 Fuentes públicas contrastadas: [sonido F2002](https://www.overtake.gg/downloads/btk150s-ferrari-f2002-sound-mod.52684/) y [Fuji76-77](https://www.overtake.gg/downloads/fujji-1976-1977.79502/). La declaración del mantenedor vincula el audio local al mod F2002; verificar esa cadena a nivel de archivo/variante antes de preparar una distribución de medios.
+
+## Tipografía Libron
+
+Libron v0.31, © 2026 Nico Verbruggen, basada en Readerly (© 2026 Nico Verbruggen) y Newsreader (© 2020 The Newsreader Project Authors). Se utiliza en menús, carga, texto, consola y HUD. [Publicación original](https://github.com/nicoverbruggen/libron/releases/tag/v0.31). Redistribuida sin modificar bajo SIL Open Font License 1.1; licencia y procedencia en `implementation/fonts/Libron/`.

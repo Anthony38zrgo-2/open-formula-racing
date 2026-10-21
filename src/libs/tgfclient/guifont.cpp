@@ -97,7 +97,7 @@ void gfuiLoadFonts(void)
 
 	snprintf(buf, sizeof(buf), "%sdata/fonts/%s", GfDataDir(),
 			 GfParmGetStr(param, "Menu Font TrueType", "name",
-				"Jura/Jura.ttf"));
+				"Libron/Libron-Bold.ttf"));
 	GfLogTrace("Loading font 'Menu Font' from %s : Sizes", buf);
 	nFontId = GFUI_FONT_BIG;
 	for(i = 0; i < 4; i++, nFontId++) {
@@ -110,7 +110,7 @@ void gfuiLoadFonts(void)
 
 	snprintf(buf, sizeof(buf), "%sdata/fonts/%s", GfDataDir(),
 			 GfParmGetStr(param, "Console Font TrueType", "name",
-				"LiberationSans/LiberationSans-Bold.ttf"));
+				"Libron/Libron-Bold.ttf"));
 	GfLogTrace("Loading font 'Console Font' from %s : Sizes", buf);
 	nFontId = GFUI_FONT_BIG_C;
 	for(i = 0; i < 4; i++, nFontId++) {
@@ -123,7 +123,7 @@ void gfuiLoadFonts(void)
 
 	snprintf(buf, sizeof(buf), "%sdata/fonts/%s", GfDataDir(),
 			 GfParmGetStr(param, "Text Font TrueType", "name",
-				"DroidSans/DroidSans.ttf"));
+				"Libron/Libron-Regular.ttf"));
 	GfLogTrace("Loading font 'Text Font' from %s : Sizes", buf);
 	nFontId = GFUI_FONT_BIG_T;
 	for(i = 0; i < 4; i++, nFontId++) {

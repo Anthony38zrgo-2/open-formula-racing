@@ -175,7 +175,7 @@ OSGPLOT::OSGPLOT(
     osg::Vec4 color = osg::Vec4(0.0f,0.0f,0.0f,0.9f);
     osgTitle->setColor(color);
 
-    std::string fontFileUrl = "/vera/Vera.ttf";
+    std::string fontFileUrl = "/Libron/Libron-Regular.ttf";
     std::string fontsMainDirectory = GetDataDir();
     fontsMainDirectory = fontsMainDirectory+"data/fonts";
     fontFileUrl = fontsMainDirectory+fontFileUrl;

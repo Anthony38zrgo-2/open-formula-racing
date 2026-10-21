@@ -7,6 +7,8 @@ import re
 import shutil
 import subprocess
 
+from configure_game_fonts import install_game_fonts
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -30,6 +32,7 @@ def main():
     shutil.copytree(project / 'implementation/initial-settings', distribution / 'initial-settings', dirs_exist_ok=True)
     shutil.copytree(project / 'implementation/initial-settings/cars/categories', data_directory / 'cars/categories', dirs_exist_ok=True)
     shutil.copyfile(project / 'implementation/initial-settings/config/raceman/williams-fuji-practice.xml', data_directory / 'config/raceman/williams-fuji-practice.xml')
+    install_game_fonts(project)
     plugin_directory = compiler_prefix / 'bin/osgPlugins-3.6.5'
     if not plugin_directory.exists():
         plugin_directory = compiler_prefix / 'lib/osgPlugins-3.6.5'
