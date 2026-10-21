@@ -646,29 +646,7 @@ SimUpdate(tSituation *s, double deltaTime)
             }
             CHECK(car);
 
-            if (car->formula_vertical_solver_enabled)
-            {
-                SimCarVerticalCoupledUpdate(car, s);
-            }
-            else
-            {
-                for (i = 0; i < 4; i++)
-                {
-                    SimWheelUpdateRide(car, i);
-                }
-                CHECK(car);
-
-                for (i = 0; i < 2; i++)
-                {
-                    SimAxleUpdate(car, i);
-                }
-                CHECK(car);
-
-                for (i = 0; i < 4; i++)
-                {
-                    SimWheelUpdateForce(car, i);
-                }
-            }
+            SimCarVerticalCoupledUpdate(car, s);
             CHECK(car);
 
             SimTransmissionUpdate(car);
@@ -829,24 +807,7 @@ SimUpdateSingleCar(int index, double deltaTime,tSituation *s)
         SimWingUpdate(car, i, s);
     }
     CHECK(car);
-    if (car->formula_vertical_solver_enabled)
-    {
-        SimCarVerticalCoupledUpdate(car, s);
-    }
-    else
-    {
-        for (i = 0; i < 4; i++){
-            SimWheelUpdateRide(car, i);
-        }
-        CHECK(car);
-        for (i = 0; i < 2; i++){
-            SimAxleUpdate(car, i);
-        }
-        CHECK(car);
-        for (i = 0; i < 4; i++){
-            SimWheelUpdateForce(car, i);
-        }
-    }
+    SimCarVerticalCoupledUpdate(car, s);
     CHECK(car);
     SimTransmissionUpdate(car);
     CHECK(car);

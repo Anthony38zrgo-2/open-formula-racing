@@ -26,7 +26,8 @@ struct TireContactInput
     double normal_force_newtons;
     double base_contact_patch_meters;
     double load_sensitivity_exponent;
-    double elapsed_seconds;
+    double deflection_meters;
+    double deflection_velocity_meters_per_second;
     int grounded;
 };
 
@@ -46,7 +47,7 @@ struct TireContactOutput
 
 void TireContactModelReset(TireContactState& state, const TireContactConfiguration& configuration,
     const TireMechanicalModifiers& modifiers);
-void TireContactModelUpdate(TireContactState& state, const TireContactConfiguration& configuration,
+void TireContactModelEvaluate(TireContactState& state, const TireContactConfiguration& configuration,
     const TireMechanicalModifiers& modifiers, const TireContactInput& input, TireContactOutput& output);
 
 #endif

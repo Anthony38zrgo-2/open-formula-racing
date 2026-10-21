@@ -298,10 +298,6 @@ SimCarConfig(tCar *car)
     car->formula_diagnostic_interval = std::max(0.001,
         (double)GfParmGetNum(car->params, "Formula Controls",
             "diagnostic telemetry interval", NULL, 0.05));
-    const char* vertical_integration = GfParmGetStr(car->params, "Formula Controls",
-        "vertical integration", "reference");
-    car->formula_vertical_solver_enabled =
-        strcmp(vertical_integration, "coupled seven degree of freedom") == 0;
     car->formula_vertical_solver_initialized = 0;
     car->formula_vertical_diagnostic_every_step =
         GfParmGetNum(car->params, "Formula Controls", "diagnostic vertical every step",
@@ -400,14 +396,7 @@ SimCarConfig(tCar *car)
     SimCarReConfig(car);
 
     SimTireModelConfigure(car);
-    if (car->formula_vertical_solver_enabled && !car->formula_tire_model_enabled)
-    {
-        GfLogWarning("Coupled vertical integration requires the transient coupled tire model; "
-            "falling back to reference for this vehicle\n");
-        car->formula_vertical_solver_enabled = 0;
-    }
-    GfLogInfo("SimuV5 vertical integration: %s\n", car->formula_vertical_solver_enabled
-        ? "coupled seven degree of freedom" : "reference");
+    GfLogInfo("SimuV5 vertical integration: coupled seven degree of freedom (only model)\n");
 
     /* initialize dashboardInstant */
     tPrivCar *priv = &(car->carElt->priv);
@@ -854,12 +843,7 @@ SimCarUpdateSpeed(tCar *car)
 
     car->DynGCg.vel.x += car->DynGCg.acc.x * SimDeltaTime;
     car->DynGCg.vel.y += car->DynGCg.acc.y * SimDeltaTime;
-    if (!car->formula_vertical_solver_enabled)
-    {
-        car->DynGCg.vel.z += car->DynGCg.acc.z * SimDeltaTime;
-        car->DynGCg.vel.ax += car->DynGCg.acc.ax * SimDeltaTime;
-        car->DynGCg.vel.ay += car->DynGCg.acc.ay * SimDeltaTime;
-    }
+
     car->DynGCg.vel.az += car->DynGCg.acc.az * SimDeltaTime;
 
     /* spin limitation */
@@ -1552,12 +1536,7 @@ SimCarUpdatePos(tCar *car)
 
     car->DynGCg.pos.x += vx * SimDeltaTime;
     car->DynGCg.pos.y += vy * SimDeltaTime;
-    if (!car->formula_vertical_solver_enabled)
-    {
-        car->DynGCg.pos.z += car->DynGCg.vel.z * SimDeltaTime;
-        car->DynGCg.pos.ax += car->DynGCg.vel.ax * SimDeltaTime;
-        car->DynGCg.pos.ay += car->DynGCg.vel.ay * SimDeltaTime;
-    }
+
     car->DynGCg.pos.az += car->DynGCg.vel.az * SimDeltaTime;
 
     FLOAT_NORM_PI_PI(car->DynGCg.pos.az);
@@ -1825,7 +1804,7 @@ SimCarUpdate2(tCar *car, tSituation *situation)
                 car->carElt->index, wheel_index, wheel.forces.x, wheel.forces.y,
                 wheel.spinVel, wheel.in.spinVel, wheel.spinTq, wheel.brake.Tq,
                 tire.force.slip_power, tire.force.combined_utilization);
-            if (car->formula_vertical_solver_enabled)
+            if (car->formula_vertical_solver_initialized)
             {
                 const double extension =
                     car->formula_vertical_state.suspension_extension_meters[wheel_index];

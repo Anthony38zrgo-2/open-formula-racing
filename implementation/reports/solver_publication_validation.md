@@ -33,3 +33,11 @@ El primer experimento `tire_vertical_model.cpp/.h` y `validate_formula_tire_vert
 Esta publicación conserva el estado parcial documentado: existen validaciones de geometría, balance mecánico del banco, reposo y una secuencia diagnóstica de conducción. Quedan pendientes conducción sostenida a alta velocidad, la última curva real de Fuji, pianos, pendientes, boxes y aceptación humana. Los ensayos sintéticos de baches y la corrección de momentos no establecen por sí solos que la oscilación fuerte a alta velocidad haya desaparecido.
 
 La pantalla de carga se publica separadamente: compilación correcta, fondo editado suministrado por el usuario y comprobación de igualdad de píxeles tras conversión JPG→PNG. La revisión visual interactiva se interrumpió por Escape y permanece pendiente.
+
+## Aprobación posterior: 21 de octubre de 2026
+
+El usuario aprobó explícitamente la validación a alta velocidad del modelo actual. Se registra como aceptación humana de ese aspecto; no representa una nueva ejecución instrumentada por el agente ni extiende automáticamente la aceptación a boxes, pianos, pendientes u otros casos no confirmados. Las limitaciones anteriores describen el estado al publicar el 20 de octubre. El alcance de retirada de las rutas anteriores se está aclarando antes de modificar código compartido.
+
+## Retirada posterior: 21 de octubre de 2026
+
+El usuario confirmó retirar también el neumático legacy original. La limpieza está implementada y la DLL instalada: simuv5 usa únicamente el modelo acoplado y su solver de siete grados de libertad. Los selectores, targets y cifras de publicación anteriores quedan como historial. Validación actual: 504 comprobaciones y arranque correcto; ver `simuv5_legacy_tire_retirement.md`. Los reglajes simultáneos se preservaron y requieren su propia revalidación.

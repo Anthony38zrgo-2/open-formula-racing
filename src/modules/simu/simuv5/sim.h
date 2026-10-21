@@ -66,15 +66,11 @@ extern void SimWheelConfig(tCar *car, int index);
 extern void SimWheelReConfig(tCar *car, int index);
 extern void SimWheelDamage(tWheel* wheel, tdble dmg);
 extern void SimWheelUpdateRoad(tCar *car, int index);
-extern void SimWheelUpdateRide(tCar *car, int index);
-extern void SimWheelUpdateForce(tCar *car, int index);
 extern void SimWheelUpdateDriverAssistsForCoupled(tCar *car, int index);
-extern void SimWheelUpdateTire(tCar *car, int index);
 extern void SimWheelUpdateRotation(tCar *car);
 extern void SimUpdateFreeWheels(tCar *car, int axlenb);
 extern void SimTireModelConfigure(tCar *car);
 extern void SimTireModelResetWheel(tCar *car, int index, bool new_tire);
-extern void SimTireModelUpdateWheel(tCar *car, int index);
 extern void SimTireModelUpdateWheelWithVerticalState(tCar *car, int index,
     double normal_force_newtons, double deflection_meters,
     double deflection_velocity_meters_per_second, int grounded);

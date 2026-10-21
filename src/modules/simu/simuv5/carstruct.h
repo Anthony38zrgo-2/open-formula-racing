@@ -47,7 +47,6 @@ typedef struct
     double formula_diagnostic_interval;
     TireModelConfiguration formula_tire_configuration;
     int formula_tire_model_enabled;
-    int formula_vertical_solver_enabled;
     int formula_vertical_solver_initialized;
     TireVerticalSolverState formula_vertical_state;
     double formula_vertical_previous_ground_height[4];

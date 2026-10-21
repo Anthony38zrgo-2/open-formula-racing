@@ -1,4 +1,22 @@
+# Estado vigente: neumático legacy retirado de simuv5
+
+Actualización del 21 de octubre de 2026: el usuario confirmó eliminar también el neumático original de Speed Dreams y aprobó la validación a alta velocidad del modelo acoplado. La retirada está implementada: simuv5 solo ejecuta transient coupled con el solver vertical conjunto de siete grados de libertad. No recuperar reference ni el prototipo tire_vertical_model.
+
+Leer primero `implementation/reports/simuv5_legacy_tire_retirement.md` y `implementation/migration_status.json`. Compilación, 504 comprobaciones nativas y arranque mediante OpenFormula.exe completados. La aprobación a alta velocidad procede del usuario; no se ha repetido esa medición ni se extiende a reglajes posteriores. Quedan independientes las pruebas de pianos, pendientes y boxes.
+
+El selector legacy se rechaza. Los coches que utilicen simuv5 requieren Formula Tires válido; migrar sus parámetros antes de cargarlos. No hay fallback silencioso. Otros plugins históricos de Speed Dreams no se modificaron.
+
+Conservar los cambios simultáneos de reglaje y el resto del trabajo ajeno. Inventariar rama, HEAD y cambios actuales antes de continuar. Esta retirada no incluye commit ni push.
+
+## Encargo histórico archivado: no ejecutar como instrucciones vigentes
+
+El texto siguiente documenta la investigación anterior. Sus estados pendientes, hashes, selectores y referencias a legacy/reference son históricos y están sustituidos por el estado vigente anterior.
+
+---
+
 # Encargo revisado: cerrar la Etapa B del contacto vertical del Williams
+
+Actualización del 21 de octubre de 2026: el usuario aprobó explícitamente la validación a alta velocidad del modelo actual. Esa prueba ya no está pendiente de aceptación humana. Las referencias a alta velocidad pendiente en el encargo del día 20 son históricas; no implican que el agente haya realizado una nueva medición instrumentada. El alcance exacto de retirada del integrador `reference` y del neumático legacy original se está aclarando antes de modificar sus rutas compartidas.
 
 Estado al publicar: las Puertas 1 y 2 y la integración de Puerta 3 ya están implementadas; consultar `implementation/reports/williams_idle_oscillation_stage_b_gate3.md` y `solver_publication_validation.md` antes de retomar este encargo. No reimplementar desde cero las etapas completadas. La conducción sostenida a alta velocidad y la aceptación humana siguen pendientes. El prototipo anterior `tire_vertical_model` permanece fuera de la publicación; el solver integrado es `tire_vertical_solver`.
 

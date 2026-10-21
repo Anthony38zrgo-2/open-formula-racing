@@ -86,7 +86,7 @@ int main()
         "validate_tire_selector_schema.xml",
         "validate_tire_selector_pressure.xml"
     };
-    std::string absent = Document("", "");
+    std::string absent = Document("", PressureSection("gauge"));
     std::string legacy = Document(
         "<section name=\"Formula Controls\"><attstr name=\"tire model\" val=\"legacy\"/></section>\n",
         PressureSection("gauge"));
@@ -107,9 +107,9 @@ int main()
     Check(written, "selector fixtures written");
 
     bool valid = ReadConfiguration(paths[0], configuration);
-    Check(valid && configuration.enabled == 0, "absent selector stays legacy");
+    Check(valid && configuration.enabled == 1, "absent selector defaults to coupled");
     valid = ReadConfiguration(paths[1], configuration);
-    Check(valid && configuration.enabled == 0, "legacy selector stays legacy");
+    Check(!valid && configuration.enabled == 0, "retired legacy selector is rejected");
     valid = ReadConfiguration(paths[2], configuration);
     Check(valid && configuration.enabled == 1, "coupled selector enables model");
     valid = ReadConfiguration(paths[3], configuration);

@@ -133,8 +133,7 @@ void SimTireModelConfigure(tCar *car)
         && car->formula_tire_configuration.enabled) ? 1 : 0;
     if (!car->formula_tire_model_enabled)
     {
-        GfLogInfo("SimuV5 tire model: legacy (configuration_valid=%d enabled=%d)\n",
-            configuration_valid ? 1 : 0, car->formula_tire_configuration.enabled);
+        GfLogFatal("simuv5 requires valid transient coupled tire configuration; legacy support has been removed\n");
         return;
     }
     GfLogInfo("SimuV5 tire model: transient coupled (configuration_valid=%d enabled=%d)\n",
@@ -192,7 +191,7 @@ static void BuildTireForceInput(tCar *car, int index, double normal_force_newton
     force_input.wheel_right = index % 2 == 0 ? 1 : 0;
 }
 
-static void SimTireModelUpdateWheelInternal(tCar *car, int index, int use_vertical_state,
+static void SimTireModelUpdateWheelInternal(tCar *car, int index,
     double normal_force_override, double deflection_override,
     double deflection_velocity_override, int grounded_override)
 {
@@ -205,10 +204,7 @@ static void SimTireModelUpdateWheelInternal(tCar *car, int index, int use_vertic
     {
         SimTireModelResetWheel(car, index, false);
     }
-    if (use_vertical_state)
-    {
-        wheel->forces.z = (tdble)normal_force_override;
-    }
+    wheel->forces.z = (tdble)normal_force_override;
 
     TireMechanicalModifiers modifiers;
     TireThermalModelMechanicalModifiers(state.thermal, configuration.thermal[axle],
@@ -218,16 +214,11 @@ static void SimTireModelUpdateWheelInternal(tCar *car, int index, int use_vertic
     contact_input.normal_force_newtons = wheel->forces.z;
     contact_input.base_contact_patch_meters = base_contact_patch;
     contact_input.load_sensitivity_exponent = configuration.force[axle].load_sensitivity_exponent;
-    contact_input.elapsed_seconds = use_vertical_state ? 0.0 : elapsed;
-    contact_input.grounded = use_vertical_state
-        ? grounded_override : wheel->formula_tire_model_grounded;
-    if (use_vertical_state)
-    {
-        state.contact.deflection = std::max(deflection_override, 0.0);
-        state.contact.deflection_velocity = deflection_velocity_override;
-    }
+    contact_input.deflection_meters = deflection_override;
+    contact_input.deflection_velocity_meters_per_second = deflection_velocity_override;
+    contact_input.grounded = grounded_override;
     TireContactOutput contact_output;
-    TireContactModelUpdate(state.contact, configuration.contact[axle], modifiers, contact_input,
+    TireContactModelEvaluate(state.contact, configuration.contact[axle], modifiers, contact_input,
         contact_output);
 
     double vehicle_speed = sqrt(wheel->bodyVel.x * wheel->bodyVel.x
@@ -355,16 +346,13 @@ static void SimTireModelUpdateWheelInternal(tCar *car, int index, int use_vertic
     SimTireModelPublishWheel(car, index);
 }
 
-void SimTireModelUpdateWheel(tCar *car, int index)
-{
-    SimTireModelUpdateWheelInternal(car, index, 0, 0.0, 0.0, 0.0, 0);
-}
+
 
 void SimTireModelUpdateWheelWithVerticalState(tCar *car, int index,
     double normal_force_newtons, double deflection_meters,
     double deflection_velocity_meters_per_second, int grounded)
 {
-    SimTireModelUpdateWheelInternal(car, index, 1, normal_force_newtons,
+    SimTireModelUpdateWheelInternal(car, index, normal_force_newtons,
         deflection_meters, deflection_velocity_meters_per_second, grounded);
 }
 

@@ -228,7 +228,7 @@ void SimCarCollideXYScene(tCar *car)
 		//SimSuspDamage(&wheel->susp, dotProd + SUSP_DAMAGE_CONST * SimDeltaTime);
 
 		SimWheelDamage(wheel, dotProd + WHEEL_ROT_DAMAGE * SimDeltaTime);
-		SimWheelUpdateRide(car, i);
+		SimWheelUpdateRoad(car, i);
 
         // If the car moves toward the barrier, rebound.
         if (dotProd < 0.0f)

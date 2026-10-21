@@ -327,11 +327,12 @@ bool TireModelConfigurationRead(TireModelConfiguration& configuration, void* han
     double ambient_pressure_pascals, double ambient_temperature_kelvin)
 {
     TireModelConfigurationSetDefaults(configuration);
-    const char* selector = ReadText(handle, "Formula Controls", "tire model", "legacy");
+    const char* selector = ReadText(handle, "Formula Controls", "tire model", "transient coupled");
     configuration.enabled = IsCoupledModel(selector) ? 1 : 0;
     if (!configuration.enabled)
     {
-        return true;
+        GfLogWarning("Unsupported tire model '%s': simuv5 only supports transient coupled\n", selector);
+        return false;
     }
 
     configuration.schema_version = (int)ReadNumber(handle, "Formula Tires", "schema version", 1.0);

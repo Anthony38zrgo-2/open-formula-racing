@@ -275,7 +275,7 @@ static void ThermalSubstep(TireThermalState& state, const TireThermalConfigurati
 
     double total_capacity_delta = tread_capacity * (delta_tread[0] + delta_tread[1] + delta_tread[2])
         + carcass_capacity * delta_carcass + gas_capacity * delta_gas;
-    double external_energy = (external_power + deposited_power + flex_power + input.brake_carcass_heat_watts
+    double external_energy = (external_power + deposited_power + flex_power + carcass_air_power + input.brake_carcass_heat_watts
         + input.brake_gas_heat_watts) * step_seconds;
     state.last_balance_residual_joules += total_capacity_delta - external_energy;
     deposited_joules += slip_heat_power * step_seconds;

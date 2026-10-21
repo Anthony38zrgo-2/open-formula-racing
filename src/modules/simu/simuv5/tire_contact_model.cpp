@@ -50,7 +50,7 @@ void TireContactModelReset(TireContactState& state, const TireContactConfigurati
     state.clamp_count = 0;
 }
 
-void TireContactModelUpdate(TireContactState& state, const TireContactConfiguration& configuration,
+void TireContactModelEvaluate(TireContactState& state, const TireContactConfiguration& configuration,
     const TireMechanicalModifiers& modifiers, const TireContactInput& input, TireContactOutput& output)
 {
     double stiffness = fmax(configuration.radial_stiffness_newtons_per_meter
@@ -61,61 +61,13 @@ void TireContactModelUpdate(TireContactState& state, const TireContactConfigurat
     double damping = 2.0 * ClampValue(configuration.radial_damping_ratio, 0.05, 1.5)
         * sqrt(stiffness * mass) * modifiers.vertical_damping_scale;
     double normal_force = fmax(input.normal_force_newtons, 0.0);
-    double elapsed = ClampValue(input.elapsed_seconds, 0.0, 0.05);
-    int step_count = (int)ceil(elapsed / 0.001);
-    if (step_count < 1)
-    {
-        step_count = 1;
-    }
-    if (step_count > 64)
-    {
-        step_count = 64;
-    }
-    double step_seconds = elapsed > 0.0 ? elapsed / (double)step_count : 0.0;
-
-    if (!input.grounded || normal_force <= 1.0e-6)
-    {
-        double previous = state.deflection;
-        double decay_seconds = 0.05;
-        double fraction = elapsed > 0.0 ? 1.0 - exp(-elapsed / decay_seconds) : 1.0;
-        state.deflection += (0.0 - state.deflection) * fraction;
-        state.deflection_velocity = elapsed > 0.0 ? (state.deflection - previous) / elapsed : 0.0;
-        state.contact_fraction = 0.0;
-    }
-    else
-    {
-        for (int step = 0; step < step_count; ++step)
-        {
-            double spring_force = stiffness * state.deflection;
-            double damping_force = damping * state.deflection_velocity;
-            double acceleration = (normal_force - spring_force - damping_force) / mass;
-            state.deflection_velocity += acceleration * step_seconds;
-            state.deflection += state.deflection_velocity * step_seconds;
-            if (state.deflection < 0.0)
-            {
-                state.deflection = 0.0;
-                if (state.deflection_velocity < 0.0)
-                {
-                    state.deflection_velocity = 0.0;
-                }
-            }
-            else if (state.deflection > maximum_deflection)
-            {
-                state.deflection = maximum_deflection;
-                if (state.deflection_velocity > 0.0)
-                {
-                    state.deflection_velocity = 0.0;
-                }
-                state.clamp_count += 1;
-            }
-        }
-        state.contact_fraction = ClampValue(normal_force
-            / fmax(configuration.static_load_newtons * 0.08, 1.0), 0.0, 1.0);
-        if (state.contact_fraction < 0.35)
-        {
-            state.contact_fraction = 0.35;
-        }
-    }
+    state.deflection = ClampValue(input.deflection_meters, 0.0, maximum_deflection);
+    state.deflection_velocity = input.deflection_velocity_meters_per_second;
+    if (input.deflection_meters > maximum_deflection)
+        state.clamp_count += 1;
+    state.contact_fraction = input.grounded && normal_force > 1.0e-6
+        ? ClampValue(normal_force / fmax(configuration.static_load_newtons * 0.08, 1.0), 0.35, 1.0)
+        : 0.0;
 
     double deflection_ratio = ClampValue(state.deflection / maximum_deflection, 0.0, 1.5);
     state.effective_radius = configuration.radius_meters
