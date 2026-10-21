@@ -85,11 +85,11 @@ ENDIF(OPTION_CLIENT_SERVER)
 SET(LEGACYMENU_SOURCES ${MAINSCREENS_SOURCES}
                        ${CONFSCREENS_SOURCES}
                        ${RACESCREENS_SOURCES}
-                       legacymenu.cpp)
+                       legacymenu.cpp loading_presentation.cpp)
 SET(LEGACYMENU_HEADERS ${MAINSCREENS_HEADERS}
                        ${CONFSCREENS_HEADERS}
                        ${RACESCREENS_HEADERS}
-                       legacymenu.h)
+                       legacymenu.h loading_presentation.h)
 
 INCLUDE_DIRECTORIES(. ${MS} ${CS} ${RS})
 ADD_INTERFACE_INCLUDEDIR()
@@ -160,3 +160,5 @@ ADD_ZLIB_LIBRARY(legacymenu)
 ADD_MINIZIP_LIBRARY(legacymenu)
 
 SD_INSTALL_FILES(LIB modules/userinterface TARGETS legacymenu)
+INSTALL(FILES ${CMAKE_SOURCE_DIR}/implementation/loading-screen/pit-lane-background.png
+        DESTINATION ${SD_DATADIR}/data/img)

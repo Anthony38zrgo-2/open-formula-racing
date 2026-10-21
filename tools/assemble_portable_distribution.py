@@ -18,6 +18,9 @@ def main():
     distribution = project / 'distribution'
     data_directory = distribution / 'share/games/speed-dreams-2'
     binaries_directory = distribution / 'bin'
+    loading_background = project / 'implementation/loading-screen/pit-lane-background.png'
+    (data_directory / 'data/img').mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(loading_background, data_directory / 'data/img/pit-lane-background.png')
     shader_directory = data_directory / 'data/shaders'
     shader_directory.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(project / 'implementation/shaders/car_material_appearance.frag',

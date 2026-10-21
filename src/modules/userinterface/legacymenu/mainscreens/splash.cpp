@@ -22,11 +22,10 @@
 #include <glfeatures.h>
 
 #include "splash.h"
+#include "loading_presentation.h"
 
 
-static int splImgWidth, splImgHeight; // Real image size (from image file).
-static int splImgPow2Width, splImgPow2Height; // Smallest possible containing 2^N x 2^P.
-static GLuint splTextureId = 0;
+static LoadingPresentation startupLoadingPresentation;
 
 static bool splDisplaying = false;
 static bool splTimedOut = false;
@@ -59,8 +58,7 @@ static void splashClose()
 
     // Completed ? OK, let's close.
     splDisplaying = false;
-    glDeleteTextures(1, &splTextureId);
-    splTextureId = 0;
+    startupLoadingPresentation.release();
 
     // And do what was specified.
     if (splOnClosed)
@@ -162,80 +160,11 @@ static void splashTimer(int /* value */)
  * Remarks
  *
  */
-static void splashDisplay( void )
+static void splashDisplay(void)
 {
     splDisplaying = true;
-
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_LIGHTING);
-    glDisable(GL_CULL_FACE);
-    glDisable(GL_ALPHA_TEST);
-
-    int nScrW, nScrH, nViewW, nViewH;
-    GfScrGetSize(&nScrW, &nScrH, &nViewW, &nViewH);
-
-    glViewport((nScrW-nViewW) / 2, (nScrH-nViewH) / 2, nViewW, nViewH);
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    gluOrtho2D(0, nScrW, 0, nScrH);
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
-
-    if (splTextureId)
-    {
-        // Prepare texture display.
-        glEnable(GL_TEXTURE_2D);
-        glBindTexture(GL_TEXTURE_2D, splTextureId);
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-        // Compute the initial width of the right area and the height of the bottom area
-        // of the texture that will not be displayed
-        // (We display only the top left rectangle of the quad texture
-        //  that corresponds to the original image).
-        GLfloat tx1 = 0.0f;
-        GLfloat tx2 = splImgWidth / (GLfloat)splImgPow2Width;
-
-        GLfloat ty1 = 1.0f - splImgHeight / (GLfloat)splImgPow2Height;
-        GLfloat ty2 = 1.0;
-
-        // Compute the width/height of the symetrical left/right / top/bottom
-        // areas of original image that will need to be clipped
-        // in order to keep its aspect ratio.
-        const GLfloat rfactor = splImgWidth * (GLfloat)nViewH / splImgHeight / (GLfloat)nViewW;
-
-        if (rfactor >= 1.0f) {
-            // If aspect ratio of view is smaller than image's one, "cut off" sides.
-            const GLfloat tdx = splImgWidth * (rfactor - 1.0f) / splImgPow2Width / 2.0f;
-            tx1 += tdx;
-            tx2 -= tdx;
-        } else {
-            // If aspect ratio of view is larger than image's one,
-            // "cut off" top and bottom.
-            const GLfloat tdy = splImgHeight * rfactor / splImgPow2Height / 2.0f;
-            ty2 = (ty1+1)/2 + tdy;
-            ty1 = (ty1+1)/2 - tdy;
-        }
-
-        // Display texture.
-        glBegin(GL_QUADS);
-        glTexCoord2f(tx1, ty1); glVertex3f(0.0, 0.0, 0.0);
-        glTexCoord2f(tx1, ty2); glVertex3f(0.0, nScrH, 0.0);
-        glTexCoord2f(tx2, ty2); glVertex3f(nScrW, nScrH, 0.0);
-        glTexCoord2f(tx2, ty1); glVertex3f(nScrW, 0.0, 0.0);
-        glEnd();
-        glDisable(GL_TEXTURE_2D);
-    }
-
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    gluOrtho2D(0, 640, 0, 480);
-
-    static float grWhite[4] = {1.0, 1.0, 1.0, 1.0};
-    GfuiDrawString(GfuiApp().version().c_str(), grWhite, GFUI_FONT_SMALL_C,
-                   440-8, 8, 200, GFUI_ALIGN_HR);
-
-    GfuiSwapBuffers();
+    startupLoadingPresentation.draw(splBackgroundWorkDone ? 0.10f : 0.04f,
+        splBackgroundWorkDone ? "Carga inicial completada" : "Iniciando Open Formula");
 }
 
 static void splashMouse(int /* b */, int s, int /* x */, int /* y */)
@@ -272,13 +201,7 @@ bool SplashScreen(bool (*fnBackWork)(void), bool (*fnOnClosed)(void), bool bInte
     splOnClosed = fnOnClosed;
     splTimedOut = !bInteractive;
 
-    // Free splash texture if was loaded already.
-    if (splTextureId)
-        GfTexFreeTexture(splTextureId);
-
-    // Load splash texture from file.
-    splTextureId = GfTexReadTexture("data/img/splash.jpg", &splImgWidth, &splImgHeight,
-                                    &splImgPow2Width, &splImgPow2Height);
+    startupLoadingPresentation.load();
 
     // Prevent fnOnClosed being called (by splashClose)
     // before fnBackWork (called by splashIdle) is done.
@@ -293,6 +216,7 @@ bool SplashScreen(bool (*fnBackWork)(void), bool (*fnOnClosed)(void), bool bInte
         GfuiApp().eventLoop().setTimerCB(2000, splashTimer);
     }
     GfuiApp().eventLoop().setRecomputeCB(splashIdle);
+    splashDisplay();
 
     return true;
 }
