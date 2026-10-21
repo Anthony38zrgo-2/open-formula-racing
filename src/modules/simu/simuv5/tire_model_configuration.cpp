@@ -87,13 +87,12 @@ static void SetContactDefaults(TireContactConfiguration& contact, int axle)
     contact.width_meters = axle == 0 ? 0.308 : 0.389;
     contact.wheel_mass_kilograms = axle == 0 ? 13.0 : 16.0;
     contact.static_load_newtons = axle == 0 ? 1300.0 : 1700.0;
-    contact.radial_stiffness_newtons_per_meter = contact.static_load_newtons / 0.008;
-    contact.radial_damping_ratio = 0.45;
-    contact.maximum_deflection_meters = contact.radius_meters * 0.12;
-    contact.rolling_radius_deflection_factor = 0.68;
+    contact.empirical_load_compliance_meters_per_newton =
+        0.008 / contact.static_load_newtons;
+    contact.empirical_deformation_limit_meters = contact.radius_meters * 0.12;
+    contact.rolling_radius_load_deflection_factor = 0.68;
     contact.contact_patch_load_gain = 0.12;
-    contact.contact_patch_deflection_gain = 0.20;
-    contact.partial_contact_stiffness_floor = 0.35;
+    contact.contact_patch_empirical_deformation_gain = 0.20;
 }
 
 static void SetThermalDefaults(TireThermalConfiguration& thermal, int axle)
@@ -146,7 +145,7 @@ static void SetWearDefaults(TireWearConfiguration& wear, int axle)
 void TireModelConfigurationSetDefaults(TireModelConfiguration& configuration)
 {
     configuration.enabled = 0;
-    configuration.schema_version = 1;
+    configuration.schema_version = 2;
     configuration.wet_grip_scale = 0.60;
     for (int axle = 0; axle < 2; ++axle)
     {
@@ -208,19 +207,17 @@ static void ReadContactConfiguration(TireModelConfiguration& configuration, void
     contact.radius_meters = 0.5 * (radius_meters[wheel] + radius_meters[wheel + 1]);
     contact.width_meters = 0.5 * (width_meters[wheel] + width_meters[wheel + 1]);
     contact.wheel_mass_kilograms = 0.5 * (wheel_mass_kilograms[wheel] + wheel_mass_kilograms[wheel + 1]);
-    contact.radial_stiffness_newtons_per_meter = ReadNumber(handle, section, "radial stiffness",
-        contact.static_load_newtons / 0.008);
-    contact.radial_damping_ratio = ReadNumber(handle, section, "radial damping ratio", contact.radial_damping_ratio);
-    contact.maximum_deflection_meters = ReadNumber(handle, section, "maximum deflection",
-        contact.radius_meters * 0.12);
-    contact.rolling_radius_deflection_factor = ReadNumber(handle, section, "rolling radius deflection factor",
-        contact.rolling_radius_deflection_factor);
+    contact.empirical_load_compliance_meters_per_newton = ReadNumber(handle, section,
+        "empirical load compliance", 0.008 / contact.static_load_newtons);
+    contact.empirical_deformation_limit_meters = ReadNumber(handle, section,
+        "empirical deformation limit", contact.radius_meters * 0.12);
+    contact.rolling_radius_load_deflection_factor = ReadNumber(handle, section,
+        "rolling radius load deflection factor", contact.rolling_radius_load_deflection_factor);
     contact.contact_patch_load_gain = ReadNumber(handle, section, "contact patch load gain",
         contact.contact_patch_load_gain);
-    contact.contact_patch_deflection_gain = ReadNumber(handle, section, "contact patch deflection gain",
-        contact.contact_patch_deflection_gain);
-    contact.partial_contact_stiffness_floor = ReadNumber(handle, section, "partial contact stiffness floor",
-        contact.partial_contact_stiffness_floor);
+    contact.contact_patch_empirical_deformation_gain = ReadNumber(handle, section,
+        "contact patch empirical deformation gain",
+        contact.contact_patch_empirical_deformation_gain);
     if (configuration.force[axle].contact_patch_meters <= 0.0)
     {
         configuration.force[axle].contact_patch_meters = contact.width_meters * 0.8;
@@ -336,11 +333,31 @@ bool TireModelConfigurationRead(TireModelConfiguration& configuration, void* han
     }
 
     configuration.schema_version = (int)ReadNumber(handle, "Formula Tires", "schema version", 1.0);
-    if (configuration.schema_version != 1)
+    if (configuration.schema_version != 2)
     {
-        GfLogWarning("Unsupported coupled tire configuration schema %d\n", configuration.schema_version);
+        GfLogWarning("Unsupported coupled tire configuration schema %d: migrate the XML to schema 2 (radial stiffness and radial damping ratio are retired)\n",
+            configuration.schema_version);
         configuration.enabled = 0;
         return false;
+    }
+
+    static const char* contact_sections[2] = {
+        "Formula Tires/Front Contact", "Formula Tires/Rear Contact"
+    };
+    for (int axle = 0; axle < 2; ++axle)
+    {
+        if (GfParmExistsParam(handle, contact_sections[axle], "radial stiffness")
+            || GfParmExistsParam(handle, contact_sections[axle], "radial damping ratio")
+            || GfParmExistsParam(handle, contact_sections[axle], "maximum deflection")
+            || GfParmExistsParam(handle, contact_sections[axle], "partial contact stiffness floor")
+            || GfParmExistsParam(handle, contact_sections[axle], "rolling radius deflection factor")
+            || GfParmExistsParam(handle, contact_sections[axle], "contact patch deflection gain"))
+        {
+            GfLogWarning("Legacy radial tire fields found in %s: migrate the XML to schema 2 instead of mixing old and new fields\n",
+                contact_sections[axle]);
+            configuration.enabled = 0;
+            return false;
+        }
     }
 
     configuration.wet_grip_scale = ReadNumber(handle, "Formula Tires", "wet grip scale", configuration.wet_grip_scale);

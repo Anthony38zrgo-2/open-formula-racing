@@ -19,16 +19,17 @@
 #include <algorithm>
 #include <cstring>
 #include <cstdio>
+#include <limits>
 
 #include "sim.h"
 #include "tire_thermal_model.h"
+#include "track_ground_mesh.h"
 
 static double SimCarVerticalClamp(double value, double lower, double upper);
 static void SimCarComputeCoupledContactVelocityForState(tCar *car, int wheel_index,
     const TireVerticalSolverState& state, const double ground_height_meters[4],
     double& velocity_x, double& velocity_y);
 
-const tdble aMax = 1.0f; /*  */
 static const char *SuspSect[4] = {SECT_FRNTRGTSUSP, SECT_FRNTLFTSUSP, SECT_REARRGTSUSP, SECT_REARLFTSUSP};
 
 // The "Simu" logger instance
@@ -299,9 +300,60 @@ SimCarConfig(tCar *car)
         (double)GfParmGetNum(car->params, "Formula Controls",
             "diagnostic telemetry interval", NULL, 0.05));
     car->formula_vertical_solver_initialized = 0;
+    car->formula_vertical_failed = 0;
+    car->formula_vertical_accepted_substeps = 0;
     car->formula_vertical_diagnostic_every_step =
         GfParmGetNum(car->params, "Formula Controls", "diagnostic vertical every step",
             NULL, 0.0) > 0.0;
+    car->formula_vertical_authority_diagnostic =
+        GfParmGetNum(car->params, "Formula Controls", "vertical authority diagnostic",
+            NULL, 0.0) > 0.0;
+    car->formula_vertical_authority_every_step =
+        GfParmGetNum(car->params, "Formula Controls", "vertical authority every step",
+            NULL, 0.0) > 0.0;
+    car->formula_floor_contact_enabled =
+        GfParmGetNum(car->params, "Formula Floor", "enabled", NULL, 0.0) > 0.0;
+    car->formula_floor_contact_count = (int)GfParmGetNum(car->params, "Formula Floor",
+        "contact count", NULL, 0.0);
+    if (car->formula_floor_contact_count < 0)
+    {
+        car->formula_floor_contact_count = 0;
+    }
+    if (car->formula_floor_contact_count > TIRE_VERTICAL_MAX_CHASSIS_CONTACTS)
+    {
+        GfLogWarning("Formula Floor contact count %d exceeds capacity %d; truncated\n",
+            car->formula_floor_contact_count, TIRE_VERTICAL_MAX_CHASSIS_CONTACTS);
+        car->formula_floor_contact_count = TIRE_VERTICAL_MAX_CHASSIS_CONTACTS;
+    }
+    for (int contact_index = 0; contact_index < car->formula_floor_contact_count;
+        ++contact_index)
+    {
+        char point_section[48] = {};
+        std::snprintf(point_section, sizeof(point_section), "Formula Floor Point %d",
+            contact_index);
+        TireVerticalChassisContactConfiguration contact = {};
+        contact.x_meters = (double)GfParmGetNum(car->params, point_section,
+            "x", NULL, 0.0);
+        contact.y_meters = (double)GfParmGetNum(car->params, point_section,
+            "y", NULL, 0.0);
+        contact.z_meters = (double)GfParmGetNum(car->params, point_section,
+            "z", NULL, 0.0);
+        const char* group = GfParmGetStr(car->params, point_section, "group", "floor");
+        contact.group = std::strcmp(group, "front_wing") == 0 ? 1 : 0;
+        contact.enabled = GfParmGetNum(car->params, point_section, "enabled",
+            NULL, 0.0) > 0.0;
+        car->formula_floor_contact[contact_index] = contact;
+        car->formula_floor_previous_ground_height[contact_index] = 0.0;
+    }
+    int enabled_floor_contacts = 0;
+    for (int contact_index = 0; contact_index < car->formula_floor_contact_count;
+        ++contact_index)
+    {
+        enabled_floor_contacts += car->formula_floor_contact[contact_index].enabled ? 1 : 0;
+    }
+    GfLogInfo("Formula Floor: %d contacts, %d enabled, section=%d\n",
+        car->formula_floor_contact_count, enabled_floor_contacts,
+        car->formula_floor_contact_enabled);
     car->formula_diagnostic_controls_enabled =
         GfParmGetNum(car->params, "Formula Controls", "diagnostic controls",
             NULL, 0.0) > 0.0;
@@ -907,7 +959,7 @@ static double SimCarVerticalClamp(double value, double lower, double upper)
     return value;
 }
 
-static void SimCarBuildVerticalConfiguration(tCar *car,
+void SimCarBuildVerticalConfiguration(tCar *car,
     TireVerticalSolverConfiguration& configuration)
 {
     std::memset(&configuration, 0, sizeof(configuration));
@@ -951,20 +1003,7 @@ static void SimCarBuildVerticalConfiguration(tCar *car,
         corner.damper.efficiency = wheel.susp.damper.efficiency;
 
         const int axle = wheel_index / 2;
-        TireMechanicalModifiers modifiers;
-        TireThermalModelMechanicalModifiers(wheel.formula_tire_model.thermal,
-            car->formula_tire_configuration.thermal[axle],
-            car->formula_tire_configuration.pressure, wheel_index, modifiers);
-        const double stiffness =
-            car->formula_tire_configuration.contact[axle].radial_stiffness_newtons_per_meter
-            * modifiers.vertical_stiffness_scale;
-        const double damping_ratio = SimCarVerticalClamp(
-            car->formula_tire_configuration.contact[axle].radial_damping_ratio, 0.05, 1.5);
-        corner.tire_radial_stiffness_newtons_per_meter = stiffness;
-        corner.tire_radial_damping_newtons_per_second_per_meter =
-            2.0 * damping_ratio * std::sqrt(std::max(stiffness, 1.0)
-                * std::max((double)wheel.mass, 1.0))
-            * modifiers.vertical_damping_scale;
+        (void)axle;
         corner.unloaded_radius_meters = wheel.radius;
     }
 
@@ -1008,9 +1047,17 @@ static void SimCarBuildVerticalConfiguration(tCar *car,
             || heave.damper.bump.C1 != 0.0 || heave.damper.bump.C2 != 0.0
             || heave.damper.rebound.C1 != 0.0 || heave.damper.rebound.C2 != 0.0;
     }
+
+    configuration.chassis_contact_count = car->formula_floor_contact_count;
+    for (int contact_index = 0; contact_index < car->formula_floor_contact_count;
+        ++contact_index)
+    {
+        configuration.chassis_contact[contact_index] =
+            car->formula_floor_contact[contact_index];
+    }
 }
 
-static void SimCarVerticalPublish(tCar *car,
+void SimCarVerticalPublish(tCar *car,
     const TireVerticalSolverState& state, const TireVerticalSolverState& previous_state,
     const TireVerticalSolverDiagnostics& diagnostics,
     const double ground_height_meters[4],
@@ -1047,13 +1094,15 @@ static void SimCarVerticalPublish(tCar *car,
         const double chassis_reference_velocity = state.body_velocity[0]
             - wheel.staticPos.x * state.body_velocity[2]
             + wheel.staticPos.y * state.body_velocity[1];
+        (void)chassis_reference_velocity;
         const double clearance = chassis_reference_height - ground_height_meters[wheel_index];
-        const double deflection = extension - clearance;
-        const double deflection_velocity =
-            ground_velocity_meters_per_second[wheel_index]
-            + extension_velocity - chassis_reference_velocity;
         const double normal_force = diagnostics.tire_normal_force_newtons[wheel_index];
-        const bool contact = diagnostics.tire_contact[wheel_index] != 0;
+        const bool supported = diagnostics.tire_contact_supported_during_step[wheel_index] != 0;
+        const bool contact_at_end = diagnostics.tire_contact_at_end[wheel_index] != 0;
+        const double contact_fraction = elapsed_seconds > 0.0
+            ? std::max(0.0, std::min(1.0,
+                diagnostics.tire_contact_support_seconds[wheel_index] / elapsed_seconds))
+            : 0.0;
 
         wheel.pos.z = chassis_reference_height;
         wheel.relPos.z = wheel.radius - extension;
@@ -1072,14 +1121,14 @@ static void SimCarVerticalPublish(tCar *car,
             wheel.susp.state |= SIM_SUSP_EXT;
         }
         wheel.state = wheel.susp.state;
-        if (!contact)
+        if (!contact_at_end)
         {
             wheel.state |= SIM_WH_INAIR;
         }
         wheel.forces.z = normal_force;
         wheel.axleFz = 0.0;
         wheel.axleFz3rd = 0.0;
-        wheel.formula_tire_model_grounded = contact ? 1 : 0;
+        wheel.formula_tire_model_grounded = supported ? 1 : 0;
 
         const double caster_camber = sin(wheel.staticPos.ay) * wheel.steer;
         if (wheel_index % 2)
@@ -1099,11 +1148,38 @@ static void SimCarVerticalPublish(tCar *car,
         wheel.bodyVel.x = contact_velocity_x;
         wheel.bodyVel.y = contact_velocity_y;
         SimTireModelUpdateWheelWithVerticalState(car, wheel_index, normal_force,
-            std::max(deflection, 0.0), deflection_velocity, contact ? 1 : 0);
+            contact_fraction, supported ? 1 : 0);
         SimWheelUpdateDriverAssistsForCoupled(car, wheel_index);
     }
 
     car->formula_vertical_state = state;
+
+    for (int contact_index = 0; contact_index < car->formula_floor_contact_count;
+        ++contact_index)
+    {
+        car->formula_floor_gap_meters[contact_index] =
+            diagnostics.chassis_contact_gap_meters[contact_index];
+        car->formula_floor_impulse_newton_seconds[contact_index] =
+            diagnostics.chassis_contact_impulse_newton_seconds[contact_index];
+        car->formula_floor_active[contact_index] =
+            diagnostics.chassis_contact_active[contact_index];
+    }
+    car->formula_floor_energy_loss_joules =
+        diagnostics.chassis_contact_energy_loss_joules;
+
+    if (car->formula_vertical_authority_diagnostic
+        && car->formula_vertical_authority_every_step)
+    {
+        GfLogInfo("Formula vertical authority publish: time=%.6f dt=%.6f body=%.9f roll=%.9f pitch=%.9f vbody=%.9f vroll=%.9f vpitch=%.9f dyn_z=%.9f dyn_vz=%.9f ride=%.9f,%.9f,%.9f,%.9f packers=%.9f,%.9f,%.9f,%.9f\n",
+            car->formula_vertical_time, elapsed_seconds,
+            state.body_position[0], state.body_position[1], state.body_position[2],
+            state.body_velocity[0], state.body_velocity[1], state.body_velocity[2],
+            car->DynGCg.pos.z, car->DynGCg.vel.z,
+            car->wheel[0].rideHeight, car->wheel[1].rideHeight,
+            car->wheel[2].rideHeight, car->wheel[3].rideHeight,
+            car->wheel[0].susp.spring.packers, car->wheel[1].susp.spring.packers,
+            car->wheel[2].susp.spring.packers, car->wheel[3].susp.spring.packers);
+    }
 }
 
 static void SimCarComputeCoupledContactVelocityForState(tCar *car, int wheel_index,
@@ -1180,20 +1256,45 @@ static void SimCarVerticalLogStep(tCar *car, double time_seconds,
         const double chassis_reference_velocity = state.body_velocity[0]
             - wheel.staticPos.x * state.body_velocity[2]
             + wheel.staticPos.y * state.body_velocity[1];
-        const double deflection = extension
-            - (chassis_reference_height - ground_height_meters[wheel_index]);
-        const double deflection_velocity = ground_velocity_meters_per_second[wheel_index]
-            + extension_velocity - chassis_reference_velocity;
+        const double gap = chassis_reference_height - ground_height_meters[wheel_index]
+            - extension;
+        const double gap_velocity = chassis_reference_velocity - extension_velocity
+            - ground_velocity_meters_per_second[wheel_index];
         GfLogInfo("Formula vertical step wheel: time=%.6f car=%d wheel=%d H=%.9f G=%.9f "
-            "C=%.9f L=%.9f Ldot=%.9f d=%.9f ddot=%.9f N=%.6f S=%.6f contact=%d\n",
+            "C=%.9f L=%.9f Ldot=%.9f gap=%.9f gapdot=%.9f N=%.6f S=%.6f contact=%d\n",
             time_seconds, car->carElt->index, wheel_index,
             chassis_reference_height, ground_height_meters[wheel_index],
             chassis_reference_height + wheel.radius - extension, extension,
-            extension_velocity, deflection, deflection_velocity,
+            extension_velocity, gap, gap_velocity,
             diagnostics.tire_normal_force_newtons[wheel_index],
             diagnostics.suspension_force_newtons[wheel_index],
             diagnostics.tire_contact[wheel_index]);
     }
+}
+
+static double SimCarSampleGroundHeightAt(const tCar* car, double world_x, double world_y)
+{
+    TrackGroundSample sample;
+    if (simulation_track_ground_mesh.sample(world_x, world_y,
+            car->DynGCg.pos.z, sample))
+    {
+        return sample.height;
+    }
+    tTrkLocPos position;
+    RtTrackGlobal2Local(car->trkPos.seg, world_x, world_y, &position, TR_LPOS_MAIN);
+    return RtTrackHeightL(&position);
+}
+
+static void SimCarChassisContactWorldPosition(const tCar* car,
+    const TireVerticalChassisContactConfiguration& contact,
+    double& world_x, double& world_y)
+{
+    const double cos_yaw = std::cos(car->DynGCg.pos.az);
+    const double sin_yaw = std::sin(car->DynGCg.pos.az);
+    world_x = car->DynGCg.pos.x
+        + contact.x_meters * cos_yaw - contact.y_meters * sin_yaw;
+    world_y = car->DynGCg.pos.y
+        + contact.x_meters * sin_yaw + contact.y_meters * cos_yaw;
 }
 
 static bool SimCarSolveVerticalFrame(tCar *car,
@@ -1201,35 +1302,127 @@ static bool SimCarSolveVerticalFrame(tCar *car,
     const TireVerticalSolverState& previous_state,
     const double ground_height_meters[4],
     const double ground_velocity_meters_per_second[4],
+    const double chassis_ground_height_meters[TIRE_VERTICAL_MAX_CHASSIS_CONTACTS],
+    const double chassis_ground_velocity_meters_per_second[TIRE_VERTICAL_MAX_CHASSIS_CONTACTS],
     int substep_count, double substep_seconds, bool final_pass,
     TireVerticalSolverState& final_state, TireVerticalSolverDiagnostics& final_diagnostics)
 {
     TireVerticalSolverState current_state = previous_state;
-    TireVerticalSolverDiagnostics diagnostics;
-    for (int substep = 0; substep < substep_count; ++substep)
+    TireVerticalSolverDiagnostics diagnostics = {};
+    const double frame_duration = substep_count * substep_seconds;
+    double tire_impulse[4] = {};
+    double tire_support[4] = {};
+    int tire_at_end[4] = {};
+    int total_iterations = 0;
+    int accepted_substeps = 0;
+    double last_residual = 0.0;
+    const int maximum_depth = 6;
+
+    struct Interval
     {
+        double offset_seconds;
+        double duration_seconds;
+        int depth;
+    };
+    Interval stack[128] = {};
+    int stack_size = 0;
+    int next_substep = 0;
+    while (stack_size > 0 || next_substep < substep_count)
+    {
+        if (!stack_size)
+        {
+            stack[stack_size++] = Interval{next_substep * substep_seconds,
+                substep_seconds, 0};
+            ++next_substep;
+        }
+        const Interval interval = stack[--stack_size];
         TireVerticalSolverStepInput input = {};
-        input.elapsed_seconds = substep_seconds;
+        input.elapsed_seconds = interval.duration_seconds;
         for (int wheel_index = 0; wheel_index < 4; ++wheel_index)
         {
-            input.ground_height_meters[wheel_index] = ground_height_meters[wheel_index];
+            input.ground_height_meters[wheel_index] = ground_height_meters[wheel_index]
+                - ground_velocity_meters_per_second[wheel_index]
+                    * (frame_duration - interval.offset_seconds);
             input.ground_height_velocity_meters_per_second[wheel_index] =
                 ground_velocity_meters_per_second[wheel_index];
         }
-        TireVerticalSolverState next_state;
-        if (!TireVerticalSolverStep(configuration, current_state, input, next_state,
-                diagnostics))
+        for (int contact_index = 0; contact_index < configuration.chassis_contact_count;
+            ++contact_index)
         {
-            GfLogError("Coupled vertical step failed (%s) residual=%.9g iterations=%d\n",
-                final_pass ? "final" : "predictor", diagnostics.residual_norm,
-                diagnostics.newton_iterations);
-            return false;
+            input.chassis_ground_height_meters[contact_index] =
+                chassis_ground_height_meters[contact_index]
+                - chassis_ground_velocity_meters_per_second[contact_index]
+                    * (frame_duration - interval.offset_seconds);
+            input.chassis_ground_height_velocity_meters_per_second[contact_index] =
+                chassis_ground_velocity_meters_per_second[contact_index];
         }
+
+        TireVerticalSolverState next_state;
+        const bool solved = TireVerticalSolverStep(configuration, current_state, input,
+            next_state, diagnostics) != 0;
+        if (!solved)
+        {
+            if (interval.depth >= maximum_depth
+                || diagnostics.failure_reason == TIRE_VERTICAL_FAILURE_NONFINITE
+                || diagnostics.failure_reason == TIRE_VERTICAL_FAILURE_INITIAL_GEOMETRY)
+            {
+                GfLogError("Coupled vertical step failed (%s) at offset=%.9f duration=%.9g residual=%.9g iterations=%d reason=%d\n",
+                    final_pass ? "final" : "predictor", interval.offset_seconds,
+                    interval.duration_seconds, diagnostics.residual_norm,
+                    diagnostics.newton_iterations, diagnostics.failure_reason);
+                GfLogError("Vertical failure state: xyz=%.17g,%.17g,%.17g yaw=%.17g "
+                    "q=%.17g,%.17g,%.17g v=%.17g,%.17g,%.17g Q=%.17g,%.17g,%.17g\n",
+                    (double)car->DynGCg.pos.x, (double)car->DynGCg.pos.y,
+                    (double)car->DynGCg.pos.z, (double)car->DynGCg.pos.az,
+                    current_state.body_position[0], current_state.body_position[1],
+                    current_state.body_position[2], current_state.body_velocity[0],
+                    current_state.body_velocity[1], current_state.body_velocity[2],
+                    configuration.external_body_generalized_force[0],
+                    configuration.external_body_generalized_force[1],
+                    configuration.external_body_generalized_force[2]);
+                for (int wheel = 0; wheel < 4; ++wheel)
+                    GfLogError("Vertical failure wheel: i=%d L=%.17g vL=%.17g G=%.17g vG=%.17g\n",
+                        wheel, current_state.suspension_extension_meters[wheel],
+                        current_state.suspension_extension_velocity_meters_per_second[wheel],
+                        input.ground_height_meters[wheel],
+                        input.ground_height_velocity_meters_per_second[wheel]);
+                for (int contact = 0; contact < configuration.chassis_contact_count; ++contact)
+                    if (configuration.chassis_contact[contact].enabled)
+                        GfLogError("Vertical failure floor: i=%d G=%.17g vG=%.17g\n", contact,
+                            input.chassis_ground_height_meters[contact],
+                            input.chassis_ground_height_velocity_meters_per_second[contact]);
+                for (int constraint = 0; constraint < diagnostics.active_constraint_count; ++constraint)
+                    GfLogError("Vertical failure constraint: kind=%d i=%d J=%.17g\n",
+                        diagnostics.active_constraint_kind[constraint],
+                        diagnostics.active_constraint_index[constraint],
+                        diagnostics.constraint_impulse_newton_seconds[constraint]);
+                car->formula_vertical_failed = 1;
+                return false;
+            }
+            const double half = 0.5 * interval.duration_seconds;
+            stack[stack_size++] = Interval{ interval.offset_seconds + half, half,
+                interval.depth + 1 };
+            stack[stack_size++] = Interval{ interval.offset_seconds, half,
+                interval.depth + 1 };
+            continue;
+        }
+
         current_state = next_state;
+        ++accepted_substeps;
+        total_iterations += diagnostics.newton_iterations;
+        last_residual = diagnostics.residual_norm;
+        for (int wheel_index = 0; wheel_index < 4; ++wheel_index)
+        {
+            tire_impulse[wheel_index] +=
+                diagnostics.tire_contact_impulse_newton_seconds[wheel_index];
+            tire_support[wheel_index] +=
+                diagnostics.tire_contact_support_seconds[wheel_index];
+            tire_at_end[wheel_index] = diagnostics.tire_contact_at_end[wheel_index];
+        }
         if (final_pass)
         {
             const double log_time = car->formula_vertical_time
-                + (substep + 1) * substep_seconds;
+                + interval.offset_seconds + interval.duration_seconds;
             car->formula_vertical_energy_joules = TireVerticalSystemEnergyJoules(configuration,
                 current_state, ground_height_meters);
             car->formula_vertical_residual = diagnostics.residual_norm;
@@ -1240,13 +1433,36 @@ static bool SimCarSolveVerticalFrame(tCar *car,
                 ground_height_meters, ground_velocity_meters_per_second);
         }
     }
+
     final_state = current_state;
+    if (final_pass) car->formula_vertical_accepted_substeps = accepted_substeps;
     final_diagnostics = diagnostics;
+    final_diagnostics.newton_iterations = total_iterations;
+    final_diagnostics.residual_norm = last_residual;
+    final_diagnostics.converged = 1;
+    for (int wheel_index = 0; wheel_index < 4; ++wheel_index)
+    {
+        final_diagnostics.tire_contact_impulse_newton_seconds[wheel_index] =
+            tire_impulse[wheel_index];
+        final_diagnostics.tire_contact_support_seconds[wheel_index] =
+            tire_support[wheel_index];
+        final_diagnostics.tire_contact_supported_during_step[wheel_index] =
+            tire_support[wheel_index] > 0.0 ? 1 : 0;
+        final_diagnostics.tire_contact_at_end[wheel_index] = tire_at_end[wheel_index];
+        final_diagnostics.tire_contact[wheel_index] =
+            tire_support[wheel_index] > 0.0 ? 1 : tire_at_end[wheel_index];
+        final_diagnostics.tire_normal_force_newtons[wheel_index] = frame_duration > 0.0
+            ? tire_impulse[wheel_index] / frame_duration : 0.0;
+    }
     return true;
 }
 
 void SimCarVerticalCoupledUpdate(tCar *car, tSituation *situation)
 {
+    if (car->formula_vertical_failed)
+    {
+        return;
+    }
     double ground_height_meters[4] = {};
     double ground_velocity_meters_per_second[4] = {};
     for (int wheel_index = 0; wheel_index < 4; ++wheel_index)
@@ -1259,6 +1475,34 @@ void SimCarVerticalCoupledUpdate(tCar *car, tSituation *situation)
     if (!car->formula_vertical_solver_initialized)
     {
         car->formula_vertical_start_x = car->DynGCg.pos.x;
+    }
+
+    double chassis_ground_height_meters[TIRE_VERTICAL_MAX_CHASSIS_CONTACTS] = {};
+    double chassis_ground_velocity_meters_per_second[TIRE_VERTICAL_MAX_CHASSIS_CONTACTS] = {};
+    for (int contact_index = 0; contact_index < car->formula_floor_contact_count;
+        ++contact_index)
+    {
+        if (!car->formula_floor_contact[contact_index].enabled)
+        {
+            continue;
+        }
+        double world_x = 0.0;
+        double world_y = 0.0;
+        SimCarChassisContactWorldPosition(car, car->formula_floor_contact[contact_index],
+            world_x, world_y);
+        double height = SimCarSampleGroundHeightAt(car, world_x, world_y);
+        if (car->formula_diagnostic_slope != 0.0)
+        {
+            height += car->formula_diagnostic_slope
+                * (world_x - car->formula_vertical_start_x);
+        }
+        chassis_ground_height_meters[contact_index] = height;
+        if (car->formula_vertical_solver_initialized && SimDeltaTime > 0.0)
+        {
+            chassis_ground_velocity_meters_per_second[contact_index] =
+                (height - car->formula_floor_previous_ground_height[contact_index])
+                / SimDeltaTime;
+        }
     }
 
     for (int wheel_index = 0; wheel_index < 4; ++wheel_index)
@@ -1329,6 +1573,7 @@ void SimCarVerticalCoupledUpdate(tCar *car, tSituation *situation)
             sizeof(error_message)))
     {
         GfLogError("Coupled vertical configuration invalid: %s\n", error_message);
+        car->formula_vertical_failed = 1;
         return;
     }
 
@@ -1339,6 +1584,7 @@ void SimCarVerticalCoupledUpdate(tCar *car, tSituation *situation)
                 car->formula_vertical_state, diagnostics))
         {
             GfLogError("Coupled vertical equilibrium initialization failed\n");
+            car->formula_vertical_failed = 1;
             return;
         }
         TireVerticalSolverState previous_state = car->formula_vertical_state;
@@ -1356,6 +1602,8 @@ void SimCarVerticalCoupledUpdate(tCar *car, tSituation *situation)
         car->formula_vertical_newton_iterations = diagnostics.newton_iterations;
         car->formula_vertical_active_constraint_count = diagnostics.active_constraint_count;
         car->formula_vertical_solver_initialized = 1;
+        for (int contact = 0; contact < car->formula_floor_contact_count; ++contact)
+            car->formula_floor_previous_ground_height[contact] = chassis_ground_height_meters[contact];
         SimCarVerticalLogStep(car, car->formula_vertical_time, car->formula_vertical_state,
             diagnostics, ground_height_meters, ground_velocity_meters_per_second);
         GfLogInfo("Coupled vertical equilibrium: body=%.9f roll=%.9f pitch=%.9f "
@@ -1386,8 +1634,16 @@ void SimCarVerticalCoupledUpdate(tCar *car, tSituation *situation)
     int substep_count = 1;
     if (car->formula_vertical_substep_seconds > 0.0)
     {
-        substep_count = (int)std::ceil(frame_elapsed_seconds
-            / car->formula_vertical_substep_seconds);
+        const double ratio = frame_elapsed_seconds / car->formula_vertical_substep_seconds;
+        if (!std::isfinite(ratio) || ratio > std::numeric_limits<int>::max())
+        {
+            car->formula_vertical_failed = 1;
+            return;
+        }
+        // SimDeltaTime is float; do not turn its rounding of 2ms into a
+        // spurious fifth 0.5ms substep.
+        substep_count = (int)std::ceil(ratio - 8.0 * std::numeric_limits<tdble>::epsilon()
+            * std::max(1.0, ratio));
         substep_count = std::max(1, substep_count);
     }
     const double substep_seconds = frame_elapsed_seconds / (double)substep_count;
@@ -1401,6 +1657,7 @@ void SimCarVerticalCoupledUpdate(tCar *car, tSituation *situation)
         TireVerticalSolverDiagnostics predictor_diagnostics;
         if (!SimCarSolveVerticalFrame(car, configuration, frame_start_state,
                 ground_height_meters, ground_velocity_meters_per_second,
+                chassis_ground_height_meters, chassis_ground_velocity_meters_per_second,
                 substep_count, substep_seconds, false, predictor_state,
                 predictor_diagnostics))
         {
@@ -1432,6 +1689,7 @@ void SimCarVerticalCoupledUpdate(tCar *car, tSituation *situation)
 
         if (!SimCarSolveVerticalFrame(car, configuration, frame_start_state,
                 ground_height_meters, ground_velocity_meters_per_second,
+                chassis_ground_height_meters, chassis_ground_velocity_meters_per_second,
                 substep_count, substep_seconds, true, final_state, final_diagnostics))
         {
             return;
@@ -1441,6 +1699,7 @@ void SimCarVerticalCoupledUpdate(tCar *car, tSituation *situation)
     {
         if (!SimCarSolveVerticalFrame(car, configuration, frame_start_state,
                 ground_height_meters, ground_velocity_meters_per_second,
+                chassis_ground_height_meters, chassis_ground_velocity_meters_per_second,
                 substep_count, substep_seconds, true, final_state, final_diagnostics))
         {
             return;
@@ -1448,6 +1707,22 @@ void SimCarVerticalCoupledUpdate(tCar *car, tSituation *situation)
     }
 
     car->formula_vertical_time += frame_elapsed_seconds;
+    const double view_limit = std::numeric_limits<tdble>::max();
+    bool publishable = TireVerticalStateIsFinite(final_state);
+    for (int body = 0; body < 3; ++body)
+        publishable = publishable && std::fabs(final_state.body_position[body]) < view_limit
+            && std::fabs(final_state.body_velocity[body]) < view_limit;
+    for (int wheel = 0; wheel < 4; ++wheel)
+        publishable = publishable && std::isfinite(final_diagnostics.tire_normal_force_newtons[wheel])
+            && std::fabs(final_diagnostics.tire_normal_force_newtons[wheel]) < view_limit
+            && std::fabs(final_state.suspension_extension_meters[wheel]) < view_limit
+            && std::fabs(final_state.suspension_extension_velocity_meters_per_second[wheel]) < view_limit;
+    if (!publishable)
+    {
+        GfLogError("Coupled vertical result is not representable in vehicle views\n");
+        car->formula_vertical_failed = 1;
+        return;
+    }
     SimCarVerticalPublish(car, final_state, frame_start_state, final_diagnostics,
         ground_height_meters, ground_velocity_meters_per_second, frame_elapsed_seconds);
     car->formula_vertical_energy_joules = TireVerticalSystemEnergyJoules(configuration,
@@ -1459,6 +1734,8 @@ void SimCarVerticalCoupledUpdate(tCar *car, tSituation *situation)
         car->formula_vertical_ground_velocity[wheel_index] =
             ground_velocity_meters_per_second[wheel_index];
     }
+    for (int contact = 0; contact < car->formula_floor_contact_count; ++contact)
+        car->formula_floor_previous_ground_height[contact] = chassis_ground_height_meters[contact];
     (void)situation;
 }
 
@@ -1522,11 +1799,12 @@ void SimCarApplyDiagnosticControls(tCar *car, tSituation *situation)
     }
 }
 
-static void
+void
 SimCarUpdatePos(tCar *car)
 {
     tdble vx, vy;
     //tdble accx, accy;
+
 
     vx = car->DynGCg.vel.x;
     vy = car->DynGCg.vel.y;
@@ -1540,23 +1818,6 @@ SimCarUpdatePos(tCar *car)
     car->DynGCg.pos.az += car->DynGCg.vel.az * SimDeltaTime;
 
     FLOAT_NORM_PI_PI(car->DynGCg.pos.az);
-
-    if (car->DynGCg.pos.ax > aMax) {
-        car->DynGCg.pos.ax = aMax;
-        car->DynGCg.vel.ax = 0;
-    }
-    if (car->DynGCg.pos.ax < -aMax) {
-        car->DynGCg.pos.ax = -aMax;
-        car->DynGCg.vel.ax = 0;
-    }
-    if (car->DynGCg.pos.ay > aMax) {
-        car->DynGCg.pos.ay = aMax;
-        car->DynGCg.vel.ay = 0;
-    }
-    if (car->DynGCg.pos.ay < -aMax) {
-        car->DynGCg.pos.ay = -aMax;
-        car->DynGCg.vel.ay = 0;
-    }
 
     car->DynGC.pos.x = car->DynGCg.pos.x;
     car->DynGC.pos.y = car->DynGCg.pos.y;
@@ -1751,8 +2012,54 @@ SimCarUpdate(tCar *car, tSituation * /* s */)
     CHECK(car);
     SimCarUpdatePos(car);
     CHECK(car);
+
+    const TireVerticalSolverState authority_state_before = car->formula_vertical_state;
+    const double authority_pos_z_before = car->DynGCg.pos.z;
+    const double authority_vel_z_before = car->DynGCg.vel.z;
+    const double authority_view_pos_z_before = car->DynGC.pos.z;
+    const double authority_view_vel_z_before = car->DynGC.vel.z;
+    double authority_ride_before[4] = {};
+    double authority_packers[4] = {};
+    for (int wheel_index = 0; wheel_index < 4; ++wheel_index)
+    {
+        authority_ride_before[wheel_index] = car->wheel[wheel_index].rideHeight;
+        authority_packers[wheel_index] = car->wheel[wheel_index].susp.spring.packers;
+    }
+
     SimCarCollideZ(car);
     CHECK(car);
+
+    if (car->formula_vertical_authority_diagnostic)
+    {
+        const bool changed = std::fabs(car->DynGCg.pos.z - authority_pos_z_before) > 1.0e-12
+            || std::fabs(car->DynGCg.vel.z - authority_vel_z_before) > 1.0e-12
+            || std::fabs(car->DynGC.pos.z - authority_view_pos_z_before) > 1.0e-12
+            || std::fabs(car->DynGC.vel.z - authority_view_vel_z_before) > 1.0e-12
+            || std::fabs(car->wheel[0].rideHeight - authority_ride_before[0]) > 1.0e-12
+            || std::fabs(car->wheel[1].rideHeight - authority_ride_before[1]) > 1.0e-12
+            || std::fabs(car->wheel[2].rideHeight - authority_ride_before[2]) > 1.0e-12
+            || std::fabs(car->wheel[3].rideHeight - authority_ride_before[3]) > 1.0e-12;
+        if (changed || car->formula_vertical_authority_every_step)
+        {
+            GfLogInfo("Formula vertical authority step: time=%.6f dt=%.6f state_z=%.9f state_vz=%.9f state_roll=%.9f state_pitch=%.9f pos_z=%.9f->%.9f delta=%.9f vel_z=%.9f->%.9f view_z=%.9f->%.9f view_vz=%.9f->%.9f ride=%.9f,%.9f,%.9f,%.9f->%.9f,%.9f,%.9f,%.9f packers=%.9f,%.9f,%.9f,%.9f\n",
+                car->formula_vertical_time, SimDeltaTime,
+                authority_state_before.body_position[0],
+                authority_state_before.body_velocity[0],
+                authority_state_before.body_position[1],
+                authority_state_before.body_position[2],
+                authority_pos_z_before, car->DynGCg.pos.z,
+                car->DynGCg.pos.z - authority_pos_z_before,
+                authority_vel_z_before, car->DynGCg.vel.z,
+                authority_view_pos_z_before, car->DynGC.pos.z,
+                authority_view_vel_z_before, car->DynGC.vel.z,
+                authority_ride_before[0], authority_ride_before[1],
+                authority_ride_before[2], authority_ride_before[3],
+                car->wheel[0].rideHeight, car->wheel[1].rideHeight,
+                car->wheel[2].rideHeight, car->wheel[3].rideHeight,
+                authority_packers[0], authority_packers[1],
+                authority_packers[2], authority_packers[3]);
+        }
+    }
     SimCarCollideXYScene(car);
     CHECK(car);
 
@@ -1766,6 +2073,62 @@ SimCarUpdate(tCar *car, tSituation * /* s */)
     {
         repair->max = (tdble) car->dammage;
     }
+}
+
+static bool SimCarFiniteDynamics(const tDynPt& dynamics)
+{
+    const double values[] = { dynamics.pos.x, dynamics.pos.y, dynamics.pos.z,
+        dynamics.pos.ax, dynamics.pos.ay, dynamics.pos.az, dynamics.vel.x,
+        dynamics.vel.y, dynamics.vel.z, dynamics.vel.ax, dynamics.vel.ay,
+        dynamics.vel.az, dynamics.acc.x, dynamics.acc.y, dynamics.acc.z,
+        dynamics.acc.ax, dynamics.acc.ay, dynamics.acc.az };
+    for (double value : values) if (!std::isfinite(value)) return false;
+    return true;
+}
+
+bool SimCarPhysicsStep(tCar *car, tSituation *situation)
+{
+    if (car->formula_vertical_failed) return false;
+    if (SimDeltaTime == 0.0) return true;
+    // Roll back the entire car and its public views, not just its vertical
+    // coordinates. Predictor inputs, brake state, forces and tire state are
+    // part of the transaction as well.
+    const tCar before = *car;
+    const tCarElt public_before = *car->carElt;
+    if (!std::isfinite(SimDeltaTime) || SimDeltaTime < 0.0
+        || !SimCarFiniteDynamics(car->DynGCg) || !SimCarFiniteDynamics(car->DynGC))
+        car->formula_vertical_failed = 1;
+    if (!car->formula_vertical_failed)
+    {
+        SimCarUpdateWheelPos(car);
+        SimBrakeSystemUpdate(car);
+        SimAeroUpdate(car, situation);
+        for (int axle = 0; axle < 2; ++axle) SimWingUpdate(car, axle, situation);
+        SimCarVerticalCoupledUpdate(car, situation);
+    }
+    if (!car->formula_vertical_failed)
+    {
+        SimTransmissionUpdate(car);
+        SimWheelUpdateRotation(car);
+        SimCarUpdate(car, situation);
+    }
+    bool valid = !car->formula_vertical_failed && TireVerticalStateIsFinite(car->formula_vertical_state)
+        && SimCarFiniteDynamics(car->DynGCg) && SimCarFiniteDynamics(car->DynGC);
+    for (const auto& wheel : car->wheel)
+        valid = valid && std::isfinite(wheel.forces.x) && std::isfinite(wheel.forces.y)
+            && std::isfinite(wheel.forces.z) && std::isfinite(wheel.spinVel)
+            && std::isfinite(wheel.relPos.z) && std::isfinite(wheel.susp.force);
+    if (!valid)
+    {
+        *car->carElt = public_before;
+        *car = before;
+        if (!SimCarFiniteDynamics(car->DynGCg)) car->DynGCg = public_before.pub.DynGCg;
+        if (!SimCarFiniteDynamics(car->DynGC)) car->DynGC = public_before.pub.DynGC;
+        car->formula_vertical_failed = 1;
+        GfLogError("Vehicle physics step rejected; complete last valid car state preserved (car=%d)\n",
+            car->carElt->index);
+    }
+    return valid;
 }
 
 void
@@ -1816,16 +2179,15 @@ SimCarUpdate2(tCar *car, tSituation *situation)
                         * car->formula_vertical_state.body_velocity[2]
                     + car->wheel[wheel_index].staticPos.y
                         * car->formula_vertical_state.body_velocity[1];
-                const double deflection = extension
-                    - (car->wheel[wheel_index].pos.z - car->wheel[wheel_index].zRoad);
-                const double deflection_velocity =
-                    car->formula_vertical_ground_velocity[wheel_index]
-                    + extension_velocity - chassis_velocity;
-                GfLogInfo("Formula vertical wheel: car=%d wheel=%d H=%.9f G=%.9f C=%.9f L=%.9f Ldot=%.9f d=%.9f ddot=%.9f N=%.6f S=%.6f contact=%d residual=%.9f iterations=%d active=%d energy=%.6f\n",
+                const double gap = car->wheel[wheel_index].pos.z
+                    - car->wheel[wheel_index].zRoad - extension;
+                const double gap_velocity = chassis_velocity - extension_velocity
+                    - car->formula_vertical_ground_velocity[wheel_index];
+                GfLogInfo("Formula vertical wheel: car=%d wheel=%d H=%.9f G=%.9f C=%.9f L=%.9f Ldot=%.9f gap=%.9f gapdot=%.9f N=%.6f S=%.6f contact=%d residual=%.9f iterations=%d active=%d energy=%.6f\n",
                     car->carElt->index, wheel_index, car->wheel[wheel_index].pos.z,
                     car->wheel[wheel_index].zRoad,
                     car->wheel[wheel_index].pos.z + car->wheel[wheel_index].radius - extension,
-                    extension, extension_velocity, deflection, deflection_velocity,
+                    extension, extension_velocity, gap, gap_velocity,
                     car->wheel[wheel_index].forces.z, car->wheel[wheel_index].susp.force,
                     car->wheel[wheel_index].formula_tire_model_grounded,
                     car->formula_vertical_residual,
@@ -1833,9 +2195,9 @@ SimCarUpdate2(tCar *car, tSituation *situation)
                     car->formula_vertical_active_constraint_count,
                     car->formula_vertical_energy_joules);
             }
-            GfLogInfo("Formula coupled tire: car=%d wheel=%d enabled=%d deflection=%.6f deflection_velocity=%.6f effective_radius=%.6f contact_patch=%.6f coverage=%.6f utilization=%.6f demand=%.6f lateral_capacity=%.6f longitudinal_capacity=%.6f slip_angle=%.6f slip_ratio=%.6f aligning_torque=%.6f tread_inner=%.6f tread_center=%.6f tread_outer=%.6f carcass=%.6f gas=%.6f pressure_abs=%.6f pressure_gauge=%.6f wear_inner=%.6f wear_center=%.6f wear_outer=%.6f wear_grip=%.6f slip_power=%.6f thermal_residual=%.9f pressure_clamps=%d temperature_clamps=%d contact_clamps=%d thermal_updates=%d\n",
+            GfLogInfo("Formula coupled tire: car=%d wheel=%d enabled=%d empirical_deformation=%.6f effective_radius=%.6f contact_patch=%.6f coverage=%.6f utilization=%.6f demand=%.6f lateral_capacity=%.6f longitudinal_capacity=%.6f slip_angle=%.6f slip_ratio=%.6f aligning_torque=%.6f tread_inner=%.6f tread_center=%.6f tread_outer=%.6f carcass=%.6f gas=%.6f pressure_abs=%.6f pressure_gauge=%.6f wear_inner=%.6f wear_center=%.6f wear_outer=%.6f wear_grip=%.6f slip_power=%.6f thermal_residual=%.9f pressure_clamps=%d temperature_clamps=%d contact_clamps=%d thermal_updates=%d\n",
                       car->carElt->index, wheel_index, car->formula_tire_model_enabled,
-                      tire.contact.deflection, tire.contact.deflection_velocity,
+                      tire.contact.empirical_deformation,
                       tire.contact.effective_radius, tire.contact.contact_patch,
                       tire.contact.contact_fraction, tire.force.combined_utilization,
                       tire.force.combined_demand, tire.force.lateral_capacity,

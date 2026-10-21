@@ -53,9 +53,8 @@ static TireThermalInput BaseThermalInput()
     input.slip_power_watts = 5000.0;
     input.slip_velocity_longitudinal_meters_per_second = 2.0;
     input.slip_velocity_lateral_meters_per_second = 1.5;
-    input.deflection_meters = 0.008;
-    input.deflection_velocity_meters_per_second = 0.05;
-    input.maximum_deflection_meters = 0.035;
+    input.empirical_deformation_meters = 0.008;
+    input.empirical_deformation_limit_meters = 0.035;
     input.vehicle_speed_meters_per_second = 40.0;
     input.ambient_temperature_kelvin = 298.15;
     input.track_temperature_kelvin = 308.15;

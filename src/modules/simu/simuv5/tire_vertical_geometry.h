@@ -54,6 +54,9 @@ struct TireVerticalGeometryOutput
     double tire_deflection_signed_meters;
     double tire_deflection_meters;
     double tire_deflection_velocity_meters_per_second;
+    double geometric_gap_meters;
+    double geometric_gap_velocity_meters_per_second;
+    double contact_radius_meters;
     double suspension_extension_meters;
     double suspension_extension_velocity_meters_per_second;
     double suspension_position_legacy_meters;

@@ -290,6 +290,8 @@ SimReConfig(tCarElt *carElt)
             SimTireModelPublishWheel(car, wheel_index);
         }
         car->formula_vertical_solver_initialized = 0;
+        car->formula_vertical_failed = 0;
+        car->formula_vertical_accepted_substeps = 0;
         car->formula_vertical_time = 0.0;
         car->blocked = car->collision = 0;
         SimCarUpdateWheelPos(car);
@@ -632,6 +634,7 @@ SimUpdate(tSituation *s, double deltaTime)
     {
         car = &(SimCarTable[ncar]);
         carElt = car->carElt;
+        if (car->formula_vertical_failed) continue;
 
         if (carElt->_state & RM_CAR_STATE_NO_SIMU)
         {
@@ -668,6 +671,9 @@ SimUpdate(tSituation *s, double deltaTime)
         SimInstantReConfig(car);
         CHECK(car);
 
+        const tCar physics_before = *car;
+        const tCarElt public_before = *carElt;
+
         SimSteerUpdate(car);
         CHECK(car);
 
@@ -682,32 +688,14 @@ SimUpdate(tSituation *s, double deltaTime)
 
         if (!(s->_raceState & RM_RACE_PRESTART) || car->carElt->_skillLevel == PRO)
         {
-            SimCarUpdateWheelPos(car);
-            CHECK(car);
-
-            SimBrakeSystemUpdate(car);
-            CHECK(car);
-
-            SimAeroUpdate(car, s);
-            CHECK(car);
-
-            for (i = 0; i < 2; i++)
+            if (!SimCarPhysicsStep(car, s))
             {
-                SimWingUpdate(car, i, s);
+                // Include steering, gearbox and engine/fuel changes in the
+                // rollback; they ran before the coupled contact transaction.
+                *carElt = public_before;
+                *car = physics_before;
+                car->formula_vertical_failed = 1;
             }
-            CHECK(car);
-
-            SimCarVerticalCoupledUpdate(car, s);
-            CHECK(car);
-
-            SimTransmissionUpdate(car);
-            CHECK(car);
-
-            SimWheelUpdateRotation(car);
-            CHECK(car);
-
-            SimCarUpdate(car, s);
-            CHECK(car);
         }
         else
         {
@@ -725,6 +713,7 @@ SimUpdate(tSituation *s, double deltaTime)
         car = &(SimCarTable[ncar]);
         CHECK(car);
         carElt = car->carElt;
+        if (car->formula_vertical_failed) continue;
 
         if (carElt->_state & RM_CAR_STATE_NO_SIMU)
         {
@@ -833,6 +822,7 @@ SimUpdateSingleCar(int index, double deltaTime,tSituation *s)
 
     car = &(SimCarTable[index]);
     carElt = car->carElt;
+    if (car->formula_vertical_failed) return;
 
     CHECK(car);
     ctrlCheck(car);
@@ -841,6 +831,8 @@ SimUpdateSingleCar(int index, double deltaTime,tSituation *s)
     CHECK(car);
     SimInstantReConfig(car);
     CHECK(car);
+    const tCar physics_before = *car;
+    const tCarElt public_before = *carElt;
     SimSteerUpdate(car);
     CHECK(car);
     SimGearboxUpdate(car);
@@ -848,24 +840,13 @@ SimUpdateSingleCar(int index, double deltaTime,tSituation *s)
     SimEngineUpdateTq(car);
     CHECK(car);
 
-    SimCarUpdateWheelPos(car);
-    CHECK(car);
-    SimBrakeSystemUpdate(car);
-    CHECK(car);
-    SimAeroUpdate(car, s);
-    CHECK(car);
-    for (i = 0; i < 2; i++){
-        SimWingUpdate(car, i, s);
+    if (!SimCarPhysicsStep(car, s))
+    {
+        *carElt = public_before;
+        *car = physics_before;
+        car->formula_vertical_failed = 1;
+        return;
     }
-    CHECK(car);
-    SimCarVerticalCoupledUpdate(car, s);
-    CHECK(car);
-    SimTransmissionUpdate(car);
-    CHECK(car);
-    SimWheelUpdateRotation(car);
-    CHECK(car);
-    SimCarUpdate(car, s);
-    CHECK(car);
 
     /* copy back the data to carElt */
 

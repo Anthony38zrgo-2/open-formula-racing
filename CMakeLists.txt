@@ -230,6 +230,42 @@ target_include_directories(validate_formula_tire_vertical_system PRIVATE src/mod
     src/interfaces src/libs/tgf src/libs/portability src/libs/math src/libs/robottools freesolid/include)
 target_link_libraries(validate_formula_tire_vertical_system tgf)
 
+add_executable(validate_rigid_contact_safety tools/validate_rigid_contact_safety.cpp
+    src/modules/simu/simuv5/tire_vertical_solver.cpp)
+target_include_directories(validate_rigid_contact_safety PRIVATE src/modules/simu/simuv5)
+
+add_executable(validate_formula_vertical_authority tools/validate_formula_vertical_authority.cpp
+    src/modules/simu/simuv5/car.cpp
+    src/modules/simu/simuv5/collide.cpp
+    src/modules/simu/simuv5/susp.cpp
+    src/modules/simu/simuv5/axle.cpp
+    src/modules/simu/simuv5/wheel.cpp
+    src/modules/simu/simuv5/simulationOptions.cpp
+    src/modules/simu/simuv5/tire_model.cpp
+    src/modules/simu/simuv5/tire_model_configuration.cpp
+    src/modules/simu/simuv5/tire_contact_model.cpp
+    src/modules/simu/simuv5/tire_force_model.cpp
+    src/modules/simu/simuv5/tire_thermal_model.cpp
+    src/modules/simu/simuv5/tire_wear_model.cpp
+    src/modules/simu/simuv5/tire_vertical_geometry.cpp
+    src/modules/simu/simuv5/tire_vertical_solver.cpp
+    src/modules/simu/simuv5/engine.cpp
+    src/modules/simu/simuv5/transmission.cpp
+    src/modules/simu/simuv5/differential.cpp
+    src/modules/simu/simuv5/steer.cpp
+    src/modules/simu/simuv5/brake.cpp
+    src/modules/simu/simuv5/aero.cpp
+    src/modules/simu/simuv5/track_ground_mesh.cpp
+    src/modules/simu/simuv5/categories.cpp)
+target_include_directories(validate_formula_vertical_authority PRIVATE src/modules/simu/simuv5
+    src/interfaces src/libs/tgf src/libs/portability src/libs/math src/libs/robottools freesolid/include)
+target_link_libraries(validate_formula_vertical_authority tgf robottools solid)
+set_target_properties(validate_formula_vertical_authority PROPERTIES ENABLE_EXPORTS FALSE)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+    target_compile_options(validate_formula_vertical_authority PRIVATE -ffunction-sections -fdata-sections)
+    target_link_options(validate_formula_vertical_authority PRIVATE -Wl,--gc-sections -Wl,--exclude-all-symbols)
+endif()
+
 add_executable(validate_formula_tire_energy tools/validate_formula_tire_energy.cpp
     src/modules/simu/simuv5/tire_thermal_model.cpp
     src/modules/simu/simuv5/tire_model_configuration.cpp)

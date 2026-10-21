@@ -280,6 +280,17 @@ static double formulaFloorHeightEfficiency(double height, const tAero& aerodynam
 static void updateFormulaUnderfloor(tCar* car)
 {
     tAero& aerodynamics = car->aero;
+    if (car->formula_vertical_authority_diagnostic
+        && car->formula_vertical_authority_every_step)
+    {
+        GfLogInfo("Formula vertical authority aero read: time=%.6f ride=%.9f,%.9f,%.9f,%.9f packers=%.9f,%.9f,%.9f,%.9f dyn_pos_z=%.9f state_z=%.9f\n",
+            car->formula_vertical_time,
+            car->wheel[0].rideHeight, car->wheel[1].rideHeight,
+            car->wheel[2].rideHeight, car->wheel[3].rideHeight,
+            car->wheel[0].susp.spring.packers, car->wheel[1].susp.spring.packers,
+            car->wheel[2].susp.spring.packers, car->wheel[3].susp.spring.packers,
+            car->DynGCg.pos.z, car->formula_vertical_state.body_position[0]);
+    }
     aerodynamics.floor_downforce = aerodynamics.floor_drag = 0.0;
     if (aerodynamics.floor_lift_area <= 0.0 || car->DynGC.vel.x <= 0.0)
         return;

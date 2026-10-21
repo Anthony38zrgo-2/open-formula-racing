@@ -48,6 +48,8 @@ typedef struct
     TireModelConfiguration formula_tire_configuration;
     int formula_tire_model_enabled;
     int formula_vertical_solver_initialized;
+    int formula_vertical_failed;
+    int formula_vertical_accepted_substeps;
     TireVerticalSolverState formula_vertical_state;
     double formula_vertical_previous_ground_height[4];
     double formula_vertical_ground_velocity[4];
@@ -65,6 +67,16 @@ typedef struct
     double formula_diagnostic_bump_duration_seconds;
     double formula_diagnostic_slope;
     double formula_vertical_start_x;
+    int formula_vertical_authority_diagnostic;
+    int formula_vertical_authority_every_step;
+    int formula_floor_contact_enabled;
+    int formula_floor_contact_count;
+    TireVerticalChassisContactConfiguration formula_floor_contact[TIRE_VERTICAL_MAX_CHASSIS_CONTACTS];
+    double formula_floor_previous_ground_height[TIRE_VERTICAL_MAX_CHASSIS_CONTACTS];
+    double formula_floor_gap_meters[TIRE_VERTICAL_MAX_CHASSIS_CONTACTS];
+    double formula_floor_impulse_newton_seconds[TIRE_VERTICAL_MAX_CHASSIS_CONTACTS];
+    int formula_floor_active[TIRE_VERTICAL_MAX_CHASSIS_CONTACTS];
+    double formula_floor_energy_loss_joules;
 
     /* components */
     tAxle		axle[2];

@@ -22,9 +22,8 @@
 
 struct TireMechanicalModifiers
 {
-    double vertical_stiffness_scale;
-    double vertical_damping_scale;
-    double maximum_deflection_scale;
+    double empirical_compliance_scale;
+    double empirical_deformation_limit_scale;
     double contact_patch_scale;
     double relaxation_length_scale;
     double rolling_resistance_scale;
@@ -43,9 +42,8 @@ struct TireThermalInput
     double slip_power_watts;
     double slip_velocity_longitudinal_meters_per_second;
     double slip_velocity_lateral_meters_per_second;
-    double deflection_meters;
-    double deflection_velocity_meters_per_second;
-    double maximum_deflection_meters;
+    double empirical_deformation_meters;
+    double empirical_deformation_limit_meters;
     double vehicle_speed_meters_per_second;
     double ambient_temperature_kelvin;
     double track_temperature_kelvin;

@@ -1,0 +1,203 @@
+{
+  "schema_version": 1,
+  "status": "proposal",
+  "date": "2026-10-21",
+  "coordinate_frame": {
+    "origin": "center of gravity used by the vertical solver (body_position[0] = height of the chassis reference plane above ground)",
+    "x": "forward, meters",
+    "y": "left, meters",
+    "z": "up, meters",
+    "angle_sign": "positive roll raises the left side (y > 0); positive pitch lowers the front (x > 0), matching chassis_reference_height = H - x*pitch + y*roll"
+  },
+  "mapping_from_acc": {
+    "x_solver_meters": "x_acc - (-0.456958055) = x_acc + 0.456958055",
+    "y_solver_meters": "-z_acc (ACC z positive is the right side, verified with GEO_BODYWORK_SIDEPOD_SURFACE_PANEL_LEFT/RIGHT)",
+    "z_solver_meters": "y_acc (ACC y = 0 is the chassis reference plane; world height = body_position[0] + y_acc at zero roll/pitch)"
+  },
+  "nominal_body_position_meters": 0.05,
+  "mesh_height_uncertainty_meters": 0.0005,
+  "jacobian": {
+    "gap": "g_i = H + z_i - x_i*pitch + y_i*roll - ground",
+    "generalized_coordinates": ["H", "roll", "pitch"],
+    "row": "[1, y_i, -x_i]",
+    "impulse_map": "Q = [lambda, y_i*lambda, -x_i*lambda], lambda >= 0"
+  },
+  "groups": {
+    "floor": [
+      {
+        "id": "F1",
+        "tier": 1,
+        "role": "front_center",
+        "source": "GEO_BODYWORK_MAIN_BODY_AND_COCKPIT_SHELL",
+        "acc": {"x": 0.85, "y": -0.02510, "z": 0.0},
+        "solver": {"x": 1.306958, "y": 0.0, "z": -0.02510},
+        "nominal_gap_meters": 0.02490
+      },
+      {
+        "id": "F2",
+        "tier": 1,
+        "role": "front_left",
+        "source": "GEO_BODYWORK_MAIN_BODY_AND_COCKPIT_SHELL",
+        "acc": {"x": 0.85, "y": -0.02510, "z": -0.10},
+        "solver": {"x": 1.306958, "y": 0.10, "z": -0.02510},
+        "nominal_gap_meters": 0.02490
+      },
+      {
+        "id": "F3",
+        "tier": 1,
+        "role": "front_right",
+        "source": "GEO_BODYWORK_MAIN_BODY_AND_COCKPIT_SHELL",
+        "acc": {"x": 0.85, "y": -0.02510, "z": 0.10},
+        "solver": {"x": 1.306958, "y": -0.10, "z": -0.02510},
+        "nominal_gap_meters": 0.02490
+      },
+      {
+        "id": "M1",
+        "tier": 1,
+        "role": "mid_center",
+        "source": "GEO_BODYWORK_MAIN_BODY_AND_COCKPIT_SHELL",
+        "acc": {"x": 0.0, "y": -0.02510, "z": 0.0},
+        "solver": {"x": 0.456958, "y": 0.0, "z": -0.02510},
+        "nominal_gap_meters": 0.02490
+      },
+      {
+        "id": "R1",
+        "tier": 1,
+        "role": "rear_center",
+        "source": "GEO_BODYWORK_MAIN_BODY_AND_COCKPIT_SHELL",
+        "acc": {"x": -0.80, "y": -0.02510, "z": 0.0},
+        "solver": {"x": -0.343042, "y": 0.0, "z": -0.02510},
+        "nominal_gap_meters": 0.02490
+      },
+      {
+        "id": "R2",
+        "tier": 1,
+        "role": "rear_floor_left",
+        "source": "GEO_BODYWORK_MAIN_BODY_AND_COCKPIT_SHELL",
+        "acc": {"x": -1.40, "y": 0.0, "z": -0.50},
+        "solver": {"x": -0.943042, "y": 0.50, "z": 0.0},
+        "nominal_gap_meters": 0.05000
+      },
+      {
+        "id": "R3",
+        "tier": 1,
+        "role": "rear_floor_right",
+        "source": "GEO_BODYWORK_MAIN_BODY_AND_COCKPIT_SHELL",
+        "acc": {"x": -1.40, "y": 0.0, "z": 0.50},
+        "solver": {"x": -0.943042, "y": -0.50, "z": 0.0},
+        "nominal_gap_meters": 0.05000
+      },
+      {
+        "id": "T1",
+        "tier": 1,
+        "role": "rear_most_center",
+        "source": "GEO_BODYWORK_MAIN_BODY_AND_COCKPIT_SHELL",
+        "acc": {"x": -1.80, "y": -0.02100, "z": 0.0},
+        "solver": {"x": -1.343042, "y": 0.0, "z": -0.02100},
+        "nominal_gap_meters": 0.02900
+      },
+      {
+        "id": "L1",
+        "tier": 2,
+        "role": "side_floor_left",
+        "source": "GEO_BODYWORK_MAIN_BODY_AND_COCKPIT_SHELL",
+        "acc": {"x": -0.40, "y": -0.00297, "z": -0.55},
+        "solver": {"x": 0.056958, "y": 0.55, "z": -0.00297},
+        "nominal_gap_meters": 0.04703
+      },
+      {
+        "id": "L2",
+        "tier": 2,
+        "role": "side_floor_right",
+        "source": "GEO_BODYWORK_MAIN_BODY_AND_COCKPIT_SHELL",
+        "acc": {"x": -0.40, "y": -0.00297, "z": 0.55},
+        "solver": {"x": 0.056958, "y": -0.55, "z": -0.00297},
+        "nominal_gap_meters": 0.04703
+      },
+      {
+        "id": "T2",
+        "tier": 3,
+        "role": "rear_most_left",
+        "source": "GEO_BODYWORK_MAIN_BODY_AND_COCKPIT_SHELL",
+        "acc": {"x": -1.80, "y": -0.02100, "z": -0.10},
+        "solver": {"x": -1.343042, "y": 0.10, "z": -0.02100},
+        "nominal_gap_meters": 0.02900
+      },
+      {
+        "id": "T3",
+        "tier": 3,
+        "role": "rear_most_right",
+        "source": "GEO_BODYWORK_MAIN_BODY_AND_COCKPIT_SHELL",
+        "acc": {"x": -1.80, "y": -0.02100, "z": 0.10},
+        "solver": {"x": -1.343042, "y": -0.10, "z": -0.02100},
+        "nominal_gap_meters": 0.02900
+      }
+    ],
+    "front_wing": [
+      {
+        "id": "W1",
+        "tier": 3,
+        "role": "endplate_left",
+        "source": "GEO_FRONT_WING_ENDPLATE_LEFT",
+        "acc": {"x": 1.75, "y": -0.00604, "z": -0.655},
+        "solver": {"x": 2.206958, "y": 0.655, "z": -0.00604},
+        "nominal_gap_meters": 0.04396
+      },
+      {
+        "id": "W2",
+        "tier": 3,
+        "role": "endplate_right",
+        "source": "GEO_FRONT_WING_ENDPLATE_RIGHT",
+        "acc": {"x": 1.75, "y": -0.00604, "z": 0.655},
+        "solver": {"x": 2.206958, "y": -0.655, "z": -0.00604},
+        "nominal_gap_meters": 0.04396
+      }
+    ]
+  },
+  "coverage": {
+    "nominal_body_position_meters": 0.05,
+    "method": "quasi-static gap closure at the nominal pose; ordering only, not a dynamic prediction",
+    "first_contact": {
+      "roll_left_deg": 3.845,
+      "roll_right_deg": 3.845,
+      "pitch_nose_down_deg": 1.092,
+      "pitch_nose_up_deg": 1.237
+    },
+    "first_contact_without_front_wing": {
+      "roll_left_deg": 4.890,
+      "roll_right_deg": 4.890
+    },
+    "notes": [
+      "Front wing endplates are the first lateral contact at 3.845 deg roll; if the front-wing group is disabled, the side floor is first at 4.890 deg.",
+      "Front plank is the first contact at 1.092 deg nose-down; the front wing follows at 1.142 deg.",
+      "Rear-most plank (T1) is the first contact at 1.237 deg nose-up; the rear floor (R2/R3) follows at 3.038 deg and the rear center (R1) at 4.160 deg."
+    ]
+  },
+  "provenance": {
+    "mesh": "implementation/candidates/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven.acc",
+    "mesh_sha256": "96E42B84D184F0338360FA6DE43C4F188D7953367AA876C5AD54260748D6B84C",
+    "mesh_vertices": 48216,
+    "mesh_triangles": 63659,
+    "source_glb": "D:\\Formula90s\\game\\assets\\models\\vehicles\\f1-1997\\williams\\variants\\hockenheim\\villenueve\\car\\runtime\\williams_fw19_hockenheim_1997_chassis.glb",
+    "source_glb_sha256": "71cb5cf969f5f093551c6a49af3689111c7e0691e07a9e39581081d066fc6238",
+    "source_transformation": [[0.0, 0.0, -1.0, 0.0], [0.0, 1.0, 0.0, 0.48865], [1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
+    "generation_report": "implementation/candidates/williams-nineteen-ninety-seven/williams_generation_report.json",
+    "vehicle_xml": "implementation/candidates/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven.xml",
+    "vehicle_xml_sha256": "BB355DAE2EC3EAEAFA7561C1B4A003475C6A6648E759E87B873CEF71EE7E037D",
+    "audit": "implementation/reports/williams_chassis_suspension_audit.md",
+    "tool": "tools/inspect_vehicle_floor.py"
+  },
+  "validation": {
+    "tool": "tools/validate_floor_contact_points.py",
+    "checks_passed": 100,
+    "failures": 0
+  },
+  "limits": [
+    "The ACC is a visual surface mesh, not CAD or a structural floor model. The central lower surface is used as the plank; no separate plank thickness or wear model exists.",
+    "The mesh has large polygons and sparse vertices; the heights were sampled by triangle interpolation, not by vertex bins.",
+    "The front wing is an aerodynamic surface, not part of the chassis floor. It is a separate group and must not generate wheel damage.",
+    "The vertical contact approximation ignores the local surface normal; the sampled triangles are almost horizontal (normal_y around -1), but the sidepod and diffuser areas are curved.",
+    "The lateral sign is resolved from the named sidepod panels: ACC z positive is right, so solver y (left) = -z_acc. If the source model is mirrored, the left/right labels swap while the symmetric set remains the same.",
+    "The heights are relative to the chassis reference plane. The runtime equilibrium body position must be used; 0.05 m is only the nominal published clearance."
+  ]
+}

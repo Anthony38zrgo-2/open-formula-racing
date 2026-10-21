@@ -11,6 +11,7 @@ import xml.etree.ElementTree as element_tree
 import numpy
 
 from convert_binary_scene import export_scene
+from apply_floor_contacts import apply_floor_contacts
 
 
 def find_section(parent, name):
@@ -98,12 +99,12 @@ def configure_tire_grip(document, tires):
             set_number(wheel, 'load factor max', 1.6)
 
 
-def configure_coupled_tires(document, tires, arguments):
+def configure_coupled_tires(document, tires, arguments, mass, front_weight_distribution):
     controls = find_section(document, 'Formula Controls')
     set_text(controls, 'tire model', 'transient coupled')
     set_text(controls, 'vertical integration', 'coupled seven degree of freedom')
     formula_tires = find_section(document, 'Formula Tires')
-    set_number(formula_tires, 'schema version', 1)
+    set_number(formula_tires, 'schema version', 2)
     set_text(formula_tires, 'pressure convention', 'gauge')
     set_text(formula_tires, 'pressure unit', 'Pa')
     set_number(formula_tires, 'ambient pressure', 101325, 'Pa')
@@ -147,12 +148,14 @@ def configure_coupled_tires(document, tires, arguments):
         set_text(force_section, 'relaxation enabled', 'yes')
         set_text(force_section, 'peak migration enabled', 'yes')
         contact_section = find_section(formula_tires, axle_name + ' Contact')
-        set_number(contact_section, 'radial damping ratio', tires['radial_damping_ratio'])
-        set_number(contact_section, 'maximum deflection', tires[source_name]['radius'] * 0.12, 'm')
-        set_number(contact_section, 'rolling radius deflection factor', 0.68)
+        front_share = front_weight_distribution
+        static_load = mass * 9.81 * (front_share if source_name == 'front'
+            else 1.0 - front_share) * 0.5
+        set_number(contact_section, 'empirical load compliance', 0.008 / static_load, 'm/N')
+        set_number(contact_section, 'empirical deformation limit', tires[source_name]['radius'] * 0.12, 'm')
+        set_number(contact_section, 'rolling radius load deflection factor', 0.68)
         set_number(contact_section, 'contact patch load gain', 0.12)
-        set_number(contact_section, 'contact patch deflection gain', 0.20)
-        set_number(contact_section, 'partial contact stiffness floor', 0.35)
+        set_number(contact_section, 'contact patch empirical deformation gain', 0.20)
         thermal = tires['thermal'][source_name]
         thermal_section = find_section(formula_tires, axle_name + ' Thermal')
         for parameter_name, source_name_key, unit in [
@@ -490,7 +493,8 @@ def main():
                floor_profile['lift_area_m2'] * floor_profile['induced_drag_ratio'], 'm2')
     configure_aerodynamic_load_distribution(document)
     configure_tire_grip(document, tires)
-    configure_coupled_tires(document, tires, arguments)
+    configure_coupled_tires(document, tires, arguments, mass,
+        chassis['front_weight_distribution'])
     source_audio = source_root / 'game/sounds/banks/v10-v2-bank/engine_powered_maximum_loop.wav'
     source_audio_digest = hashlib.sha256(source_audio.read_bytes()).hexdigest()
     if source_audio_digest != '9bec0ea0aef8424b7062ab18471e849e660c906c609848a5a3adb8ff1411414c':
@@ -503,6 +507,9 @@ def main():
     set_number(sound, 'rpm scale', 600 / (sample['reference_revolutions_per_minute'] * math.pi / 30))
     element_tree.indent(document)
     element_tree.ElementTree(document).write(destination_directory / (identifier + '.xml'), encoding='utf-8', xml_declaration=True)
+    apply_floor_contacts(
+        pathlib.Path(__file__).resolve().parent.parent / 'implementation' / 'floor_contact_points.json',
+        destination_directory / (identifier + '.xml'))
     with wave.open(str(source_audio), 'rb') as sample_file:
         audio_description = {'channels': sample_file.getnchannels(), 'sample_width_bytes': sample_file.getsampwidth(), 'sample_rate': sample_file.getframerate(), 'frames': sample_file.getnframes()}
     report = {'dry_mass_kilograms': mass, 'chassis_mass_kilograms': chassis['vehicle_mass'], 'wheel_mass_kilograms': mass - chassis['vehicle_mass'],

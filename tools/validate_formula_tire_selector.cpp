@@ -26,7 +26,7 @@ static void Check(bool condition, const char* name)
 static std::string PressureSection(const std::string& convention)
 {
     return std::string("<section name=\"Formula Tires\">\n")
-        + "<attnum name=\"schema version\" val=\"1\"/>\n"
+        + "<attnum name=\"schema version\" val=\"2\"/>\n"
         + "<attstr name=\"pressure convention\" val=\"" + convention + "\"/>\n"
         + "<attstr name=\"pressure unit\" val=\"Pa\"/>\n"
         + "<attnum name=\"ambient pressure\" val=\"101325\" unit=\"Pa\"/>\n"
@@ -94,13 +94,13 @@ int main()
         "<section name=\"Formula Controls\"><attstr name=\"tire model\" val=\"transient coupled\"/></section>\n",
         PressureSection("gauge"));
     std::string bad_schema_tires = PressureSection("gauge");
-    bad_schema_tires.replace(bad_schema_tires.find("val=\"1\""), 7, "val=\"2\"");
+    bad_schema_tires.replace(bad_schema_tires.find("val=\"2\""), 7, "val=\"3\"");
     std::string bad_schema = Document(
         "<section name=\"Formula Controls\"><attstr name=\"tire model\" val=\"transient coupled\"/></section>\n",
         bad_schema_tires);
     std::string bad_pressure = Document(
         "<section name=\"Formula Controls\"><attstr name=\"tire model\" val=\"transient coupled\"/></section>\n",
-        "<section name=\"Formula Tires\"><attnum name=\"schema version\" val=\"1\"/></section>\n");
+        "<section name=\"Formula Tires\"><attnum name=\"schema version\" val=\"2\"/></section>\n");
     bool written = WriteDocument(paths[0], absent) && WriteDocument(paths[1], legacy)
         && WriteDocument(paths[2], coupled) && WriteDocument(paths[3], bad_schema)
         && WriteDocument(paths[4], bad_pressure);

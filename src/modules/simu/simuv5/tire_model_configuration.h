@@ -49,13 +49,11 @@ struct TireContactConfiguration
     double width_meters;
     double wheel_mass_kilograms;
     double static_load_newtons;
-    double radial_stiffness_newtons_per_meter;
-    double radial_damping_ratio;
-    double maximum_deflection_meters;
-    double rolling_radius_deflection_factor;
+    double empirical_load_compliance_meters_per_newton;
+    double empirical_deformation_limit_meters;
+    double rolling_radius_load_deflection_factor;
     double contact_patch_load_gain;
-    double contact_patch_deflection_gain;
-    double partial_contact_stiffness_floor;
+    double contact_patch_empirical_deformation_gain;
 };
 
 struct TireThermalConfiguration

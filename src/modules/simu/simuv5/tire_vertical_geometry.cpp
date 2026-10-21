@@ -60,6 +60,10 @@ void TireVerticalGeometryCompute(const TireVerticalGeometryInput& input, TireVer
         input.ground_height_velocity_meters_per_second
         + input.suspension_extension_velocity_meters_per_second
         - output.chassis_reference_height_velocity_meters_per_second;
+    output.geometric_gap_meters = -output.tire_deflection_signed_meters;
+    output.geometric_gap_velocity_meters_per_second =
+        -output.tire_deflection_velocity_meters_per_second;
+    output.contact_radius_meters = input.tire_unloaded_radius_meters;
 
     output.suspension_extension_meters = input.suspension_extension_meters;
     output.suspension_extension_velocity_meters_per_second =

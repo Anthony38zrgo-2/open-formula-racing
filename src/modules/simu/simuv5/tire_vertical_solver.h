@@ -48,8 +48,6 @@ struct TireVerticalCornerConfiguration
 {
     TireVerticalSpringConfiguration spring;
     TireVerticalDamperConfiguration damper;
-    double tire_radial_stiffness_newtons_per_meter;
-    double tire_radial_damping_newtons_per_second_per_meter;
     double unloaded_radius_meters;
 };
 
@@ -60,6 +58,18 @@ struct TireVerticalAxleConfiguration
     TireVerticalSpringConfiguration heave_spring;
     TireVerticalDamperConfiguration heave_damper;
     int heave_enabled;
+};
+
+#define TIRE_VERTICAL_MAX_CHASSIS_CONTACTS 16
+#define TIRE_VERTICAL_MAX_ACTIVE_CONSTRAINTS 24
+
+struct TireVerticalChassisContactConfiguration
+{
+    double x_meters;
+    double y_meters;
+    double z_meters;
+    int group; /* 0 = floor, 1 = front wing */
+    int enabled;
 };
 
 struct TireVerticalSolverConfiguration
@@ -75,6 +85,8 @@ struct TireVerticalSolverConfiguration
     TireVerticalAxleConfiguration axle[2];
     double external_body_generalized_force[3];
     double external_wheel_generalized_force[4];
+    int chassis_contact_count;
+    TireVerticalChassisContactConfiguration chassis_contact[TIRE_VERTICAL_MAX_CHASSIS_CONTACTS];
 };
 
 struct TireVerticalSolverState
@@ -90,32 +102,64 @@ struct TireVerticalSolverStepInput
     double elapsed_seconds;
     double ground_height_meters[4];
     double ground_height_velocity_meters_per_second[4];
+    double chassis_ground_height_meters[TIRE_VERTICAL_MAX_CHASSIS_CONTACTS];
+    double chassis_ground_height_velocity_meters_per_second[TIRE_VERTICAL_MAX_CHASSIS_CONTACTS];
 };
 
 enum TireVerticalConstraintKind
 {
     TIRE_VERTICAL_CONSTRAINT_NONE = 0,
     TIRE_VERTICAL_CONSTRAINT_LOWER = 1,
-    TIRE_VERTICAL_CONSTRAINT_UPPER = 2
+    TIRE_VERTICAL_CONSTRAINT_UPPER = 2,
+    TIRE_VERTICAL_CONSTRAINT_CHASSIS = 3,
+    TIRE_VERTICAL_CONSTRAINT_TIRE = 4
+};
+
+enum TireVerticalFailureReason
+{
+    TIRE_VERTICAL_FAILURE_NONE = 0,
+    TIRE_VERTICAL_FAILURE_NONFINITE = 1,
+    TIRE_VERTICAL_FAILURE_INITIAL_GEOMETRY = 2,
+    TIRE_VERTICAL_FAILURE_NUMERICAL = 3,
+    TIRE_VERTICAL_FAILURE_ACTIVE_SET = 4,
+    TIRE_VERTICAL_FAILURE_FEASIBILITY = 5
 };
 
 struct TireVerticalSolverDiagnostics
 {
     int converged;
+    int no_op;
+    int failed;
+    int failure_reason;
     int newton_iterations;
     double residual_norm;
     int active_constraint_count;
-    int active_constraint_wheel[8];
-    int active_constraint_kind[8];
-    double constraint_impulse_newton_seconds[8];
+    int active_constraint_wheel[TIRE_VERTICAL_MAX_ACTIVE_CONSTRAINTS];
+    int active_constraint_kind[TIRE_VERTICAL_MAX_ACTIVE_CONSTRAINTS];
+    int active_constraint_index[TIRE_VERTICAL_MAX_ACTIVE_CONSTRAINTS];
+    double constraint_impulse_newton_seconds[TIRE_VERTICAL_MAX_ACTIVE_CONSTRAINTS];
     double constraint_energy_loss_joules;
+    double constraint_work_joules;
     double damper_energy_loss_joules;
-    double tire_damping_energy_loss_joules;
+    double tire_damping_energy_loss_joules; /* Retired radial damping: always zero. */
     double tire_normal_force_newtons[4];
+    double tire_contact_impulse_newton_seconds[4];
+    double tire_contact_support_seconds[4];
+    int tire_contact_supported_during_step[4];
+    int tire_contact_at_end[4];
+    double tire_gap_meters[4];
     double suspension_force_newtons[4];
-    double tire_deflection_meters[4];
     double wheel_center_height_meters[4];
     int tire_contact[4];
+    double chassis_contact_gap_meters[TIRE_VERTICAL_MAX_CHASSIS_CONTACTS];
+    double chassis_contact_impulse_newton_seconds[TIRE_VERTICAL_MAX_CHASSIS_CONTACTS];
+    int chassis_contact_active[TIRE_VERTICAL_MAX_CHASSIS_CONTACTS];
+    double chassis_contact_energy_loss_joules;
+    double chassis_contact_ground_work_joules;
+    double chassis_contact_work_joules;
+    double tire_contact_energy_loss_joules;
+    double tire_contact_ground_work_joules;
+    double tire_contact_work_joules;
     double mass_matrix[7][7];
     int mass_matrix_positive_definite;
     int sprung_mass_matrix_positive_definite;
@@ -147,22 +191,28 @@ struct TireVerticalQuarterCarStepInput
 struct TireVerticalQuarterCarDiagnostics
 {
     int converged;
+    int no_op;
     int newton_iterations;
     double residual_norm;
     double tire_normal_force_newtons;
+    double tire_contact_impulse_newton_seconds;
+    double tire_contact_support_seconds;
+    int tire_contact_supported_during_step;
     double suspension_force_newtons;
-    double tire_deflection_meters;
+    double tire_gap_meters;
     double wheel_center_height_meters;
     int tire_contact;
     int lower_limit_active;
     int upper_limit_active;
     double limit_impulse_newton_seconds;
     double constraint_energy_loss_joules;
+    double constraint_work_joules;
     double damper_energy_loss_joules;
-    double tire_damping_energy_loss_joules;
+    double tire_damping_energy_loss_joules; /* Retired radial damping: always zero. */
 };
 
 double TireVerticalSpringForce(const TireVerticalSpringConfiguration& configuration, double position_meters);
+bool TireVerticalStateIsFinite(const TireVerticalSolverState& state);
 double TireVerticalSpringPotentialJoules(const TireVerticalSpringConfiguration& configuration, double position_meters);
 double TireVerticalDamperForce(const TireVerticalDamperConfiguration& configuration, double velocity_meters_per_second);
 double TireVerticalDamperSlope(const TireVerticalDamperConfiguration& configuration, double velocity_meters_per_second);

@@ -28,88 +28,15 @@
 
 void SimCarCollideZ(tCar *car)
 {
-    int i;
-    t3Dd normal;
-    tdble dotProd;
-    tWheel *wheel;
-    const float CRASH_THRESHOLD = -5.0f;
-    tdble dz = 0.0f;
-
-    if (car->carElt->_state & RM_CAR_STATE_NO_SIMU)
-    {
-        return;
-    }
-
-    for (i = 0; i < 4; i++)
-    {
-        wheel = &(car->wheel[i]);
-
-        if ( (wheel->state & SIM_SUSP_COMP)&&(!(wheel->state & SIM_WH_INAIR)) )
-        {
-            dz = MAX(dz, wheel->susp.spring.packers - wheel->rideHeight);
-            wheel->rideHeight = wheel->susp.spring.packers;
-            RtTrackSurfaceNormalL(&(wheel->trkPos), &normal);
-            if (wheel->ground_mesh_contact)
-                normal = wheel->ground_mesh_normal;
-            dotProd = (car->DynGCg.vel.x * normal.x + car->DynGCg.vel.y * normal.y + car->DynGCg.vel.z * normal.z) * wheel->trkPos.seg->surface->kRebound;
-            if (dotProd < 0.0f)
-            {
-                if (dotProd < CRASH_THRESHOLD)
-                {
-                    static tdble WHEEL_ROT_DAMAGE = 0.001f;
-                    static tdble WHEEL_BENT_DAMAGE = 0.01f;
-                    static tdble WHEEL_DAMAGE_LIMIT = 0.25f;
-                    static tdble SUSP_DAMAGE_CONST = 1.0f;
-                    static tdble SUSP_DAMAGE = 0.1f;
-
-                    wheel->rotational_damage_x -= dotProd*WHEEL_ROT_DAMAGE * urandom();
-                    wheel->rotational_damage_z -= dotProd*WHEEL_ROT_DAMAGE * urandom();
-                    wheel->bent_damage_x += (float)(WHEEL_BENT_DAMAGE * (urandom() - 0.5));
-                    wheel->bent_damage_z += (float)(WHEEL_BENT_DAMAGE * (urandom() - 0.5));
-                    if (wheel->rotational_damage_x > WHEEL_DAMAGE_LIMIT)
-                    {
-                        wheel->rotational_damage_x = WHEEL_DAMAGE_LIMIT;
-                    }
-
-                    if (wheel->rotational_damage_z > WHEEL_DAMAGE_LIMIT)
-                    {
-                        wheel->rotational_damage_z = WHEEL_DAMAGE_LIMIT;
-                    }
-
-                    if (car->options->suspension_damage)
-                    {
-                        SimSuspDamage (&wheel->susp,
-                                       SUSP_DAMAGE * dotProd + SUSP_DAMAGE_CONST);
-                        GfLogInfo("Suspension damage = %.5f\n", wheel->susp.damper.efficiency);
-                    }
-                    car->collision |= SEM_COLLISION_Z_CRASH;
-                }
-
-                if (wheel->susp.state & SIM_SUSP_OVERCOMP)
-                {
-                    car->collision |= SEM_COLLISION;
-                }
-
-                if ((car->carElt->_state & RM_CAR_STATE_FINISH) == 0)
-                {
-                    int deltaDamage = (int)(wheel->trkPos.seg->surface->kDammage * fabs(dotProd) * simDammageFactor[car->carElt->_skillLevel]);
-                    if (deltaDamage > 1)
-                    {
-                      car->collision |= SEM_COLLISION_Z;
-                      car->dammage += deltaDamage;
-                    }
-                }
-
-                car->DynGCg.vel.x -= normal.x * dotProd;
-                car->DynGCg.vel.y -= normal.y * dotProd;
-                car->DynGCg.vel.z -= normal.z * dotProd;
-            }
-        }
-    }
-
-    car->DynGCg.pos.z += dz; //elevate car when it is slightly sinken into ground
+    // Vertical response belongs exclusively to the accepted coupled solve.
+    // Keep collision notification from actual floor impulses, with no packer
+    // projection, velocity reflection or modification of wheel ride heights.
+    if (car->formula_vertical_failed || (car->carElt->_state & RM_CAR_STATE_NO_SIMU)) return;
+    for (int contact = 0; contact < car->formula_floor_contact_count; ++contact)
+        if (car->formula_floor_active[contact]
+            && car->formula_floor_impulse_newton_seconds[contact] > 0.0)
+            car->collision |= SEM_COLLISION;
 }
-
 const tdble BorderFriction = 0.0f;
 
 // Collision of car/track borders.
@@ -285,7 +212,8 @@ static void SimCarCollideResponse(void * /*dummy*/, DtObjectRef obj1, DtObjectRe
     // Handle cars collisions during pit stops as well.
     static const int NO_SIMU_WITHOUT_PIT = RM_CAR_STATE_NO_SIMU & ~RM_CAR_STATE_PIT;
 
-    if ((car[0]->carElt->_state & NO_SIMU_WITHOUT_PIT) ||
+    if (car[0]->formula_vertical_failed || car[1]->formula_vertical_failed
+        || (car[0]->carElt->_state & NO_SIMU_WITHOUT_PIT) ||
         (car[1]->carElt->_state & NO_SIMU_WITHOUT_PIT))
     {
         return;
@@ -397,7 +325,7 @@ static void SimCarCollideResponse(void * /*dummy*/, DtObjectRef obj1, DtObjectRe
     for (i = 0; i < 2; i++)
     {
         tCarElt *carElt = car[i]->carElt;
-        if (carElt->_state & RM_CAR_STATE_NO_SIMU)
+        if ((carElt->_state & RM_CAR_STATE_NO_SIMU) || SimCarTable[carElt->index].formula_vertical_failed)
         {
             continue;
         }
@@ -936,7 +864,7 @@ SimCarCollideCars(tSituation *s)
     for (i = 0; i < s->_ncars; i++)
     {
         carElt = s->cars[i];
-        if (carElt->_state & RM_CAR_STATE_NO_SIMU)
+        if ((carElt->_state & RM_CAR_STATE_NO_SIMU) || SimCarTable[carElt->index].formula_vertical_failed)
         {
             continue;
         }
@@ -961,7 +889,7 @@ SimCarCollideCars(tSituation *s)
     for (i = 0; i < s->_ncars; i++)
     {
         carElt = s->cars[i];
-        if (carElt->_state & RM_CAR_STATE_NO_SIMU)
+        if ((carElt->_state & RM_CAR_STATE_NO_SIMU) || SimCarTable[carElt->index].formula_vertical_failed)
         {
             continue;
         }

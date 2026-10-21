@@ -45,14 +45,11 @@ struct TireForceState
 
 struct TireContactState
 {
-    double deflection;
-    double deflection_velocity;
+    double empirical_deformation;
     double effective_radius;
     double contact_patch;
     double load_sensitivity_scale;
-    double vertical_stiffness;
-    double vertical_damping;
-    double maximum_deflection;
+    double empirical_deformation_limit;
     double contact_fraction;
     long long clamp_count;
 };

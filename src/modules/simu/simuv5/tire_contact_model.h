@@ -26,21 +26,17 @@ struct TireContactInput
     double normal_force_newtons;
     double base_contact_patch_meters;
     double load_sensitivity_exponent;
-    double deflection_meters;
-    double deflection_velocity_meters_per_second;
+    double contact_fraction;
     int grounded;
 };
 
 struct TireContactOutput
 {
-    double deflection_meters;
-    double deflection_velocity_meters_per_second;
+    double empirical_deformation_meters;
     double effective_radius_meters;
     double contact_patch_meters;
     double load_sensitivity_scale;
-    double vertical_stiffness_newtons_per_meter;
-    double vertical_damping_newtons_per_meter;
-    double maximum_deflection_meters;
+    double empirical_deformation_limit_meters;
     double contact_fraction;
     long long clamp_count;
 };

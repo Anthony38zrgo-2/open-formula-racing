@@ -54,7 +54,16 @@ extern void SimAxleUpdate(tCar *car, int index);
 extern void SimCarConfig(tCar *car);
 extern void SimCarReConfig(tCar *car);
 extern void SimCarUpdate(tCar *car, tSituation*);
+extern bool SimCarPhysicsStep(tCar *car, tSituation*);
 extern void SimCarUpdate2(tCar *car, tSituation*);
+extern void SimCarUpdatePos(tCar *car);
+extern void SimCarBuildVerticalConfiguration(tCar *car,
+    TireVerticalSolverConfiguration& configuration);
+extern void SimCarVerticalPublish(tCar *car,
+    const TireVerticalSolverState& state, const TireVerticalSolverState& previous_state,
+    const TireVerticalSolverDiagnostics& diagnostics,
+    const double ground_height_meters[4],
+    const double ground_velocity_meters_per_second[4], double elapsed_seconds);
 
 extern void SimSuspCheckIn(tSuspension *susp);
 extern void SimSuspDamage(tSuspension* susp, tdble dmg);
@@ -72,8 +81,7 @@ extern void SimUpdateFreeWheels(tCar *car, int axlenb);
 extern void SimTireModelConfigure(tCar *car);
 extern void SimTireModelResetWheel(tCar *car, int index, bool new_tire);
 extern void SimTireModelUpdateWheelWithVerticalState(tCar *car, int index,
-    double normal_force_newtons, double deflection_meters,
-    double deflection_velocity_meters_per_second, int grounded);
+    double normal_force_newtons, double contact_fraction, int grounded);
 extern void SimTireModelEvaluateProvisionalWheel(tCar *car, int index,
     double normal_force_newtons, double* force_x_newtons, double* force_y_newtons);
 extern void SimTireModelPublishWheel(tCar *car, int index);

@@ -72,8 +72,6 @@ static TireVerticalQuarterCarConfiguration BuildQuarterCarConfiguration()
     corner.damper.rebound.fast_intercept_newtons = (3000.0 - 1500.0) * 0.15;
     corner.damper.efficiency = 1.0;
 
-    corner.tire_radial_stiffness_newtons_per_meter = 165000.0;
-    corner.tire_radial_damping_newtons_per_second_per_meter = 1300.0;
     corner.unloaded_radius_meters = 0.312;
     return configuration;
 }
@@ -149,11 +147,17 @@ static void CheckNativeSuspensionLaw()
 
 static double QuarterCarNumericalLoss(const TireVerticalQuarterCarConfiguration& configuration,
     double initial_energy, double final_energy, double road_work, double damper_loss,
-    double tire_loss, double constraint_loss)
+    double tire_loss, double constraint_loss, double constraint_work)
 {
     (void)configuration;
-    return -(final_energy - initial_energy - road_work + damper_loss + tire_loss
-        + constraint_loss);
+    (void)constraint_work;
+    (void)damper_loss;
+    (void)tire_loss;
+    (void)constraint_loss;
+    // Passivity measures actual mechanical energy against external road work.
+    // Midpoint estimates of individual losses are diagnostic, not allowances
+    // that can excuse a positive contact work or a net gain in energy.
+    return initial_energy + road_work - final_energy;
 }
 
 static void RunQuarterCarSimulation(const TireVerticalQuarterCarConfiguration& configuration,
@@ -169,6 +173,7 @@ static void RunQuarterCarSimulation(const TireVerticalQuarterCarConfiguration& c
     double damper_loss = 0.0;
     double tire_loss = 0.0;
     double constraint_loss = 0.0;
+    double constraint_work = 0.0;
     maximum_absolute_suspension = std::fabs(state.suspension_extension_meters);
     step_failures = 0;
 
@@ -193,6 +198,7 @@ static void RunQuarterCarSimulation(const TireVerticalQuarterCarConfiguration& c
         damper_loss += diagnostics.damper_energy_loss_joules;
         tire_loss += diagnostics.tire_damping_energy_loss_joules;
         constraint_loss += diagnostics.constraint_energy_loss_joules;
+        constraint_work += diagnostics.constraint_work_joules;
         state = next_state;
         maximum_absolute_suspension = std::max(maximum_absolute_suspension,
             std::fabs(state.suspension_extension_meters));
@@ -201,7 +207,7 @@ static void RunQuarterCarSimulation(const TireVerticalQuarterCarConfiguration& c
     final_state = state;
     final_energy = TireVerticalQuarterCarEnergyJoules(configuration, state, ground_height_meters);
     numerical_loss = QuarterCarNumericalLoss(configuration, initial_energy, final_energy,
-        road_work, damper_loss, tire_loss, constraint_loss);
+        road_work, damper_loss, tire_loss, constraint_loss, constraint_work);
 }
 
 static void CheckQuarterCarEquilibrium()
@@ -211,7 +217,7 @@ static void CheckQuarterCarEquilibrium()
     TireVerticalQuarterCarDiagnostics diagnostics;
     Check(TireVerticalQuarterCarInitializeEquilibrium(configuration, 0.0, state, diagnostics),
         "quarter car equilibrium converges");
-    CheckClose(state.body_position_meters, 0.040309, 2.0e-5,
+    CheckClose(state.body_position_meters, 0.05, 2.0e-5,
         "quarter car equilibrium body height");
     CheckClose(state.suspension_extension_meters, 0.05, 1.0e-8,
         "quarter car equilibrium extension");
@@ -219,13 +225,13 @@ static void CheckQuarterCarEquilibrium()
         "quarter car equilibrium normal force");
     CheckClose(diagnostics.suspension_force_newtons, 150.0 * 9.81, 1.0e-3,
         "quarter car equilibrium suspension force");
-    CheckClose(diagnostics.tire_deflection_meters,
-        diagnostics.tire_normal_force_newtons / 165000.0, 1.0e-10,
-        "quarter car equilibrium deflection");
+    CheckClose(diagnostics.tire_gap_meters, 0.0, 1.0e-9,
+        "quarter car equilibrium rigid contact gap");
     Check(diagnostics.tire_contact, "quarter car equilibrium contact");
 
     TireVerticalQuarterCarState positive = state;
     positive.suspension_extension_meters += 0.002;
+    positive.body_position_meters += 0.002;
     TireVerticalQuarterCarState final_state;
     double initial_energy = 0.0;
     double final_energy = 0.0;
@@ -246,6 +252,7 @@ static void CheckQuarterCarEquilibrium()
 
     TireVerticalQuarterCarState negative = state;
     negative.suspension_extension_meters -= 0.002;
+    negative.body_position_meters -= 0.002;
     RunQuarterCarSimulation(configuration, negative, 2.0, 0.002, 0.0, 0.0,
         final_state, initial_energy, final_energy, numerical_loss, maximum_extension,
         step_failures);
@@ -340,7 +347,7 @@ static void CheckQuarterCarZeroTime()
     TireVerticalQuarterCarState next_state;
     const int result = TireVerticalQuarterCarStep(configuration, state, input, next_state,
         diagnostics);
-    Check(result == 0, "quarter car zero time rejected");
+    Check(result == 1 && diagnostics.no_op, "quarter car zero time is an explicit no-op");
     Check(next_state.body_position_meters == before.body_position_meters
         && next_state.suspension_extension_meters == before.suspension_extension_meters,
         "quarter car zero time keeps state");
@@ -377,8 +384,7 @@ static void CheckQuarterCarContactLoss()
     Check(std::fabs(state.suspension_extension_meters - initial_extension) > 1.0e-6,
         "quarter car contact loss keeps suspension dynamics");
 
-    state.body_position_meters = equilibrium.body_position_meters;
-    state.body_velocity_meters_per_second = 0.0;
+    state.body_velocity_meters_per_second = -0.1;
     TireVerticalQuarterCarState final_state;
     double initial_energy = 0.0;
     double final_energy = 0.0;
@@ -406,6 +412,7 @@ static void CheckQuarterCarRateComparison()
     TireVerticalQuarterCarInitializeEquilibrium(configuration, 0.0, equilibrium, diagnostics);
     TireVerticalQuarterCarState state = equilibrium;
     state.suspension_extension_meters += 0.002;
+    state.body_position_meters += 0.002;
 
     TireVerticalQuarterCarState coarse;
     TireVerticalQuarterCarState fine;
@@ -567,23 +574,15 @@ static bool LoadWilliamsSolverConfiguration(const char* path,
         CopyDamperConfiguration(native_wheel.susp.damper, corner.damper);
 
         const int axle = wheel / 2;
-        const double stiffness = tire_configuration.contact[axle]
-            .radial_stiffness_newtons_per_meter;
-        const double damping_ratio = std::max(0.05,
-            std::min(1.5, tire_configuration.contact[axle].radial_damping_ratio));
-        corner.tire_radial_stiffness_newtons_per_meter = stiffness;
-        corner.tire_radial_damping_newtons_per_second_per_meter =
-            2.0 * damping_ratio * std::sqrt(stiffness * std::max(masses[wheel], 1.0));
+        (void)axle;
 
         std::printf("Williams wheel=%d x=%.9f y=%.9f radius=%.9f mass=%.6f "
-            "spring=%.6f preload=%.6f x0=%.9f limits=%.9f..%.9f bellcrank=%.9f "
-            "tire_stiffness=%.6f tire_damping=%.6f\n",
+            "spring=%.6f preload=%.6f x0=%.9f limits=%.9f..%.9f bellcrank=%.9f\n",
             wheel, configuration.wheel_x_meters[wheel], configuration.wheel_y_meters[wheel],
             radii[wheel], masses[wheel], corner.spring.spring_constant_newtons_per_meter,
             corner.spring.preload_newtons, corner.spring.reference_position_meters,
             corner.spring.minimum_position_meters, corner.spring.maximum_position_meters,
-            corner.spring.bellcrank_ratio, corner.tire_radial_stiffness_newtons_per_meter,
-            corner.tire_radial_damping_newtons_per_second_per_meter);
+            corner.spring.bellcrank_ratio);
     }
 
     for (int axle = 0; axle < 2; ++axle)
@@ -685,6 +684,7 @@ static void RunFourWheelSimulation(const TireVerticalSolverConfiguration& config
     double damper_loss = 0.0;
     double tire_loss = 0.0;
     double constraint_loss = 0.0;
+    double constraint_work = 0.0;
 
     const int step_count = static_cast<int>(std::lround(duration_seconds / elapsed_seconds));
     for (int step = 0; step < step_count; ++step)
@@ -692,8 +692,11 @@ static void RunFourWheelSimulation(const TireVerticalSolverConfiguration& config
         const double time_seconds = (step + 1) * elapsed_seconds;
         for (int wheel = 0; wheel < 4; ++wheel)
         {
-            ground_height[wheel] = road_bump ? GroundBumpHeight(time_seconds) : 0.0;
-            ground_velocity[wheel] = road_bump ? GroundBumpVelocity(time_seconds) : 0.0;
+            const double previous_height = road_bump
+                ? GroundBumpHeight(step * elapsed_seconds) : 0.0;
+            const double end_height = road_bump ? GroundBumpHeight(time_seconds) : 0.0;
+            ground_height[wheel] = previous_height;
+            ground_velocity[wheel] = (end_height - previous_height) / elapsed_seconds;
         }
         TireVerticalSolverStepInput input = {};
         input.elapsed_seconds = elapsed_seconds;
@@ -729,7 +732,12 @@ static void RunFourWheelSimulation(const TireVerticalSolverConfiguration& config
         }
         damper_loss += diagnostics.damper_energy_loss_joules;
         tire_loss += diagnostics.tire_damping_energy_loss_joules;
-        constraint_loss += diagnostics.constraint_energy_loss_joules;
+        constraint_loss += diagnostics.constraint_energy_loss_joules
+            + diagnostics.chassis_contact_energy_loss_joules
+            + diagnostics.tire_contact_energy_loss_joules;
+        constraint_work += diagnostics.constraint_work_joules
+            + diagnostics.chassis_contact_work_joules
+            + diagnostics.tire_contact_work_joules;
         state = next_state;
         if (!result.sampled && time_seconds >= sample_time_seconds)
         {
@@ -741,8 +749,8 @@ static void RunFourWheelSimulation(const TireVerticalSolverConfiguration& config
     result.final_state = state;
     result.final_energy_joules = TireVerticalSystemEnergyJoules(configuration, state,
         ground_height);
-    result.numerical_loss_joules = -(result.final_energy_joules - result.initial_energy_joules
-        - road_work + damper_loss + tire_loss + constraint_loss);
+    result.numerical_loss_joules = result.initial_energy_joules + road_work
+        - result.final_energy_joules;
 }
 
 static void CheckFourWheelSmallAngleGeometry(const TireVerticalSolverConfiguration& configuration)
@@ -782,6 +790,17 @@ static void CheckFourWheelSmallAngleGeometry(const TireVerticalSolverConfigurati
     }
 }
 
+static void SetGroundedExtensions(const TireVerticalSolverConfiguration& configuration,
+    TireVerticalSolverState& state)
+{
+    // A pose perturbation of a rigid tire must also move its suspension.
+    // Leaving L unchanged used to initialize some wheels inside the ground.
+    for (int wheel = 0; wheel < 4; ++wheel)
+        state.suspension_extension_meters[wheel] = state.body_position[0]
+            - configuration.wheel_x_meters[wheel] * state.body_position[2]
+            + configuration.wheel_y_meters[wheel] * state.body_position[1];
+}
+
 static void CheckFourWheelPerturbations(const TireVerticalSolverConfiguration& configuration)
 {
     const double ground_height[4] = { 0.0, 0.0, 0.0, 0.0 };
@@ -809,6 +828,7 @@ static void CheckFourWheelPerturbations(const TireVerticalSolverConfiguration& c
     {
         TireVerticalSolverState state = equilibrium;
         state.body_position[perturbations[index].axis] += perturbations[index].amount;
+        SetGroundedExtensions(configuration, state);
         FourWheelRunResult result;
         RunFourWheelSimulation(configuration, state, 2.0, 0.002, false, 1.0, result);
         Check(result.step_failures == 0, perturbations[index].name);
@@ -864,6 +884,7 @@ static void CheckFourWheelRateComparison(const TireVerticalSolverConfiguration& 
         equilibrium_diagnostics);
     TireVerticalSolverState state = equilibrium;
     state.body_position[1] = 0.005;
+    SetGroundedExtensions(configuration, state);
 
     FourWheelRunResult coarse;
     FourWheelRunResult fine;
@@ -1042,6 +1063,7 @@ static void CheckFourWheelHeave(const TireVerticalSolverConfiguration& configura
     {
         TireVerticalSolverState state = equilibrium;
         state.body_position[0] += sign * 0.005;
+        SetGroundedExtensions(heave_configuration, state);
         FourWheelRunResult result;
         RunFourWheelSimulation(heave_configuration, state, 2.0, 0.002, false, 1.0, result);
         Check(result.step_failures == 0, "four wheel heave perturbation steps converge");
@@ -1097,8 +1119,9 @@ static void CheckFourWheelContactLoss(const TireVerticalSolverConfiguration& con
     Check(std::fabs(state.suspension_extension_meters[0] - initial_extension) > 1.0e-6,
         "four wheel contact loss keeps suspension dynamics");
 
-    state.body_position[0] = equilibrium.body_position[0];
-    state.body_velocity[0] = 0.0;
+    // Recover by an actual fall from the flight state, not a teleport that
+    // placed the already extended wheels below the road.
+    state.body_velocity[0] = -0.1;
     FourWheelRunResult result;
     RunFourWheelSimulation(configuration, state, 1.0, 0.002, false, 1.0, result);
     Check(result.step_failures == 0, "four wheel contact recovery steps converge");
@@ -1129,7 +1152,6 @@ static void CheckFourWheelSuspensionScaling()
         configuration.corner[wheel].spring.bellcrank_ratio = bellcranks[wheel];
         configuration.corner[wheel].spring.minimum_position_meters = 0.01;
         configuration.corner[wheel].spring.maximum_position_meters = 0.2;
-        configuration.corner[wheel].tire_radial_stiffness_newtons_per_meter = 150000.0;
         configuration.corner[wheel].unloaded_radius_meters = 0.31;
     }
 
@@ -1258,7 +1280,7 @@ static void CheckFourWheelZeroTime(const TireVerticalSolverConfiguration& config
     TireVerticalSolverState next_state;
     const int result = TireVerticalSolverStep(configuration, state, input, next_state,
         diagnostics);
-    Check(result == 0, "four wheel zero time rejected");
+    Check(result == 1 && diagnostics.no_op, "four wheel zero time is an explicit no-op");
     Check(next_state.body_position[0] == before.body_position[0]
         && next_state.suspension_extension_meters[0] == before.suspension_extension_meters[0],
         "four wheel zero time keeps state");

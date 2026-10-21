@@ -17,20 +17,92 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #include "tire_vertical_solver.h"
 
 static const int TireVerticalSystemSize = 7;
-static const int TireVerticalMaximumConstraintCount = 4;
+static const int TireVerticalMaximumConstraintCount = 4 + 4 + TIRE_VERTICAL_MAX_CHASSIS_CONTACTS;
 static const int TireVerticalMaximumSystemSize = TireVerticalSystemSize + TireVerticalMaximumConstraintCount;
 static const int TireVerticalMaximumNewtonIterations = 60;
-static const int TireVerticalMaximumActiveSetIterations = 8;
+static const int TireVerticalMaximumActiveSetIterations = 24;
 static const int TireVerticalMaximumLineSearchIterations = 10;
 static const double TireVerticalResidualTolerance = 1.0e-7;
+static const double TireVerticalChassisResidualTolerance = 1.0e-5;
 static const double TireVerticalLimitToleranceMeters = 1.0e-9;
 static const double TireVerticalMultiplierTolerance = 1.0e-7;
 static const double TireVerticalDamperVelocityLimit = 10.0;
+static const double TireVerticalRankTolerance = 1.0e-8;
+static const double TireVerticalReactionTolerance = 1.0e-9;
+// Only roundoff-sized overlap is tolerated. An inconsistent initial geometry
+// must not be turned into a physical separation velocity proportional to 1/dt.
+static const double TireVerticalInitialGapTolerance = 1.0e-7;
+
+static bool FiniteValues(const double* values, int count)
+{
+    for (int i = 0; i < count; ++i)
+        if (!std::isfinite(values[i])) return false;
+    return true;
+}
+
+bool TireVerticalStateIsFinite(const TireVerticalSolverState& state)
+{
+    return FiniteValues(state.body_position, 3) && FiniteValues(state.body_velocity, 3)
+        && FiniteValues(state.suspension_extension_meters, 4)
+        && FiniteValues(state.suspension_extension_velocity_meters_per_second, 4);
+}
+
+static bool FiniteSpring(const TireVerticalSpringConfiguration& spring)
+{
+    const double values[] = { spring.spring_constant_newtons_per_meter,
+        spring.preload_newtons, spring.reference_position_meters,
+        spring.minimum_position_meters, spring.maximum_position_meters,
+        spring.bellcrank_ratio, spring.inertance_kilograms };
+    return FiniteValues(values, 7);
+}
+
+static bool FiniteDamper(const TireVerticalDamperConfiguration& damper)
+{
+    const TireVerticalDamperSegmentConfiguration segments[] = {damper.bump, damper.rebound};
+    for (const auto& segment : segments)
+    {
+        const double values[] = {segment.slow_coefficient_newtons_per_second_per_meter,
+            segment.fast_coefficient_newtons_per_second_per_meter,
+            segment.transition_velocity_meters_per_second, segment.slow_intercept_newtons,
+            segment.fast_intercept_newtons};
+        if (!FiniteValues(values, 5)) return false;
+    }
+    return std::isfinite(damper.efficiency);
+}
+
+static bool FiniteConfiguration(const TireVerticalSolverConfiguration& configuration)
+{
+    const double values[] = { configuration.total_mass_kilograms,
+        configuration.roll_inertia_kilogram_meters_squared,
+        configuration.pitch_inertia_kilogram_meters_squared,
+        configuration.gravity_meters_per_second_squared };
+    if (!FiniteValues(values, 4) || !FiniteValues(configuration.wheel_x_meters, 4)
+        || !FiniteValues(configuration.wheel_y_meters, 4)
+        || !FiniteValues(configuration.unsprung_mass_kilograms, 4)
+        || !FiniteValues(configuration.external_body_generalized_force, 3)
+        || !FiniteValues(configuration.external_wheel_generalized_force, 4)
+        || configuration.chassis_contact_count < 0
+        || configuration.chassis_contact_count > TIRE_VERTICAL_MAX_CHASSIS_CONTACTS) return false;
+    for (const auto& corner : configuration.corner)
+        if (!FiniteSpring(corner.spring) || !FiniteDamper(corner.damper)
+            || !std::isfinite(corner.unloaded_radius_meters)) return false;
+    for (const auto& axle : configuration.axle)
+        if (!FiniteSpring(axle.heave_spring) || !FiniteDamper(axle.heave_damper)
+            || !std::isfinite(axle.anti_roll_stiffness_newtons_per_meter)) return false;
+    for (int i = 0; i < configuration.chassis_contact_count; ++i)
+    {
+        const auto& point = configuration.chassis_contact[i];
+        if (!std::isfinite(point.x_meters) || !std::isfinite(point.y_meters)
+            || !std::isfinite(point.z_meters)) return false;
+    }
+    return true;
+}
 
 static double ClampValue(double value, double lower, double upper)
 {
@@ -395,8 +467,10 @@ static int SolveLinearSystem(const double* matrix, int stride, const double* rig
     {
         for (int column = 0; column < size; ++column)
         {
+            if (!std::isfinite(matrix[row * stride + column])) return 0;
             augmented[row][column] = matrix[row * stride + column];
         }
+        if (!std::isfinite(right_hand_side[row])) return 0;
         values[row] = right_hand_side[row];
     }
 
@@ -413,7 +487,7 @@ static int SolveLinearSystem(const double* matrix, int stride, const double* rig
                 pivot = row;
             }
         }
-        if (largest < 1.0e-14)
+        if (!std::isfinite(largest) || largest < 1.0e-14)
         {
             return 0;
         }
@@ -448,6 +522,7 @@ static int SolveLinearSystem(const double* matrix, int stride, const double* rig
             sum -= augmented[row][column] * solution[column];
         }
         solution[row] = sum / augmented[row][row];
+        if (!std::isfinite(solution[row])) return 0;
     }
     return 1;
 }
@@ -457,12 +532,8 @@ struct TireVerticalForceEvaluation
     double generalized_force[7];
     double jacobian_position[7][7];
     double jacobian_velocity[7][7];
-    double tire_normal_force_newtons[4];
     double suspension_force_newtons[4];
-    double tire_deflection_meters[4];
-    double tire_deflection_velocity_meters_per_second[4];
     double wheel_center_height_meters[4];
-    int tire_contact[4];
 };
 
 static void EvaluateForces(const TireVerticalSolverConfiguration& configuration,
@@ -483,67 +554,10 @@ static void EvaluateForces(const TireVerticalSolverConfiguration& configuration,
         const double chassis_reference_height = jacobian[0] * state.body_position[0]
             + jacobian[1] * state.body_position[1]
             + jacobian[2] * state.body_position[2];
-        const double chassis_reference_velocity = jacobian[0] * state.body_velocity[0]
-            + jacobian[1] * state.body_velocity[1]
-            + jacobian[2] * state.body_velocity[2];
-        const double clearance = chassis_reference_height - input.ground_height_meters[wheel];
-        const double deflection = state.suspension_extension_meters[wheel] - clearance;
-        const double deflection_velocity = input.ground_height_velocity_meters_per_second[wheel]
-            + state.suspension_extension_velocity_meters_per_second[wheel]
-            - chassis_reference_velocity;
-
-        double normal_force = 0.0;
-        double normal_derivative_position[7] = {};
-        double normal_derivative_velocity[7] = {};
-        const TireVerticalCornerConfiguration& corner = configuration.corner[wheel];
-        if (deflection > 0.0)
-        {
-            const double linear_force = corner.tire_radial_stiffness_newtons_per_meter * deflection
-                + corner.tire_radial_damping_newtons_per_second_per_meter * deflection_velocity;
-            if (linear_force > 0.0)
-            {
-                normal_force = linear_force;
-                evaluation.tire_contact[wheel] = 1;
-                for (int body = 0; body < 3; ++body)
-                {
-                    normal_derivative_position[body] =
-                        -corner.tire_radial_stiffness_newtons_per_meter * jacobian[body];
-                    normal_derivative_velocity[body] =
-                        -corner.tire_radial_damping_newtons_per_second_per_meter * jacobian[body];
-                }
-                normal_derivative_position[3 + wheel] =
-                    corner.tire_radial_stiffness_newtons_per_meter;
-                normal_derivative_velocity[3 + wheel] =
-                    corner.tire_radial_damping_newtons_per_second_per_meter;
-            }
-        }
-
-        evaluation.tire_normal_force_newtons[wheel] = normal_force;
         evaluation.suspension_force_newtons[wheel] = suspension.force_newtons[wheel];
-        evaluation.tire_deflection_meters[wheel] = deflection;
-        evaluation.tire_deflection_velocity_meters_per_second[wheel] = deflection_velocity;
         evaluation.wheel_center_height_meters[wheel] = chassis_reference_height
-            + corner.unloaded_radius_meters - state.suspension_extension_meters[wheel];
-
-        for (int body = 0; body < 3; ++body)
-        {
-            evaluation.generalized_force[body] += jacobian[body] * normal_force;
-            for (int column = 0; column < 7; ++column)
-            {
-                evaluation.jacobian_position[body][column] +=
-                    jacobian[body] * normal_derivative_position[column];
-                evaluation.jacobian_velocity[body][column] +=
-                    jacobian[body] * normal_derivative_velocity[column];
-            }
-        }
-        evaluation.generalized_force[3 + wheel] -= normal_force;
-        for (int column = 0; column < 7; ++column)
-        {
-            evaluation.jacobian_position[3 + wheel][column] -=
-                normal_derivative_position[column];
-            evaluation.jacobian_velocity[3 + wheel][column] -=
-                normal_derivative_velocity[column];
-        }
+            + configuration.corner[wheel].unloaded_radius_meters
+            - state.suspension_extension_meters[wheel];
     }
 
     for (int wheel = 0; wheel < 4; ++wheel)
@@ -590,6 +604,7 @@ int TireVerticalSolverConfigurationValidate(const TireVerticalSolverConfiguratio
         return 0;
     };
 
+    if (!FiniteConfiguration(configuration)) return fail("configuration contains nonfinite values");
     if (!(configuration.total_mass_kilograms > 0.0))
     {
         return fail("total mass must be positive");
@@ -602,6 +617,29 @@ int TireVerticalSolverConfigurationValidate(const TireVerticalSolverConfiguratio
     if (!(configuration.gravity_meters_per_second_squared > 0.0))
     {
         return fail("gravity must be positive");
+    }
+    if (configuration.chassis_contact_count < 0
+        || configuration.chassis_contact_count > TIRE_VERTICAL_MAX_CHASSIS_CONTACTS)
+    {
+        return fail("chassis contact count is out of range");
+    }
+    for (int contact = 0; contact < configuration.chassis_contact_count; ++contact)
+    {
+        const TireVerticalChassisContactConfiguration& chassis_contact =
+            configuration.chassis_contact[contact];
+        if (!chassis_contact.enabled)
+        {
+            continue;
+        }
+        if (!std::isfinite(chassis_contact.x_meters)
+            || !std::isfinite(chassis_contact.y_meters)
+            || !std::isfinite(chassis_contact.z_meters)
+            || std::fabs(chassis_contact.x_meters) > 10.0
+            || std::fabs(chassis_contact.y_meters) > 10.0
+            || std::fabs(chassis_contact.z_meters) > 2.0)
+        {
+            return fail("chassis contact geometry is invalid");
+        }
     }
 
     double total_unsprung_mass = 0.0;
@@ -620,14 +658,6 @@ int TireVerticalSolverConfigurationValidate(const TireVerticalSolverConfiguratio
         if (!(corner.spring.maximum_position_meters > corner.spring.minimum_position_meters))
         {
             return fail("suspension limits are invalid");
-        }
-        if (!(corner.tire_radial_stiffness_newtons_per_meter > 0.0))
-        {
-            return fail("tire radial stiffness must be positive");
-        }
-        if (corner.tire_radial_damping_newtons_per_second_per_meter < 0.0)
-        {
-            return fail("tire radial damping must not be negative");
         }
         if (!(corner.unloaded_radius_meters > 0.0))
         {
@@ -673,6 +703,10 @@ int TireVerticalSolverConfigurationValidate(const TireVerticalSolverConfiguratio
     return 1;
 }
 
+static double TireVerticalTireGapFromPositions(
+    const TireVerticalSolverConfiguration& configuration, int wheel,
+    const TireVerticalSolverState& state, double ground_height_meters);
+
 static void FillDiagnostics(const TireVerticalSolverConfiguration& configuration,
     const TireVerticalSolverState& state, const TireVerticalSolverStepInput& input,
     const TireVerticalSuspensionEvaluation& suspension,
@@ -684,19 +718,39 @@ static void FillDiagnostics(const TireVerticalSolverConfiguration& configuration
     diagnostics.tire_damping_energy_loss_joules = 0.0;
     for (int wheel = 0; wheel < 4; ++wheel)
     {
-        diagnostics.tire_normal_force_newtons[wheel] =
-            evaluation.tire_normal_force_newtons[wheel];
+        const double ground = input.ground_height_meters[wheel]
+            + input.ground_height_velocity_meters_per_second[wheel] * input.elapsed_seconds;
+        diagnostics.tire_gap_meters[wheel] =
+            TireVerticalTireGapFromPositions(configuration, wheel, state, ground);
+        diagnostics.tire_contact_impulse_newton_seconds[wheel] = 0.0;
+        diagnostics.tire_contact_support_seconds[wheel] = 0.0;
+        diagnostics.tire_contact_supported_during_step[wheel] = 0;
+        diagnostics.tire_contact_at_end[wheel] = 0;
+        diagnostics.tire_normal_force_newtons[wheel] = 0.0;
         diagnostics.suspension_force_newtons[wheel] =
             evaluation.suspension_force_newtons[wheel];
-        diagnostics.tire_deflection_meters[wheel] =
-            evaluation.tire_deflection_meters[wheel];
         diagnostics.wheel_center_height_meters[wheel] =
             evaluation.wheel_center_height_meters[wheel];
-        diagnostics.tire_contact[wheel] = evaluation.tire_contact[wheel];
+        diagnostics.tire_contact[wheel] = 0;
     }
-    (void)configuration;
-    (void)state;
-    (void)input;
+    for (int contact = 0; contact < configuration.chassis_contact_count; ++contact)
+    {
+        const TireVerticalChassisContactConfiguration& chassis_contact =
+            configuration.chassis_contact[contact];
+        if (!chassis_contact.enabled)
+        {
+            diagnostics.chassis_contact_gap_meters[contact] = 0.0;
+            continue;
+        }
+        const double ground = input.chassis_ground_height_meters[contact]
+            + input.chassis_ground_height_velocity_meters_per_second[contact]
+                * input.elapsed_seconds;
+        diagnostics.chassis_contact_gap_meters[contact] =
+            state.body_position[0] + chassis_contact.z_meters
+            - chassis_contact.x_meters * state.body_position[2]
+            + chassis_contact.y_meters * state.body_position[1]
+            - ground;
+    }
     (void)suspension;
 }
 
@@ -718,11 +772,302 @@ static void BuildStateAtEndOfStep(const TireVerticalSolverState& previous_state,
     }
 }
 
+static double TireVerticalLimitPosition(const TireVerticalSolverConfiguration& configuration,
+    int wheel, int kind);
+
+static void TireVerticalConstraintJacobian(const TireVerticalSolverConfiguration& configuration,
+    int kind, int index, double jacobian[7])
+{
+    std::memset(jacobian, 0, sizeof(double) * 7);
+    if (kind == TIRE_VERTICAL_CONSTRAINT_LOWER || kind == TIRE_VERTICAL_CONSTRAINT_UPPER)
+    {
+        jacobian[3 + index] = 1.0;
+        return;
+    }
+    if (kind == TIRE_VERTICAL_CONSTRAINT_CHASSIS)
+    {
+        const TireVerticalChassisContactConfiguration& contact =
+            configuration.chassis_contact[index];
+        jacobian[0] = 1.0;
+        jacobian[1] = contact.y_meters;
+        jacobian[2] = -contact.x_meters;
+        return;
+    }
+    if (kind == TIRE_VERTICAL_CONSTRAINT_TIRE)
+    {
+        jacobian[0] = 1.0;
+        jacobian[1] = configuration.wheel_y_meters[index];
+        jacobian[2] = -configuration.wheel_x_meters[index];
+        jacobian[3 + index] = -1.0;
+    }
+}
+
+static double TireVerticalEndGroundHeight(double ground_height_meters,
+    double ground_velocity_meters_per_second, double elapsed_seconds)
+{
+    return ground_height_meters + ground_velocity_meters_per_second * elapsed_seconds;
+}
+
+static double TireVerticalTireGapFromPositions(
+    const TireVerticalSolverConfiguration& configuration, int wheel,
+    const TireVerticalSolverState& state, double ground_height_meters)
+{
+    return state.body_position[0]
+        - configuration.wheel_x_meters[wheel] * state.body_position[2]
+        + configuration.wheel_y_meters[wheel] * state.body_position[1]
+        - state.suspension_extension_meters[wheel]
+        - ground_height_meters;
+}
+
+static double TireVerticalTireNormalVelocity(
+    const TireVerticalSolverConfiguration& configuration, int wheel,
+    const TireVerticalSolverState& state, double ground_velocity_meters_per_second)
+{
+    return state.body_velocity[0]
+        - configuration.wheel_x_meters[wheel] * state.body_velocity[2]
+        + configuration.wheel_y_meters[wheel] * state.body_velocity[1]
+        - state.suspension_extension_velocity_meters_per_second[wheel]
+        - ground_velocity_meters_per_second;
+}
+
+static double TireVerticalChassisGapFromPositions(
+    const TireVerticalSolverConfiguration& configuration, int index,
+    const TireVerticalSolverState& state, double ground_height_meters)
+{
+    const TireVerticalChassisContactConfiguration& contact =
+        configuration.chassis_contact[index];
+    return state.body_position[0] + contact.z_meters
+        - contact.x_meters * state.body_position[2]
+        + contact.y_meters * state.body_position[1]
+        - ground_height_meters;
+}
+
+static double TireVerticalChassisNormalVelocity(
+    const TireVerticalSolverConfiguration& configuration, int index,
+    const TireVerticalSolverState& state, double ground_velocity_meters_per_second)
+{
+    const TireVerticalChassisContactConfiguration& contact =
+        configuration.chassis_contact[index];
+    return state.body_velocity[0]
+        + contact.y_meters * state.body_velocity[1]
+        - contact.x_meters * state.body_velocity[2]
+        - ground_velocity_meters_per_second;
+}
+
+static double TireVerticalConstraintResidual(const TireVerticalSolverConfiguration& configuration,
+    int kind, int index, const TireVerticalSolverState& previous_state,
+    const TireVerticalSolverState& state, const TireVerticalSolverStepInput& input)
+{
+    TireVerticalSolverState end_state;
+    BuildStateAtEndOfStep(previous_state, state, input.elapsed_seconds, end_state);
+    if (kind == TIRE_VERTICAL_CONSTRAINT_CHASSIS)
+    {
+        const double ground = TireVerticalEndGroundHeight(
+            input.chassis_ground_height_meters[index],
+            input.chassis_ground_height_velocity_meters_per_second[index],
+            input.elapsed_seconds);
+        const double initial_gap = TireVerticalChassisGapFromPositions(configuration, index,
+            previous_state, input.chassis_ground_height_meters[index]);
+        return (TireVerticalChassisGapFromPositions(configuration, index, end_state, ground)
+            - std::min(initial_gap, 0.0)) / input.elapsed_seconds;
+    }
+    if (kind == TIRE_VERTICAL_CONSTRAINT_TIRE)
+    {
+        const double ground = TireVerticalEndGroundHeight(
+            input.ground_height_meters[index],
+            input.ground_height_velocity_meters_per_second[index],
+            input.elapsed_seconds);
+        const double initial_gap = TireVerticalTireGapFromPositions(configuration, index,
+            previous_state, input.ground_height_meters[index]);
+        return (TireVerticalTireGapFromPositions(configuration, index, end_state, ground)
+            - std::min(initial_gap, 0.0)) / input.elapsed_seconds;
+    }
+    const double limit = TireVerticalLimitPosition(configuration, index, kind);
+    return (end_state.suspension_extension_meters[index] - limit) / input.elapsed_seconds;
+}
+
+struct TireVerticalConstraintBasis
+{
+    int indices[TireVerticalMaximumConstraintCount];
+    int kinds[TireVerticalMaximumConstraintCount];
+    int count;
+};
+
+static void TireVerticalBuildConstraintBasis(
+    const TireVerticalSolverConfiguration& configuration,
+    const int* active_indices, const int* active_kinds, int active_count,
+    TireVerticalConstraintBasis& basis)
+{
+    double vectors[TireVerticalMaximumConstraintCount][7] = {};
+    double lengths[TireVerticalMaximumConstraintCount] = {};
+    int used[TireVerticalMaximumConstraintCount] = {};
+    double orthonormal[7][7] = {};
+    double maximum_length = 0.0;
+
+    basis.count = 0;
+    for (int constraint = 0; constraint < active_count; ++constraint)
+    {
+        TireVerticalConstraintJacobian(configuration, active_kinds[constraint],
+            active_indices[constraint], vectors[constraint]);
+        lengths[constraint] = VectorNorm(vectors[constraint], 7);
+        maximum_length = std::max(maximum_length, lengths[constraint]);
+    }
+    const double tolerance = TireVerticalRankTolerance * std::max(maximum_length, 1.0);
+
+    while (basis.count < 7)
+    {
+        int best = -1;
+        double best_length = tolerance;
+        // A newly violated affine inequality must enter the basis. Keeping
+        // only the longest old rows can repeatedly discard a higher parallel
+        // floor point and cycle forever between the same two support planes.
+        if (!basis.count && active_count > 0 && lengths[active_count - 1] > tolerance)
+        {
+            best = active_count - 1;
+            best_length = lengths[best];
+        }
+        for (int constraint = 0; constraint < active_count; ++constraint)
+        {
+            if (!basis.count && best >= 0) break;
+            if (!used[constraint] && lengths[constraint] > best_length)
+            {
+                best = constraint;
+                best_length = lengths[constraint];
+            }
+        }
+        if (best < 0)
+        {
+            break;
+        }
+        used[best] = 1;
+        basis.indices[basis.count] = active_indices[best];
+        basis.kinds[basis.count] = active_kinds[best];
+        for (int component = 0; component < 7; ++component)
+        {
+            orthonormal[basis.count][component] = vectors[best][component] / best_length;
+        }
+        basis.count += 1;
+
+        for (int constraint = 0; constraint < active_count; ++constraint)
+        {
+            if (used[constraint])
+            {
+                continue;
+            }
+            double projection = 0.0;
+            for (int component = 0; component < 7; ++component)
+            {
+                projection += vectors[constraint][component]
+                    * orthonormal[basis.count - 1][component];
+            }
+            for (int component = 0; component < 7; ++component)
+            {
+                vectors[constraint][component] -=
+                    projection * orthonormal[basis.count - 1][component];
+            }
+            lengths[constraint] = VectorNorm(vectors[constraint], 7);
+        }
+    }
+}
+
+
+static int TireVerticalReconstructReactions(
+    const TireVerticalSolverConfiguration& configuration,
+    const int* active_indices, const int* active_kinds, int active_count,
+    const TireVerticalConstraintBasis& basis, const double* basis_multipliers,
+    double* reactions)
+{
+    double required[7] = {};
+    for (int entry = 0; entry < basis.count; ++entry)
+    {
+        double row[7] = {};
+        TireVerticalConstraintJacobian(configuration, basis.kinds[entry], basis.indices[entry], row);
+        for (int j = 0; j < 7; ++j) required[j] += row[j] * basis_multipliers[entry];
+    }
+    double columns[TireVerticalMaximumConstraintCount][7] = {};
+    int signs[TireVerticalMaximumConstraintCount] = {};
+    bool free_column[TireVerticalMaximumConstraintCount] = {};
+    for (int i = 0; i < active_count; ++i)
+    {
+        TireVerticalConstraintJacobian(configuration, active_kinds[i], active_indices[i], columns[i]);
+        signs[i] = active_kinds[i] == TIRE_VERTICAL_CONSTRAINT_UPPER ? -1 : 1;
+        for (double& v : columns[i]) v *= signs[i];
+        free_column[i] = true;
+        reactions[i] = 0.0;
+    }
+    // Work in the actual column span. A 7x7 normal matrix is singular for
+    // every contact set with rank below seven, including a single floor point.
+    for (int iteration = 0; iteration <= active_count; ++iteration)
+    {
+        double orthogonal[7][7] = {};
+        int rank = 0;
+        for (int i = 0; i < active_count; ++i)
+        {
+            if (!free_column[i]) continue;
+            double v[7];
+            std::memcpy(v, columns[i], sizeof(v));
+            for (int pass = 0; pass < 2; ++pass)
+                for (int k = 0; k < rank; ++k)
+                {
+                    double dot = 0.0;
+                    for (int j = 0; j < 7; ++j) dot += v[j] * orthogonal[k][j];
+                    for (int j = 0; j < 7; ++j) v[j] -= dot * orthogonal[k][j];
+                }
+            double norm = VectorNorm(v, 7);
+            if (norm > TireVerticalRankTolerance && rank < 7)
+            {
+                for (int j = 0; j < 7; ++j) orthogonal[rank][j] = v[j] / norm;
+                ++rank;
+            }
+        }
+        if (!rank) return VectorNorm(required, 7) <= TireVerticalReactionTolerance;
+        double projected[TireVerticalMaximumConstraintCount][7] = {};
+        double rhs[7] = {}, remaining[7];
+        std::memcpy(remaining, required, sizeof(remaining));
+        for (int k = 0; k < rank; ++k)
+        {
+            for (int j = 0; j < 7; ++j) rhs[k] += orthogonal[k][j] * required[j];
+            for (int j = 0; j < 7; ++j) remaining[j] -= rhs[k] * orthogonal[k][j];
+            for (int i = 0; i < active_count; ++i)
+                if (free_column[i])
+                    for (int j = 0; j < 7; ++j)
+                        projected[i][k] += orthogonal[k][j] * columns[i][j];
+        }
+        const double closure_tolerance = 1.0e-8 * std::max(1.0, VectorNorm(required, 7));
+        if (VectorNorm(remaining, 7) > closure_tolerance) return 0;
+        double normal[7][7] = {};
+        for (int k = 0; k < rank; ++k)
+            for (int l = 0; l < rank; ++l)
+                for (int i = 0; i < active_count; ++i)
+                    if (free_column[i]) normal[k][l] += projected[i][k] * projected[i][l];
+        double dual[7] = {};
+        if (!SolveLinearSystem(&normal[0][0], 7, rhs, dual, rank)) return 0;
+        double magnitude[TireVerticalMaximumConstraintCount] = {};
+        int negative = -1;
+        double smallest = -TireVerticalReactionTolerance;
+        for (int i = 0; i < active_count; ++i)
+            if (free_column[i])
+            {
+                for (int k = 0; k < rank; ++k) magnitude[i] += projected[i][k] * dual[k];
+                if (magnitude[i] < smallest) { smallest = magnitude[i]; negative = i; }
+            }
+        if (negative >= 0) { free_column[negative] = false; continue; }
+        double reconstructed[7] = {};
+        for (int i = 0; i < active_count; ++i)
+        {
+            reactions[i] = signs[i] * magnitude[i];
+            for (int j = 0; j < 7; ++j) reconstructed[j] += columns[i][j] * magnitude[i];
+        }
+        for (int j = 0; j < 7; ++j) reconstructed[j] -= required[j];
+        return FiniteValues(reactions, active_count)
+            && VectorNorm(reconstructed, 7) <= closure_tolerance;
+    }
+    return 0;
+}
 static double TireVerticalComputeResidual(const TireVerticalSolverConfiguration& configuration,
     const double mass_matrix[7][7], const TireVerticalSolverState& previous_state,
     const TireVerticalSolverState& trial_state, const TireVerticalSolverStepInput& input,
-    const int* active_wheels, const int* active_kinds, const double* multipliers,
-    int active_count, double* residual)
+    const TireVerticalConstraintBasis& basis, const double* multipliers, double* residual)
 {
     TireVerticalSolverState evaluation_state;
     BuildStateAtEndOfStep(previous_state, trial_state, input.elapsed_seconds, evaluation_state);
@@ -744,33 +1089,50 @@ static double TireVerticalComputeResidual(const TireVerticalSolverConfiguration&
         }
         residual[row] = accumulation - input.elapsed_seconds * evaluation.generalized_force[row];
     }
-    for (int constraint = 0; constraint < active_count; ++constraint)
+    for (int constraint = 0; constraint < basis.count; ++constraint)
     {
-        residual[3 + active_wheels[constraint]] -=
-            input.elapsed_seconds * multipliers[constraint];
+        double jacobian[7] = {};
+        TireVerticalConstraintJacobian(configuration, basis.kinds[constraint],
+            basis.indices[constraint], jacobian);
+        for (int row = 0; row < 7; ++row)
+        {
+            residual[row] -= input.elapsed_seconds * jacobian[row]
+                * multipliers[constraint];
+        }
     }
-    for (int constraint = 0; constraint < active_count; ++constraint)
+    for (int constraint = 0; constraint < basis.count; ++constraint)
     {
-        const int wheel = active_wheels[constraint];
-        const double limit = active_kinds[constraint] == TIRE_VERTICAL_CONSTRAINT_LOWER
-            ? configuration.corner[wheel].spring.minimum_position_meters
-                / configuration.corner[wheel].spring.bellcrank_ratio
-            : configuration.corner[wheel].spring.maximum_position_meters
-                / configuration.corner[wheel].spring.bellcrank_ratio;
-        residual[7 + constraint] = previous_state.suspension_extension_meters[wheel]
-            + input.elapsed_seconds
-                * trial_state.suspension_extension_velocity_meters_per_second[wheel]
-            - limit;
+        residual[7 + constraint] = TireVerticalConstraintResidual(configuration,
+            basis.kinds[constraint], basis.indices[constraint], previous_state,
+            trial_state, input);
     }
-    return VectorNorm(residual, 7 + active_count);
+    return VectorNorm(residual, 7 + basis.count);
 }
 
 static int SolveNewtonSystem(const TireVerticalSolverConfiguration& configuration,
     const double mass_matrix[7][7], const TireVerticalSolverState& previous_state,
-    const TireVerticalSolverStepInput& input, const int* active_wheels,
+    const TireVerticalSolverStepInput& input, const int* active_indices,
     const int* active_kinds, int active_count, TireVerticalSolverState& state,
     double* multipliers, double* residual_norm, int* iterations)
 {
+    TireVerticalConstraintBasis basis;
+    TireVerticalBuildConstraintBasis(configuration, active_indices, active_kinds,
+        active_count, basis);
+
+    double basis_multipliers[TireVerticalMaximumConstraintCount] = {};
+    for (int entry = 0; entry < basis.count; ++entry)
+    {
+        for (int constraint = 0; constraint < active_count; ++constraint)
+        {
+            if (active_kinds[constraint] == basis.kinds[entry]
+                && active_indices[constraint] == basis.indices[entry])
+            {
+                basis_multipliers[entry] = multipliers[constraint];
+                break;
+            }
+        }
+    }
+
     int total_iterations = 0;
     for (int iteration = 0; iteration < TireVerticalMaximumNewtonIterations; ++iteration)
     {
@@ -795,33 +1157,60 @@ static int SolveNewtonSystem(const TireVerticalSolverConfiguration& configuratio
             }
             residual[row] = accumulation - input.elapsed_seconds * evaluation.generalized_force[row];
         }
-        for (int constraint = 0; constraint < active_count; ++constraint)
+        for (int constraint = 0; constraint < basis.count; ++constraint)
         {
-            residual[3 + active_wheels[constraint]] -=
-                input.elapsed_seconds * multipliers[constraint];
+            double jacobian[7] = {};
+            TireVerticalConstraintJacobian(configuration, basis.kinds[constraint],
+                basis.indices[constraint], jacobian);
+            for (int row = 0; row < 7; ++row)
+            {
+                residual[row] -= input.elapsed_seconds * jacobian[row]
+                    * basis_multipliers[constraint];
+            }
         }
-        for (int constraint = 0; constraint < active_count; ++constraint)
+        for (int constraint = 0; constraint < basis.count; ++constraint)
         {
-            const int wheel = active_wheels[constraint];
-            const double limit = active_kinds[constraint] == TIRE_VERTICAL_CONSTRAINT_LOWER
-                ? configuration.corner[wheel].spring.minimum_position_meters
-                    / configuration.corner[wheel].spring.bellcrank_ratio
-                : configuration.corner[wheel].spring.maximum_position_meters
-                    / configuration.corner[wheel].spring.bellcrank_ratio;
-            residual[7 + constraint] = previous_state.suspension_extension_meters[wheel]
-                + input.elapsed_seconds * state.suspension_extension_velocity_meters_per_second[wheel]
-                - limit;
+            residual[7 + constraint] = TireVerticalConstraintResidual(configuration,
+                basis.kinds[constraint], basis.indices[constraint], previous_state,
+                state, input);
         }
 
-        const double norm = VectorNorm(residual, 7 + active_count);
+        const double norm = VectorNorm(residual, 7 + basis.count);
         *residual_norm = norm;
-        if (norm <= TireVerticalResidualTolerance)
+        if (!std::isfinite(norm) || !TireVerticalStateIsFinite(evaluation_state)) return 0;
+        const double residual_tolerance = configuration.chassis_contact_count > 0
+            ? TireVerticalChassisResidualTolerance : TireVerticalResidualTolerance;
+        if (norm <= residual_tolerance)
         {
             *iterations = total_iterations;
+            if (!TireVerticalReconstructReactions(configuration, active_indices, active_kinds,
+                    active_count, basis, basis_multipliers, multipliers))
+            {
+                /* No admissible minimum-norm reconstruction with the current
+                 * active set.  Keep the independent basis solution so the
+                 * active-set loop can remove contacts with the wrong sign or
+                 * revise the set instead of failing the whole interval. */
+                for (int constraint = 0; constraint < active_count; ++constraint)
+                {
+                    multipliers[constraint] = 0.0;
+                }
+                for (int entry = 0; entry < basis.count; ++entry)
+                {
+                    for (int constraint = 0; constraint < active_count; ++constraint)
+                    {
+                        if (active_kinds[constraint] == basis.kinds[entry]
+                            && active_indices[constraint] == basis.indices[entry])
+                        {
+                            multipliers[constraint] = basis_multipliers[entry];
+                            break;
+                        }
+                    }
+                }
+            }
             return 1;
         }
 
-        const int system_size = 7 + active_count;
+        const int system_size = 7 + basis.count;
         double jacobian[TireVerticalMaximumSystemSize][TireVerticalMaximumSystemSize] = {};
         for (int row = 0; row < 7; ++row)
         {
@@ -833,18 +1222,24 @@ static int SolveNewtonSystem(const TireVerticalSolverConfiguration& configuratio
                             + evaluation.jacobian_velocity[row][column]);
             }
         }
-        for (int constraint = 0; constraint < active_count; ++constraint)
+        for (int constraint = 0; constraint < basis.count; ++constraint)
         {
-            const int wheel = active_wheels[constraint];
-            jacobian[3 + wheel][7 + constraint] = -input.elapsed_seconds;
-            jacobian[7 + constraint][3 + wheel] = input.elapsed_seconds;
+            double constraint_jacobian[7] = {};
+            TireVerticalConstraintJacobian(configuration, basis.kinds[constraint],
+                basis.indices[constraint], constraint_jacobian);
+            for (int row = 0; row < 7; ++row)
+            {
+                jacobian[row][7 + constraint] -= input.elapsed_seconds
+                    * constraint_jacobian[row];
+                jacobian[7 + constraint][row] += constraint_jacobian[row];
+            }
         }
 
         double delta[TireVerticalMaximumSystemSize] = {};
         if (!SolveLinearSystem(&jacobian[0][0], TireVerticalMaximumSystemSize,
                 residual, delta, system_size))
         {
-            *iterations = total_iterations;
+                        *iterations = total_iterations;
             return 0;
         }
         for (int index = 0; index < system_size; ++index)
@@ -870,17 +1265,17 @@ static int SolveNewtonSystem(const TireVerticalSolverConfiguration& configuratio
                     step_scale * delta[3 + wheel];
             }
             BuildStateAtEndOfStep(previous_state, trial_state, input.elapsed_seconds, trial_state);
-            for (int constraint = 0; constraint < active_count; ++constraint)
+            for (int constraint = 0; constraint < basis.count; ++constraint)
             {
-                trial_multipliers[constraint] = multipliers[constraint]
+                trial_multipliers[constraint] = basis_multipliers[constraint]
                     + step_scale * delta[7 + constraint];
             }
 
             double trial_residual[TireVerticalMaximumSystemSize] = {};
             const double trial_norm = TireVerticalComputeResidual(configuration, mass_matrix,
-                previous_state, trial_state, input, active_wheels, active_kinds,
-                trial_multipliers, active_count, trial_residual);
-            if (trial_norm < norm || line_search == TireVerticalMaximumLineSearchIterations - 1)
+                previous_state, trial_state, input, basis, trial_multipliers, trial_residual);
+            if (std::isfinite(trial_norm) && TireVerticalStateIsFinite(trial_state)
+                && trial_norm < norm)
             {
                 accepted_norm = trial_norm;
                 accepted = 1;
@@ -890,14 +1285,14 @@ static int SolveNewtonSystem(const TireVerticalSolverConfiguration& configuratio
         }
         if (!accepted)
         {
-            *iterations = total_iterations;
+                        *iterations = total_iterations;
             return 0;
         }
 
         state = trial_state;
-        for (int constraint = 0; constraint < active_count; ++constraint)
+        for (int constraint = 0; constraint < basis.count; ++constraint)
         {
-            multipliers[constraint] = trial_multipliers[constraint];
+            basis_multipliers[constraint] = trial_multipliers[constraint];
         }
         total_iterations += 1;
         *residual_norm = accepted_norm;
@@ -916,15 +1311,20 @@ static double TireVerticalLimitPosition(const TireVerticalSolverConfiguration& c
 }
 
 static double TireVerticalCornerDamperLoss(const TireVerticalSolverConfiguration& configuration,
-    const TireVerticalSolverState& state, const TireVerticalSolverStepInput& input)
+    const TireVerticalSolverState& previous_state, const TireVerticalSolverState& next_state,
+    const TireVerticalSolverStepInput& input)
 {
     double loss = 0.0;
     for (int wheel = 0; wheel < 4; ++wheel)
     {
         const double bellcrank = configuration.corner[wheel].spring.bellcrank_ratio;
-        const double velocity = -bellcrank * state.suspension_extension_velocity_meters_per_second[wheel];
-        const double damper_force = TireVerticalDamperForce(configuration.corner[wheel].damper, velocity);
-        loss += -bellcrank * damper_force * state.suspension_extension_velocity_meters_per_second[wheel]
+        const double average_extension_velocity = 0.5
+            * (previous_state.suspension_extension_velocity_meters_per_second[wheel]
+                + next_state.suspension_extension_velocity_meters_per_second[wheel]);
+        const double velocity = -bellcrank * average_extension_velocity;
+        const double damper_force = TireVerticalDamperForce(configuration.corner[wheel].damper,
+            velocity);
+        loss += -bellcrank * damper_force * average_extension_velocity
             * input.elapsed_seconds;
     }
     for (int axle = 0; axle < 2; ++axle)
@@ -940,42 +1340,30 @@ static double TireVerticalCornerDamperLoss(const TireVerticalSolverConfiguration
             configuration.corner[right_wheel].spring.bellcrank_ratio;
         const double left_bellcrank =
             configuration.corner[left_wheel].spring.bellcrank_ratio;
-        const double heave_velocity = -0.5
-            * (left_bellcrank * state.suspension_extension_velocity_meters_per_second[left_wheel]
-                + right_bellcrank * state.suspension_extension_velocity_meters_per_second[right_wheel]);
+        const double average_heave_velocity = -0.25
+            * (left_bellcrank
+                    * (previous_state.suspension_extension_velocity_meters_per_second[left_wheel]
+                        + next_state.suspension_extension_velocity_meters_per_second[left_wheel])
+                + right_bellcrank
+                    * (previous_state.suspension_extension_velocity_meters_per_second[right_wheel]
+                        + next_state.suspension_extension_velocity_meters_per_second[right_wheel]));
         const double heave_damper_force = TireVerticalDamperForce(
-            axle_configuration.heave_damper, heave_velocity);
+            axle_configuration.heave_damper, average_heave_velocity);
         const double heave_bellcrank = axle_configuration.heave_spring.bellcrank_ratio;
         const double left_force = 0.5 * heave_bellcrank * left_bellcrank
             * heave_damper_force;
         const double right_force = 0.5 * heave_bellcrank * right_bellcrank
             * heave_damper_force;
-        loss += -(left_force * state.suspension_extension_velocity_meters_per_second[left_wheel]
-            + right_force * state.suspension_extension_velocity_meters_per_second[right_wheel])
-            * input.elapsed_seconds;
+        const double average_left_velocity = 0.5
+            * (previous_state.suspension_extension_velocity_meters_per_second[left_wheel]
+                + next_state.suspension_extension_velocity_meters_per_second[left_wheel]);
+        const double average_right_velocity = 0.5
+            * (previous_state.suspension_extension_velocity_meters_per_second[right_wheel]
+                + next_state.suspension_extension_velocity_meters_per_second[right_wheel]);
+        loss += -(left_force * average_left_velocity
+            + right_force * average_right_velocity) * input.elapsed_seconds;
     }
     return std::max(0.0, loss);
-}
-
-static double TireVerticalTireDampingLoss(const TireVerticalSolverConfiguration& configuration,
-    const TireVerticalSolverState& state, const TireVerticalSolverStepInput& input)
-{
-    double loss = 0.0;
-    for (int wheel = 0; wheel < 4; ++wheel)
-    {
-        const double jacobian[3] = {
-            1.0, configuration.wheel_y_meters[wheel], -configuration.wheel_x_meters[wheel]
-        };
-        const double chassis_reference_velocity = jacobian[0] * state.body_velocity[0]
-            + jacobian[1] * state.body_velocity[1]
-            + jacobian[2] * state.body_velocity[2];
-        const double deflection_velocity = input.ground_height_velocity_meters_per_second[wheel]
-            + state.suspension_extension_velocity_meters_per_second[wheel]
-            - chassis_reference_velocity;
-        loss += configuration.corner[wheel].tire_radial_damping_newtons_per_second_per_meter
-            * deflection_velocity * deflection_velocity * input.elapsed_seconds;
-    }
-    return loss;
 }
 
 int TireVerticalSolverStep(const TireVerticalSolverConfiguration& configuration,
@@ -983,11 +1371,54 @@ int TireVerticalSolverStep(const TireVerticalSolverConfiguration& configuration,
     TireVerticalSolverState& next_state, TireVerticalSolverDiagnostics& diagnostics)
 {
     std::memset(&diagnostics, 0, sizeof(diagnostics));
+    next_state = previous_state;
+    diagnostics.failure_reason = TIRE_VERTICAL_FAILURE_NUMERICAL;
+    if (!FiniteConfiguration(configuration) || !TireVerticalStateIsFinite(previous_state)
+        || !std::isfinite(input.elapsed_seconds) || input.elapsed_seconds < 0.0
+        || !FiniteValues(input.ground_height_meters, 4)
+        || !FiniteValues(input.ground_height_velocity_meters_per_second, 4)
+        || !FiniteValues(input.chassis_ground_height_meters, configuration.chassis_contact_count)
+        || !FiniteValues(input.chassis_ground_height_velocity_meters_per_second,
+            configuration.chassis_contact_count))
+    {
+        diagnostics.failed = 1;
+        diagnostics.failure_reason = TIRE_VERTICAL_FAILURE_NONFINITE;
+        return 0;
+    }
     if (!(input.elapsed_seconds > 0.0))
     {
         next_state = previous_state;
-        diagnostics.converged = 0;
-        return 0;
+        diagnostics.converged = 1;
+        diagnostics.no_op = 1;
+        diagnostics.failure_reason = TIRE_VERTICAL_FAILURE_NONE;
+        return 1;
+    }
+
+    for (int wheel = 0; wheel < 4; ++wheel)
+    {
+        const double extension = previous_state.suspension_extension_meters[wheel];
+        if (TireVerticalTireGapFromPositions(configuration, wheel, previous_state,
+                input.ground_height_meters[wheel]) < -TireVerticalInitialGapTolerance
+            || extension < TireVerticalLimitPosition(configuration, wheel,
+                TIRE_VERTICAL_CONSTRAINT_LOWER) - TireVerticalInitialGapTolerance
+            || extension > TireVerticalLimitPosition(configuration, wheel,
+                TIRE_VERTICAL_CONSTRAINT_UPPER) + TireVerticalInitialGapTolerance)
+        {
+            diagnostics.failed = 1;
+            diagnostics.failure_reason = TIRE_VERTICAL_FAILURE_INITIAL_GEOMETRY;
+            return 0;
+        }
+    }
+    for (int contact = 0; contact < configuration.chassis_contact_count; ++contact)
+    {
+        if (configuration.chassis_contact[contact].enabled
+            && TireVerticalChassisGapFromPositions(configuration, contact, previous_state,
+                input.chassis_ground_height_meters[contact]) < -TireVerticalInitialGapTolerance)
+        {
+            diagnostics.failed = 1;
+            diagnostics.failure_reason = TIRE_VERTICAL_FAILURE_INITIAL_GEOMETRY;
+            return 0;
+        }
     }
 
     double mass_matrix[7][7] = {};
@@ -1002,24 +1433,122 @@ int TireVerticalSolverStep(const TireVerticalSolverConfiguration& configuration,
         || !diagnostics.sprung_mass_matrix_positive_definite)
     {
         next_state = previous_state;
+        diagnostics.failed = 1;
         return 0;
     }
 
+    const double elapsed = input.elapsed_seconds;
     TireVerticalSolverState state = previous_state;
-    int active_wheels[TireVerticalMaximumConstraintCount] = {};
+    int active_indices[TireVerticalMaximumConstraintCount] = {};
     int active_kinds[TireVerticalMaximumConstraintCount] = {};
     double multipliers[TireVerticalMaximumConstraintCount] = {};
     int active_count = 0;
     int total_iterations = 0;
     double residual_norm = 0.0;
 
+    const auto find_active = [&](int kind, int index) -> int
+    {
+        for (int constraint = 0; constraint < active_count; ++constraint)
+        {
+            if (active_kinds[constraint] == kind && active_indices[constraint] == index)
+            {
+                return constraint;
+            }
+        }
+        return -1;
+    };
+    const auto add_active = [&](int kind, int index) -> int
+    {
+        if (find_active(kind, index) >= 0)
+        {
+            return 1;
+        }
+        if (active_count >= TireVerticalMaximumConstraintCount)
+        {
+            return 0;
+        }
+        active_indices[active_count] = index;
+        active_kinds[active_count] = kind;
+        multipliers[active_count] = 0.0;
+        active_count += 1;
+        return 1;
+    };
+    const auto remove_active = [&](int position)
+    {
+        for (int index = position; index < active_count - 1; ++index)
+        {
+            active_indices[index] = active_indices[index + 1];
+            active_kinds[index] = active_kinds[index + 1];
+            multipliers[index] = multipliers[index + 1];
+        }
+        active_count -= 1;
+    };
+
+    /* Seed the active set with constraints that already touch at the start of
+     * the interval.  Everything else is added by the feasibility loop. */
+    for (int wheel = 0; wheel < 4; ++wheel)
+    {
+        const double gap = TireVerticalTireGapFromPositions(configuration, wheel,
+            previous_state, input.ground_height_meters[wheel]);
+        const double normal_velocity = TireVerticalTireNormalVelocity(configuration, wheel,
+            previous_state, input.ground_height_velocity_meters_per_second[wheel]);
+        if (gap <= 1.0e-6 && normal_velocity <= 0.0
+            && !add_active(TIRE_VERTICAL_CONSTRAINT_TIRE, wheel))
+        {
+            next_state = previous_state;
+            diagnostics.failed = 1;
+            return 0;
+        }
+    }
+    for (int contact = 0; contact < configuration.chassis_contact_count; ++contact)
+    {
+        if (!configuration.chassis_contact[contact].enabled)
+        {
+            continue;
+        }
+        const double gap = TireVerticalChassisGapFromPositions(configuration, contact,
+            previous_state, input.chassis_ground_height_meters[contact]);
+        const double normal_velocity = TireVerticalChassisNormalVelocity(configuration,
+            contact, previous_state, input.chassis_ground_height_velocity_meters_per_second[contact]);
+        if (gap <= 1.0e-6 && normal_velocity <= 0.0
+            && !add_active(TIRE_VERTICAL_CONSTRAINT_CHASSIS, contact))
+        {
+            next_state = previous_state;
+            diagnostics.failed = 1;
+            return 0;
+        }
+    }
+    for (int wheel = 0; wheel < 4; ++wheel)
+    {
+        const double position = previous_state.suspension_extension_meters[wheel];
+        const double lower = TireVerticalLimitPosition(configuration, wheel,
+            TIRE_VERTICAL_CONSTRAINT_LOWER);
+        const double upper = TireVerticalLimitPosition(configuration, wheel,
+            TIRE_VERTICAL_CONSTRAINT_UPPER);
+        if (position <= lower + TireVerticalLimitToleranceMeters
+            && !add_active(TIRE_VERTICAL_CONSTRAINT_LOWER, wheel))
+        {
+            next_state = previous_state;
+            diagnostics.failed = 1;
+            return 0;
+        }
+        if (position >= upper - TireVerticalLimitToleranceMeters
+            && !add_active(TIRE_VERTICAL_CONSTRAINT_UPPER, wheel))
+        {
+            next_state = previous_state;
+            diagnostics.failed = 1;
+            return 0;
+        }
+    }
+
+    int converged_active_set = 0;
     for (int active_set_iteration = 0;
         active_set_iteration < TireVerticalMaximumActiveSetIterations;
         ++active_set_iteration)
     {
-        int iterations = 0;
+                int iterations = 0;
         const int solved = SolveNewtonSystem(configuration, mass_matrix, previous_state,
-            input, active_wheels, active_kinds, active_count, state, multipliers,
+            input, active_indices, active_kinds, active_count, state, multipliers,
             &residual_norm, &iterations);
         total_iterations += iterations;
         if (!solved)
@@ -1027,34 +1556,55 @@ int TireVerticalSolverStep(const TireVerticalSolverConfiguration& configuration,
             next_state = previous_state;
             diagnostics.newton_iterations = total_iterations;
             diagnostics.residual_norm = residual_norm;
-            diagnostics.converged = 0;
+            diagnostics.failed = 1;
             return 0;
         }
 
+        TireVerticalSolverState end_state;
+        BuildStateAtEndOfStep(previous_state, state, elapsed, end_state);
+
         int changed = 0;
-        for (int constraint = 0; constraint < active_count; ++constraint)
+
+        for (int constraint = active_count - 1; constraint >= 0; --constraint)
         {
-            const int wheel = active_wheels[constraint];
             const int kind = active_kinds[constraint];
-            const double limit = TireVerticalLimitPosition(configuration, wheel, kind);
-            const double position = previous_state.suspension_extension_meters[wheel]
-                + input.elapsed_seconds
-                    * state.suspension_extension_velocity_meters_per_second[wheel];
-            const int valid_sign = kind == TIRE_VERTICAL_CONSTRAINT_LOWER
-                ? multipliers[constraint] >= -TireVerticalMultiplierTolerance
-                : multipliers[constraint] <= TireVerticalMultiplierTolerance;
-            const int valid_position = std::fabs(position - limit) <= 1.0e-8;
-            if (!valid_sign || !valid_position)
+            const int index = active_indices[constraint];
+            int valid = 0;
+            if (kind == TIRE_VERTICAL_CONSTRAINT_LOWER
+                || kind == TIRE_VERTICAL_CONSTRAINT_UPPER)
             {
-                for (int index = constraint; index < active_count - 1; ++index)
-                {
-                    active_wheels[index] = active_wheels[index + 1];
-                    active_kinds[index] = active_kinds[index + 1];
-                    multipliers[index] = multipliers[index + 1];
-                }
-                active_count -= 1;
+                const double limit = TireVerticalLimitPosition(configuration, index, kind);
+                const double position = end_state.suspension_extension_meters[index];
+                const int valid_sign = kind == TIRE_VERTICAL_CONSTRAINT_LOWER
+                    ? multipliers[constraint] >= -TireVerticalMultiplierTolerance
+                    : multipliers[constraint] <= TireVerticalMultiplierTolerance;
+                valid = valid_sign && std::fabs(position - limit) <= 1.0e-8;
+            }
+            else if (kind == TIRE_VERTICAL_CONSTRAINT_CHASSIS)
+            {
+                const double ground = TireVerticalEndGroundHeight(
+                    input.chassis_ground_height_meters[index],
+                    input.chassis_ground_height_velocity_meters_per_second[index], elapsed);
+                const double gap = TireVerticalChassisGapFromPositions(configuration,
+                    index, end_state, ground);
+                valid = multipliers[constraint] >= -TireVerticalMultiplierTolerance
+                    && std::fabs(gap) <= 1.0e-7;
+            }
+            else if (kind == TIRE_VERTICAL_CONSTRAINT_TIRE)
+            {
+                const double ground = TireVerticalEndGroundHeight(
+                    input.ground_height_meters[index],
+                    input.ground_height_velocity_meters_per_second[index], elapsed);
+                const double gap = TireVerticalTireGapFromPositions(configuration,
+                    index, end_state, ground);
+                valid = multipliers[constraint] >= -TireVerticalMultiplierTolerance
+                    && std::fabs(gap) <= 1.0e-7;
+            }
+            if (!valid)
+            {
+
+                remove_active(constraint);
                 changed = 1;
-                break;
             }
         }
         if (changed)
@@ -1068,74 +1618,143 @@ int TireVerticalSolverStep(const TireVerticalSolverConfiguration& configuration,
                 TIRE_VERTICAL_CONSTRAINT_LOWER);
             const double upper = TireVerticalLimitPosition(configuration, wheel,
                 TIRE_VERTICAL_CONSTRAINT_UPPER);
-            const double position = previous_state.suspension_extension_meters[wheel]
-                + input.elapsed_seconds
-                    * state.suspension_extension_velocity_meters_per_second[wheel];
-            if (position < lower - TireVerticalLimitToleranceMeters)
+            const double position = end_state.suspension_extension_meters[wheel];
+            if (position < lower - TireVerticalLimitToleranceMeters
+                && find_active(TIRE_VERTICAL_CONSTRAINT_LOWER, wheel) < 0)
             {
-                int already_active = 0;
-                for (int constraint = 0; constraint < active_count; ++constraint)
+                if (!add_active(TIRE_VERTICAL_CONSTRAINT_LOWER, wheel))
                 {
-                    already_active = already_active
-                        || (active_wheels[constraint] == wheel
-                            && active_kinds[constraint] == TIRE_VERTICAL_CONSTRAINT_LOWER);
+                    next_state = previous_state;
+                    diagnostics.failed = 1;
+                    return 0;
                 }
-                if (!already_active && active_count < TireVerticalMaximumConstraintCount)
-                {
-                    active_wheels[active_count] = wheel;
-                    active_kinds[active_count] = TIRE_VERTICAL_CONSTRAINT_LOWER;
-                    multipliers[active_count] = 0.0;
-                    state.suspension_extension_velocity_meters_per_second[wheel] =
-                        (lower - previous_state.suspension_extension_meters[wheel])
-                        / input.elapsed_seconds;
-                    active_count += 1;
-                    changed = 1;
-                    break;
-                }
+                state.suspension_extension_velocity_meters_per_second[wheel] =
+                    (lower - previous_state.suspension_extension_meters[wheel]) / elapsed;
+                changed = 1;
             }
-            if (position > upper + TireVerticalLimitToleranceMeters)
+            if (position > upper + TireVerticalLimitToleranceMeters
+                && find_active(TIRE_VERTICAL_CONSTRAINT_UPPER, wheel) < 0)
             {
-                int already_active = 0;
-                for (int constraint = 0; constraint < active_count; ++constraint)
+                if (!add_active(TIRE_VERTICAL_CONSTRAINT_UPPER, wheel))
                 {
-                    already_active = already_active
-                        || (active_wheels[constraint] == wheel
-                            && active_kinds[constraint] == TIRE_VERTICAL_CONSTRAINT_UPPER);
+                    next_state = previous_state;
+                    diagnostics.failed = 1;
+                    return 0;
                 }
-                if (!already_active && active_count < TireVerticalMaximumConstraintCount)
+                state.suspension_extension_velocity_meters_per_second[wheel] =
+                    (upper - previous_state.suspension_extension_meters[wheel]) / elapsed;
+                changed = 1;
+            }
+        }
+        if (changed)
+        {
+            continue;
+        }
+
+        for (int wheel = 0; wheel < 4; ++wheel)
+        {
+            if (find_active(TIRE_VERTICAL_CONSTRAINT_TIRE, wheel) >= 0)
+            {
+                continue;
+            }
+            const double ground_previous = input.ground_height_meters[wheel];
+            const double ground_end = TireVerticalEndGroundHeight(ground_previous,
+                input.ground_height_velocity_meters_per_second[wheel], elapsed);
+            const double gap_previous = TireVerticalTireGapFromPositions(configuration,
+                wheel, previous_state, ground_previous);
+            const double gap_end = TireVerticalTireGapFromPositions(configuration,
+                wheel, end_state, ground_end);
+            // The constraint residual preserves a roundoff-sized initial
+            // overlap. Test feasibility in that same affine frame. A contact
+            // released for tensile reaction must not be re-added just because
+            // the *previous* gap was slightly negative while it separates.
+            const double constraint_gap = gap_end - std::min(gap_previous, 0.0);
+            const double normal_velocity = TireVerticalTireNormalVelocity(configuration,
+                wheel, state, input.ground_height_velocity_meters_per_second[wheel]);
+            if (constraint_gap < -TireVerticalLimitToleranceMeters
+                || (constraint_gap <= TireVerticalLimitToleranceMeters && normal_velocity < 0.0))
+            {
+                if (!add_active(TIRE_VERTICAL_CONSTRAINT_TIRE, wheel))
                 {
-                    active_wheels[active_count] = wheel;
-                    active_kinds[active_count] = TIRE_VERTICAL_CONSTRAINT_UPPER;
-                    multipliers[active_count] = 0.0;
-                    state.suspension_extension_velocity_meters_per_second[wheel] =
-                        (upper - previous_state.suspension_extension_meters[wheel])
-                        / input.elapsed_seconds;
-                    active_count += 1;
-                    changed = 1;
-                    break;
+                    next_state = previous_state;
+                    diagnostics.failed = 1;
+                    return 0;
                 }
+                changed = 1;
+            }
+        }
+        if (changed)
+        {
+            continue;
+        }
+
+        for (int contact = 0; contact < configuration.chassis_contact_count; ++contact)
+        {
+            if (!configuration.chassis_contact[contact].enabled
+                || find_active(TIRE_VERTICAL_CONSTRAINT_CHASSIS, contact) >= 0)
+            {
+                continue;
+            }
+            const double ground_previous = input.chassis_ground_height_meters[contact];
+            const double ground_end = TireVerticalEndGroundHeight(ground_previous,
+                input.chassis_ground_height_velocity_meters_per_second[contact], elapsed);
+            const double gap_previous = TireVerticalChassisGapFromPositions(configuration,
+                contact, previous_state, ground_previous);
+            const double gap_end = TireVerticalChassisGapFromPositions(configuration,
+                contact, end_state, ground_end);
+            const double constraint_gap = gap_end - std::min(gap_previous, 0.0);
+            const double normal_velocity = TireVerticalChassisNormalVelocity(configuration,
+                contact, state,
+                input.chassis_ground_height_velocity_meters_per_second[contact]);
+            if (constraint_gap < -TireVerticalLimitToleranceMeters
+                || (constraint_gap <= TireVerticalLimitToleranceMeters && normal_velocity < 0.0))
+            {
+                if (!add_active(TIRE_VERTICAL_CONSTRAINT_CHASSIS, contact))
+                {
+                    next_state = previous_state;
+                    diagnostics.failed = 1;
+                    return 0;
+                }
+                changed = 1;
             }
         }
         if (!changed)
         {
+            converged_active_set = 1;
             break;
         }
     }
 
+    if (!converged_active_set)
+    {
+                next_state = previous_state;
+        diagnostics.newton_iterations = total_iterations;
+        diagnostics.residual_norm = residual_norm;
+        diagnostics.failed = 1;
+        diagnostics.failure_reason = TIRE_VERTICAL_FAILURE_ACTIVE_SET;
+        diagnostics.active_constraint_count = active_count;
+        for (int i = 0; i < active_count; ++i)
+        {
+            diagnostics.active_constraint_kind[i] = active_kinds[i];
+            diagnostics.active_constraint_index[i] = active_indices[i];
+            diagnostics.constraint_impulse_newton_seconds[i] = elapsed * multipliers[i];
+        }
+        return 0;
+    }
+
+    TireVerticalSolverState end_state;
+    BuildStateAtEndOfStep(previous_state, state, elapsed, end_state);
     for (int wheel = 0; wheel < 4; ++wheel)
     {
         const double lower = TireVerticalLimitPosition(configuration, wheel,
             TIRE_VERTICAL_CONSTRAINT_LOWER);
         const double upper = TireVerticalLimitPosition(configuration, wheel,
             TIRE_VERTICAL_CONSTRAINT_UPPER);
-        const double position = previous_state.suspension_extension_meters[wheel]
-            + input.elapsed_seconds * state.suspension_extension_velocity_meters_per_second[wheel];
-        if (position < lower - 1.0e-7 || position > upper + 1.0e-7)
+        if (end_state.suspension_extension_meters[wheel] < lower - 1.0e-7
+            || end_state.suspension_extension_meters[wheel] > upper + 1.0e-7)
         {
             next_state = previous_state;
-            diagnostics.newton_iterations = total_iterations;
-            diagnostics.residual_norm = residual_norm;
-            diagnostics.converged = 0;
+            diagnostics.failed = 1;
             return 0;
         }
     }
@@ -1143,31 +1762,60 @@ int TireVerticalSolverStep(const TireVerticalSolverConfiguration& configuration,
     {
         const int kind = active_kinds[constraint];
         const double multiplier = multipliers[constraint];
-        if ((kind == TIRE_VERTICAL_CONSTRAINT_LOWER && multiplier < -1.0e-7)
-            || (kind == TIRE_VERTICAL_CONSTRAINT_UPPER && multiplier > 1.0e-7))
+        if ((kind == TIRE_VERTICAL_CONSTRAINT_LOWER
+                    && multiplier < -TireVerticalMultiplierTolerance)
+                || (kind == TIRE_VERTICAL_CONSTRAINT_UPPER
+                    && multiplier > TireVerticalMultiplierTolerance)
+                || ((kind == TIRE_VERTICAL_CONSTRAINT_TIRE
+                        || kind == TIRE_VERTICAL_CONSTRAINT_CHASSIS)
+                    && multiplier < -TireVerticalMultiplierTolerance))
         {
             next_state = previous_state;
-            diagnostics.newton_iterations = total_iterations;
-            diagnostics.residual_norm = residual_norm;
-            diagnostics.converged = 0;
+            diagnostics.failed = 1;
+            return 0;
+        }
+    }
+    for (int wheel = 0; wheel < 4; ++wheel)
+    {
+        const double ground = TireVerticalEndGroundHeight(input.ground_height_meters[wheel],
+            input.ground_height_velocity_meters_per_second[wheel], elapsed);
+        const double gap = TireVerticalTireGapFromPositions(configuration, wheel,
+            end_state, ground);
+        const int active = find_active(TIRE_VERTICAL_CONSTRAINT_TIRE, wheel) >= 0;
+        if ((active && gap < -1.0e-5) || (!active && gap < -1.0e-4))
+        {
+            next_state = previous_state;
+            diagnostics.failed = 1;
+            return 0;
+        }
+    }
+    for (int contact = 0; contact < configuration.chassis_contact_count; ++contact)
+    {
+        if (!configuration.chassis_contact[contact].enabled)
+        {
+            continue;
+        }
+        const double ground = TireVerticalEndGroundHeight(
+            input.chassis_ground_height_meters[contact],
+            input.chassis_ground_height_velocity_meters_per_second[contact], elapsed);
+        const double gap = TireVerticalChassisGapFromPositions(configuration, contact,
+            end_state, ground);
+        if (!std::isfinite(gap) || gap < -TireVerticalInitialGapTolerance)
+        {
+            next_state = previous_state;
+            diagnostics.failed = 1;
+            diagnostics.failure_reason = TIRE_VERTICAL_FAILURE_FEASIBILITY;
             return 0;
         }
     }
 
-    for (int body = 0; body < 3; ++body)
+    if (!TireVerticalStateIsFinite(end_state) || !FiniteValues(multipliers, active_count))
     {
-        next_state.body_position[body] = previous_state.body_position[body]
-            + input.elapsed_seconds * state.body_velocity[body];
-        next_state.body_velocity[body] = state.body_velocity[body];
+        diagnostics.failed = 1;
+        diagnostics.failure_reason = TIRE_VERTICAL_FAILURE_NONFINITE;
+        return 0;
     }
-    for (int wheel = 0; wheel < 4; ++wheel)
-    {
-        next_state.suspension_extension_meters[wheel] =
-            previous_state.suspension_extension_meters[wheel]
-            + input.elapsed_seconds * state.suspension_extension_velocity_meters_per_second[wheel];
-        next_state.suspension_extension_velocity_meters_per_second[wheel] =
-            state.suspension_extension_velocity_meters_per_second[wheel];
-    }
+    next_state = end_state;
 
     TireVerticalForceEvaluation evaluation;
     EvaluateForces(configuration, next_state, input, evaluation);
@@ -1177,28 +1825,110 @@ int TireVerticalSolverStep(const TireVerticalSolverConfiguration& configuration,
     FillDiagnostics(configuration, next_state, input, suspension, evaluation, diagnostics);
 
     diagnostics.converged = 1;
+    diagnostics.failure_reason = TIRE_VERTICAL_FAILURE_NONE;
     diagnostics.newton_iterations = total_iterations;
     diagnostics.residual_norm = residual_norm;
     diagnostics.active_constraint_count = active_count;
     double constraint_loss = 0.0;
+    double constraint_work = 0.0;
+    double chassis_loss = 0.0;
+    double chassis_work = 0.0;
+    double chassis_ground_work = 0.0;
+    double tire_loss = 0.0;
+    double tire_work = 0.0;
+    double tire_ground_work = 0.0;
     for (int constraint = 0; constraint < active_count; ++constraint)
     {
-        const int wheel = active_wheels[constraint];
-        diagnostics.active_constraint_wheel[constraint] = wheel;
-        diagnostics.active_constraint_kind[constraint] = active_kinds[constraint];
-        diagnostics.constraint_impulse_newton_seconds[constraint] =
-            input.elapsed_seconds * multipliers[constraint];
-        const double average_velocity = 0.5
-            * (previous_state.suspension_extension_velocity_meters_per_second[wheel]
-                + next_state.suspension_extension_velocity_meters_per_second[wheel]);
-        const double work = input.elapsed_seconds * multipliers[constraint] * average_velocity;
-        constraint_loss += std::max(0.0, -work);
+        const int kind = active_kinds[constraint];
+        const int index = active_indices[constraint];
+        diagnostics.active_constraint_index[constraint] = index;
+        diagnostics.active_constraint_kind[constraint] = kind;
+        diagnostics.constraint_impulse_newton_seconds[constraint] = elapsed * multipliers[constraint];
+        if (kind == TIRE_VERTICAL_CONSTRAINT_CHASSIS)
+        {
+            diagnostics.active_constraint_wheel[constraint] = -1;
+            const TireVerticalChassisContactConfiguration& contact =
+                configuration.chassis_contact[index];
+            const double previous_body_velocity = previous_state.body_velocity[0]
+                + contact.y_meters * previous_state.body_velocity[1]
+                - contact.x_meters * previous_state.body_velocity[2];
+            const double next_body_velocity = next_state.body_velocity[0]
+                + contact.y_meters * next_state.body_velocity[1]
+                - contact.x_meters * next_state.body_velocity[2];
+            const double average_velocity = 0.5
+                * (previous_body_velocity + next_body_velocity);
+            const double work = elapsed * multipliers[constraint] * average_velocity;
+            chassis_loss += std::max(0.0, -work);
+            chassis_work += work;
+            chassis_ground_work += elapsed * multipliers[constraint]
+                * input.chassis_ground_height_velocity_meters_per_second[index];
+
+            const bool gap_ok = diagnostics.chassis_contact_gap_meters[index] >= -1.0e-5;
+            diagnostics.chassis_contact_active[index] =
+                (multipliers[constraint] >= -TireVerticalMultiplierTolerance
+                    && gap_ok) ? 1 : 0;
+            diagnostics.chassis_contact_impulse_newton_seconds[index] =
+                diagnostics.chassis_contact_active[index]
+                    ? elapsed * multipliers[constraint] : 0.0;
+        }
+        else if (kind == TIRE_VERTICAL_CONSTRAINT_TIRE)
+        {
+            diagnostics.active_constraint_wheel[constraint] = index;
+            const double previous_normal_velocity = TireVerticalTireNormalVelocity(
+                configuration, index, previous_state,
+                input.ground_height_velocity_meters_per_second[index]);
+            const double next_normal_velocity = TireVerticalTireNormalVelocity(
+                configuration, index, next_state,
+                input.ground_height_velocity_meters_per_second[index]);
+            const double average_velocity = 0.5
+                * (previous_normal_velocity + next_normal_velocity);
+            const double work = elapsed * multipliers[constraint] * average_velocity;
+            tire_loss += std::max(0.0, -work);
+            tire_work += work;
+            tire_ground_work += elapsed * multipliers[constraint]
+                * input.ground_height_velocity_meters_per_second[index];
+            diagnostics.tire_contact_impulse_newton_seconds[index] =
+                elapsed * multipliers[constraint];
+            diagnostics.tire_contact_support_seconds[index] = elapsed;
+            diagnostics.tire_contact_supported_during_step[index] = 1;
+            diagnostics.tire_normal_force_newtons[index] = multipliers[constraint];
+        }
+        else
+        {
+            diagnostics.active_constraint_wheel[constraint] = index;
+            const double average_velocity = 0.5
+                * (previous_state.suspension_extension_velocity_meters_per_second[index]
+                    + next_state.suspension_extension_velocity_meters_per_second[index]);
+            const double work = elapsed * multipliers[constraint] * average_velocity;
+            constraint_loss += std::max(0.0, -work);
+            constraint_work += work;
+        }
+    }
+    for (int wheel = 0; wheel < 4; ++wheel)
+    {
+        const double ground = TireVerticalEndGroundHeight(input.ground_height_meters[wheel],
+            input.ground_height_velocity_meters_per_second[wheel], elapsed);
+        const double gap = TireVerticalTireGapFromPositions(configuration, wheel,
+            next_state, ground);
+        diagnostics.tire_gap_meters[wheel] = gap;
+        diagnostics.tire_contact_at_end[wheel] = gap <= 1.0e-5 ? 1 : 0;
+        diagnostics.tire_contact[wheel] = diagnostics.tire_contact_at_end[wheel];
+        if (diagnostics.tire_contact_supported_during_step[wheel])
+        {
+            diagnostics.tire_contact[wheel] = 1;
+        }
     }
     diagnostics.constraint_energy_loss_joules = constraint_loss;
+    diagnostics.constraint_work_joules = constraint_work;
+    diagnostics.chassis_contact_energy_loss_joules = chassis_loss;
+    diagnostics.chassis_contact_work_joules = chassis_work;
+    diagnostics.chassis_contact_ground_work_joules = chassis_ground_work;
+    diagnostics.tire_contact_energy_loss_joules = tire_loss;
+    diagnostics.tire_contact_work_joules = tire_work;
+    diagnostics.tire_contact_ground_work_joules = tire_ground_work;
     diagnostics.damper_energy_loss_joules =
-        TireVerticalCornerDamperLoss(configuration, next_state, input);
-    diagnostics.tire_damping_energy_loss_joules =
-        TireVerticalTireDampingLoss(configuration, next_state, input);
+        TireVerticalCornerDamperLoss(configuration, previous_state, next_state, input);
+    diagnostics.tire_damping_energy_loss_joules = 0.0;
     return 1;
 }
 
@@ -1247,14 +1977,6 @@ double TireVerticalSystemEnergyJoules(const TireVerticalSolverConfiguration& con
             - state.suspension_extension_meters[wheel];
         potential += configuration.unsprung_mass_kilograms[wheel]
             * configuration.gravity_meters_per_second_squared * center_height;
-
-        const double clearance = chassis_reference_height - ground_height_meters[wheel];
-        const double deflection = state.suspension_extension_meters[wheel] - clearance;
-        if (deflection > 0.0)
-        {
-            potential += 0.5 * configuration.corner[wheel].tire_radial_stiffness_newtons_per_meter
-                * deflection * deflection;
-        }
 
         const double bellcrank = configuration.corner[wheel].spring.bellcrank_ratio;
         potential += TireVerticalSpringPotentialJoules(configuration.corner[wheel].spring,
@@ -1356,45 +2078,16 @@ double TireVerticalJacobianError(const TireVerticalSolverConfiguration& configur
     return maximum_error;
 }
 
-int TireVerticalSolverInitializeEquilibrium(const TireVerticalSolverConfiguration& configuration,
-    const double ground_height_meters[4], TireVerticalSolverState& state,
-    TireVerticalSolverDiagnostics& diagnostics)
+static int SolveVerticalEquilibrium(const TireVerticalSolverConfiguration& configuration,
+    const double ground_height_meters[4], const int active_contact[4],
+    TireVerticalSolverState& state, double normal_force_newtons[4],
+    double gap_meters[4], double* residual_norm, int* iterations)
 {
-    std::memset(&diagnostics, 0, sizeof(diagnostics));
-    double mass_matrix[7][7] = {};
-    BuildMassMatrix(configuration, mass_matrix);
-    diagnostics.mass_matrix_positive_definite = CholeskyPositiveDefinite(mass_matrix);
-    double sprung_mass_matrix[3][3] = {};
-    BuildSprungMassMatrix(configuration, sprung_mass_matrix);
-    diagnostics.sprung_mass_matrix_positive_definite =
-        CholeskyPositiveDefinite3(sprung_mass_matrix);
-    std::memcpy(diagnostics.mass_matrix, mass_matrix, sizeof(mass_matrix));
-    if (!diagnostics.mass_matrix_positive_definite
-        || !diagnostics.sprung_mass_matrix_positive_definite)
-    {
-        return 0;
-    }
-
-    std::memset(&state, 0, sizeof(state));
-    for (int wheel = 0; wheel < 4; ++wheel)
-    {
-        const double bellcrank = configuration.corner[wheel].spring.bellcrank_ratio;
-        state.suspension_extension_meters[wheel] =
-            configuration.corner[wheel].spring.reference_position_meters / bellcrank;
-    }
-
-    const double average_normal_force = configuration.total_mass_kilograms
-        * configuration.gravity_meters_per_second_squared * 0.25;
-    double average_chassis_height = 0.0;
-    for (int wheel = 0; wheel < 4; ++wheel)
-    {
-        const double deflection = average_normal_force
-            / configuration.corner[wheel].tire_radial_stiffness_newtons_per_meter;
-        average_chassis_height += (state.suspension_extension_meters[wheel] - deflection
-            + ground_height_meters[wheel]) * 0.25;
-    }
-    state.body_position[0] = average_chassis_height;
-
+    double q[7] = {
+        state.body_position[0], state.body_position[1], state.body_position[2],
+        state.suspension_extension_meters[0], state.suspension_extension_meters[1],
+        state.suspension_extension_meters[2], state.suspension_extension_meters[3]
+    };
     TireVerticalSolverStepInput static_input = {};
     static_input.elapsed_seconds = 1.0;
     for (int wheel = 0; wheel < 4; ++wheel)
@@ -1402,56 +2095,61 @@ int TireVerticalSolverInitializeEquilibrium(const TireVerticalSolverConfiguratio
         static_input.ground_height_meters[wheel] = ground_height_meters[wheel];
     }
 
-    TireVerticalSolverState trial_state = state;
-    double q[7] = {};
-    q[0] = state.body_position[0];
-    for (int wheel = 0; wheel < 4; ++wheel)
-    {
-        q[3 + wheel] = state.suspension_extension_meters[wheel];
-    }
     for (int iteration = 0; iteration < 80; ++iteration)
     {
+        TireVerticalSolverState trial_state = state;
         trial_state.body_position[0] = q[0];
         trial_state.body_position[1] = q[1];
         trial_state.body_position[2] = q[2];
-        trial_state.body_velocity[0] = 0.0;
-        trial_state.body_velocity[1] = 0.0;
-        trial_state.body_velocity[2] = 0.0;
+        for (int body = 0; body < 3; ++body)
+        {
+            trial_state.body_velocity[body] = 0.0;
+        }
         for (int wheel = 0; wheel < 4; ++wheel)
         {
             trial_state.suspension_extension_meters[wheel] = q[3 + wheel];
             trial_state.suspension_extension_velocity_meters_per_second[wheel] = 0.0;
         }
-
         TireVerticalForceEvaluation evaluation;
         EvaluateForces(configuration, trial_state, static_input, evaluation);
+        TireVerticalSuspensionEvaluation suspension;
+        EvaluateSuspension(configuration, trial_state.suspension_extension_meters,
+            trial_state.suspension_extension_velocity_meters_per_second, suspension);
+
         double residual[7] = {};
-        for (int row = 0; row < 7; ++row)
+        double sprung_weight = configuration.total_mass_kilograms;
+        for (int wheel = 0; wheel < 4; ++wheel)
         {
-            residual[row] = evaluation.generalized_force[row];
+            sprung_weight -= configuration.unsprung_mass_kilograms[wheel];
+        }
+        residual[0] = -sprung_weight * configuration.gravity_meters_per_second_squared;
+        residual[1] = 0.0;
+        residual[2] = 0.0;
+        for (int wheel = 0; wheel < 4; ++wheel)
+        {
+            const double force = suspension.force_newtons[wheel];
+            residual[0] += force;
+            residual[1] += configuration.wheel_y_meters[wheel] * force;
+            residual[2] -= configuration.wheel_x_meters[wheel] * force;
+        }
+        for (int body = 0; body < 3; ++body)
+        {
+            residual[body] += configuration.external_body_generalized_force[body];
+        }
+        for (int wheel = 0; wheel < 4; ++wheel)
+        {
+            gap_meters[wheel] = TireVerticalTireGapFromPositions(configuration, wheel,
+                trial_state, ground_height_meters[wheel]);
+            normal_force_newtons[wheel] = active_contact[wheel]
+                ? evaluation.generalized_force[3 + wheel] : 0.0;
+            residual[3 + wheel] = active_contact[wheel]
+                ? gap_meters[wheel] : evaluation.generalized_force[3 + wheel];
         }
         const double norm = VectorNorm(residual, 7);
-        diagnostics.residual_norm = norm;
-        if (norm <= 1.0e-6)
+        *residual_norm = norm;
+        if (norm <= 1.0e-7)
         {
-            for (int wheel = 0; wheel < 4; ++wheel)
-            {
-                const double lower = configuration.corner[wheel].spring.minimum_position_meters
-                    / configuration.corner[wheel].spring.bellcrank_ratio;
-                const double upper = configuration.corner[wheel].spring.maximum_position_meters
-                    / configuration.corner[wheel].spring.bellcrank_ratio;
-                if (trial_state.suspension_extension_meters[wheel] < lower - 1.0e-6
-                    || trial_state.suspension_extension_meters[wheel] > upper + 1.0e-6)
-                {
-                    diagnostics.converged = 0;
-                    return 0;
-                }
-            }
             state = trial_state;
-            FillDiagnostics(configuration, state, static_input, TireVerticalSuspensionEvaluation(),
-                evaluation, diagnostics);
-            diagnostics.converged = 1;
-            diagnostics.newton_iterations = iteration;
             for (int body = 0; body < 3; ++body)
             {
                 state.body_velocity[body] = 0.0;
@@ -1460,15 +2158,48 @@ int TireVerticalSolverInitializeEquilibrium(const TireVerticalSolverConfiguratio
             {
                 state.suspension_extension_velocity_meters_per_second[wheel] = 0.0;
             }
+            *iterations = iteration;
             return 1;
         }
 
         double jacobian[7][7] = {};
-        std::memcpy(jacobian, evaluation.jacobian_position, sizeof(jacobian));
+        for (int wheel = 0; wheel < 4; ++wheel)
+        {
+            for (int column = 0; column < 7; ++column)
+            {
+                jacobian[3 + wheel][column] = evaluation.jacobian_position[3 + wheel][column];
+            }
+        }
+        for (int extension = 0; extension < 4; ++extension)
+        {
+            double force_derivative = 0.0;
+            double roll_derivative = 0.0;
+            double pitch_derivative = 0.0;
+            for (int wheel = 0; wheel < 4; ++wheel)
+            {
+                const double derivative = suspension.force_derivative_extension[wheel][extension];
+                force_derivative += derivative;
+                roll_derivative += configuration.wheel_y_meters[wheel] * derivative;
+                pitch_derivative -= configuration.wheel_x_meters[wheel] * derivative;
+            }
+            jacobian[0][3 + extension] = force_derivative;
+            jacobian[1][3 + extension] = roll_derivative;
+            jacobian[2][3 + extension] = pitch_derivative;
+        }
+        for (int wheel = 0; wheel < 4; ++wheel)
+        {
+            if (active_contact[wheel])
+            {
+                jacobian[3 + wheel][0] = 1.0;
+                jacobian[3 + wheel][1] = configuration.wheel_y_meters[wheel];
+                jacobian[3 + wheel][2] = -configuration.wheel_x_meters[wheel];
+                jacobian[3 + wheel][3 + wheel] = -1.0;
+            }
+        }
+
         double delta[7] = {};
         if (!SolveLinearSystem(&jacobian[0][0], 7, residual, delta, 7))
         {
-            diagnostics.converged = 0;
             return 0;
         }
         for (int index = 0; index < 7; ++index)
@@ -1496,10 +2227,37 @@ int TireVerticalSolverInitializeEquilibrium(const TireVerticalSolverConfiguratio
             }
             TireVerticalForceEvaluation candidate_evaluation;
             EvaluateForces(configuration, trial_state, static_input, candidate_evaluation);
+            TireVerticalSuspensionEvaluation candidate_suspension;
+            EvaluateSuspension(configuration, trial_state.suspension_extension_meters,
+                trial_state.suspension_extension_velocity_meters_per_second,
+                candidate_suspension);
             double candidate_residual[7] = {};
-            for (int row = 0; row < 7; ++row)
+            double candidate_sprung_weight = configuration.total_mass_kilograms;
+            for (int wheel = 0; wheel < 4; ++wheel)
             {
-                candidate_residual[row] = candidate_evaluation.generalized_force[row];
+                candidate_sprung_weight -= configuration.unsprung_mass_kilograms[wheel];
+            }
+            candidate_residual[0] = -candidate_sprung_weight
+                * configuration.gravity_meters_per_second_squared;
+            candidate_residual[1] = 0.0;
+            candidate_residual[2] = 0.0;
+            for (int wheel = 0; wheel < 4; ++wheel)
+            {
+                const double force = candidate_suspension.force_newtons[wheel];
+                candidate_residual[0] += force;
+                candidate_residual[1] += configuration.wheel_y_meters[wheel] * force;
+                candidate_residual[2] -= configuration.wheel_x_meters[wheel] * force;
+            }
+            for (int body = 0; body < 3; ++body)
+            {
+                candidate_residual[body] += configuration.external_body_generalized_force[body];
+            }
+            for (int wheel = 0; wheel < 4; ++wheel)
+            {
+                const double gap = TireVerticalTireGapFromPositions(configuration, wheel,
+                    trial_state, ground_height_meters[wheel]);
+                candidate_residual[3 + wheel] = active_contact[wheel]
+                    ? gap : candidate_evaluation.generalized_force[3 + wheel];
             }
             const double candidate_norm = VectorNorm(candidate_residual, 7);
             if (candidate_norm < best_norm)
@@ -1513,7 +2271,6 @@ int TireVerticalSolverInitializeEquilibrium(const TireVerticalSolverConfiguratio
         }
         if (!accepted)
         {
-            diagnostics.converged = 0;
             return 0;
         }
         for (int index = 0; index < 7; ++index)
@@ -1522,77 +2279,183 @@ int TireVerticalSolverInitializeEquilibrium(const TireVerticalSolverConfiguratio
         }
     }
 
-    diagnostics.converged = 0;
     return 0;
+}
+
+int TireVerticalSolverInitializeEquilibrium(const TireVerticalSolverConfiguration& configuration,
+    const double ground_height_meters[4], TireVerticalSolverState& output_state,
+    TireVerticalSolverDiagnostics& diagnostics)
+{
+    std::memset(&diagnostics, 0, sizeof(diagnostics));
+    if (!FiniteConfiguration(configuration) || !FiniteValues(ground_height_meters, 4))
+    {
+        diagnostics.failed = 1;
+        diagnostics.failure_reason = TIRE_VERTICAL_FAILURE_NONFINITE;
+        return 0;
+    }
+    TireVerticalSolverState state = output_state;
+    double mass_matrix[7][7] = {};
+    BuildMassMatrix(configuration, mass_matrix);
+    diagnostics.mass_matrix_positive_definite = CholeskyPositiveDefinite(mass_matrix);
+    double sprung_mass_matrix[3][3] = {};
+    BuildSprungMassMatrix(configuration, sprung_mass_matrix);
+    diagnostics.sprung_mass_matrix_positive_definite =
+        CholeskyPositiveDefinite3(sprung_mass_matrix);
+    std::memcpy(diagnostics.mass_matrix, mass_matrix, sizeof(mass_matrix));
+    if (!diagnostics.mass_matrix_positive_definite
+        || !diagnostics.sprung_mass_matrix_positive_definite)
+    {
+        return 0;
+    }
+
+    std::memset(&state, 0, sizeof(state));
+    double average_height = 0.0;
+    for (int wheel = 0; wheel < 4; ++wheel)
+    {
+        const double bellcrank = configuration.corner[wheel].spring.bellcrank_ratio;
+        state.suspension_extension_meters[wheel] =
+            configuration.corner[wheel].spring.reference_position_meters / bellcrank;
+        average_height += state.suspension_extension_meters[wheel]
+            + ground_height_meters[wheel];
+    }
+    state.body_position[0] = 0.25 * average_height;
+
+    int active_contact[4] = { 1, 1, 1, 1 };
+    double normal_force_newtons[4] = {};
+    double gap_meters[4] = {};
+    double residual_norm = 0.0;
+    int iterations = 0;
+
+    for (int active_set_iteration = 0; active_set_iteration < 8; ++active_set_iteration)
+    {
+        if (!SolveVerticalEquilibrium(configuration, ground_height_meters, active_contact,
+                state, normal_force_newtons, gap_meters, &residual_norm, &iterations))
+        {
+            diagnostics.converged = 0;
+            diagnostics.residual_norm = residual_norm;
+            return 0;
+        }
+
+        int changed = 0;
+        for (int wheel = 0; wheel < 4; ++wheel)
+        {
+            if (active_contact[wheel] && normal_force_newtons[wheel] < -1.0e-6)
+            {
+                active_contact[wheel] = 0;
+                changed = 1;
+            }
+            else if (!active_contact[wheel] && gap_meters[wheel] < -1.0e-6)
+            {
+                active_contact[wheel] = 1;
+                changed = 1;
+            }
+        }
+        if (!changed)
+        {
+            break;
+        }
+    }
+
+    for (int wheel = 0; wheel < 4; ++wheel)
+    {
+        const double lower = TireVerticalLimitPosition(configuration, wheel,
+            TIRE_VERTICAL_CONSTRAINT_LOWER);
+        const double upper = TireVerticalLimitPosition(configuration, wheel,
+            TIRE_VERTICAL_CONSTRAINT_UPPER);
+        if (state.suspension_extension_meters[wheel] < lower - 1.0e-6
+            || state.suspension_extension_meters[wheel] > upper + 1.0e-6)
+        {
+            diagnostics.converged = 0;
+            return 0;
+        }
+    }
+
+    TireVerticalSolverStepInput static_input = {};
+    static_input.elapsed_seconds = 1.0;
+    for (int wheel = 0; wheel < 4; ++wheel)
+    {
+        static_input.ground_height_meters[wheel] = ground_height_meters[wheel];
+    }
+    TireVerticalForceEvaluation evaluation;
+    EvaluateForces(configuration, state, static_input, evaluation);
+    TireVerticalSuspensionEvaluation suspension;
+    EvaluateSuspension(configuration, state.suspension_extension_meters,
+        state.suspension_extension_velocity_meters_per_second, suspension);
+    FillDiagnostics(configuration, state, static_input, suspension, evaluation, diagnostics);
+
+    if (!TireVerticalStateIsFinite(state) || !FiniteValues(normal_force_newtons, 4)) return 0;
+    output_state = state;
+    diagnostics.converged = 1;
+    diagnostics.newton_iterations = iterations;
+    diagnostics.residual_norm = residual_norm;
+    for (int wheel = 0; wheel < 4; ++wheel)
+    {
+        diagnostics.tire_normal_force_newtons[wheel] = normal_force_newtons[wheel];
+        diagnostics.tire_gap_meters[wheel] = gap_meters[wheel];
+        diagnostics.tire_contact[wheel] = active_contact[wheel] ? 1 : 0;
+        diagnostics.tire_contact_at_end[wheel] = active_contact[wheel] ? 1 : 0;
+        diagnostics.tire_contact_supported_during_step[wheel] = active_contact[wheel] ? 1 : 0;
+        diagnostics.suspension_force_newtons[wheel] = suspension.force_newtons[wheel];
+        diagnostics.wheel_center_height_meters[wheel] =
+            state.body_position[0]
+            - configuration.wheel_x_meters[wheel] * state.body_position[2]
+            + configuration.wheel_y_meters[wheel] * state.body_position[1]
+            + configuration.corner[wheel].unloaded_radius_meters
+            - state.suspension_extension_meters[wheel];
+    }
+    for (int contact = 0; contact < configuration.chassis_contact_count; ++contact)
+    {
+        if (!configuration.chassis_contact[contact].enabled)
+        {
+            continue;
+        }
+        diagnostics.chassis_contact_gap_meters[contact] =
+            TireVerticalChassisGapFromPositions(configuration, contact, state,
+                static_input.chassis_ground_height_meters[contact]);
+    }
+    return 1;
 }
 
 static void EvaluateQuarterCarForces(const TireVerticalQuarterCarConfiguration& configuration,
     const TireVerticalQuarterCarState& state, const TireVerticalQuarterCarStepInput& input,
-    double force[2], double jacobian_position[2][2], double jacobian_velocity[2][2],
-    double& normal_force, double& suspension_force, double& deflection,
-    double& deflection_velocity, double& center_height, int& contact)
+    double generalized_force[2], double jacobian_position[2][2],
+    double jacobian_velocity[2][2], double& suspension_force,
+    double& gap, double& gap_velocity, double& center_height)
 {
-    const double chassis_reference_height = state.body_position_meters;
-    const double chassis_reference_velocity = state.body_velocity_meters_per_second;
-    deflection = state.suspension_extension_meters
-        - (chassis_reference_height - input.ground_height_meters);
-    deflection_velocity = input.ground_height_velocity_meters_per_second
-        + state.suspension_extension_velocity_meters_per_second
-        - chassis_reference_velocity;
-    normal_force = 0.0;
-    contact = 0;
-    std::memset(jacobian_position, 0, sizeof(double) * 4);
-    std::memset(jacobian_velocity, 0, sizeof(double) * 4);
-    if (deflection > 0.0)
-    {
-        const double linear_force = configuration.corner.tire_radial_stiffness_newtons_per_meter
-            * deflection
-            + configuration.corner.tire_radial_damping_newtons_per_second_per_meter
-                * deflection_velocity;
-        if (linear_force > 0.0)
-        {
-            normal_force = linear_force;
-            contact = 1;
-            jacobian_position[0][0] = -configuration.corner.tire_radial_stiffness_newtons_per_meter;
-            jacobian_position[0][1] = configuration.corner.tire_radial_stiffness_newtons_per_meter;
-            jacobian_position[1][0] = configuration.corner.tire_radial_stiffness_newtons_per_meter;
-            jacobian_position[1][1] = -configuration.corner.tire_radial_stiffness_newtons_per_meter;
-            jacobian_velocity[0][0] =
-                -configuration.corner.tire_radial_damping_newtons_per_second_per_meter;
-            jacobian_velocity[0][1] =
-                configuration.corner.tire_radial_damping_newtons_per_second_per_meter;
-            jacobian_velocity[1][0] =
-                configuration.corner.tire_radial_damping_newtons_per_second_per_meter;
-            jacobian_velocity[1][1] =
-                -configuration.corner.tire_radial_damping_newtons_per_second_per_meter;
-        }
-    }
-
+    const double bellcrank = configuration.corner.spring.bellcrank_ratio;
+    const double position = bellcrank * state.suspension_extension_meters;
+    const double damper_velocity = -bellcrank
+        * state.suspension_extension_velocity_meters_per_second;
     suspension_force = TireVerticalCornerSuspensionForce(configuration.corner,
-        state.suspension_extension_meters, state.suspension_extension_velocity_meters_per_second);
-    center_height = chassis_reference_height + configuration.corner.unloaded_radius_meters
-        - state.suspension_extension_meters;
+        state.suspension_extension_meters,
+        state.suspension_extension_velocity_meters_per_second);
 
-    force[0] = normal_force
-        - (configuration.sprung_mass_kilograms + configuration.unsprung_mass_kilograms)
-            * configuration.gravity_meters_per_second_squared;
-    force[1] = suspension_force - normal_force
+    generalized_force[0] = -(configuration.sprung_mass_kilograms
+        + configuration.unsprung_mass_kilograms)
+        * configuration.gravity_meters_per_second_squared;
+    generalized_force[1] = suspension_force
         + configuration.unsprung_mass_kilograms
             * configuration.gravity_meters_per_second_squared;
 
-    const double bellcrank = configuration.corner.spring.bellcrank_ratio;
-    const double position = bellcrank * state.suspension_extension_meters;
+    std::memset(jacobian_position, 0, sizeof(double) * 4);
+    std::memset(jacobian_velocity, 0, sizeof(double) * 4);
     const double spring_force = TireVerticalSpringForce(configuration.corner.spring, position);
-    const double damper_velocity = -bellcrank
-        * state.suspension_extension_velocity_meters_per_second;
-    const double damper_slope = TireVerticalDamperSlope(configuration.corner.damper, damper_velocity);
     if (spring_force > 0.0)
     {
-        const double derivative = bellcrank * bellcrank
+        jacobian_position[1][1] = bellcrank * bellcrank
             * configuration.corner.spring.spring_constant_newtons_per_meter;
-        jacobian_position[1][1] += derivative;
     }
-    jacobian_velocity[1][1] += -bellcrank * bellcrank * damper_slope;
+    jacobian_velocity[1][1] = -bellcrank * bellcrank
+        * TireVerticalDamperSlope(configuration.corner.damper, damper_velocity);
+
+    center_height = state.body_position_meters
+        + configuration.corner.unloaded_radius_meters
+        - state.suspension_extension_meters;
+    gap = state.body_position_meters - state.suspension_extension_meters
+        - input.ground_height_meters;
+    gap_velocity = state.body_velocity_meters_per_second
+        - state.suspension_extension_velocity_meters_per_second
+        - input.ground_height_velocity_meters_per_second;
 }
 
 static void BuildQuarterCarMassMatrix(const TireVerticalQuarterCarConfiguration& configuration,
@@ -1617,6 +2480,206 @@ static int QuarterCarMassMatrixPositiveDefinite(const TireVerticalQuarterCarConf
         && mass_matrix[0][0] * mass_matrix[1][1] - mass_matrix[0][1] * mass_matrix[1][0] > 0.0;
 }
 
+static double QuarterCarLimitPosition(const TireVerticalQuarterCarConfiguration& configuration,
+    int kind)
+{
+    return kind == TIRE_VERTICAL_CONSTRAINT_LOWER
+        ? configuration.corner.spring.minimum_position_meters
+            / configuration.corner.spring.bellcrank_ratio
+        : configuration.corner.spring.maximum_position_meters
+            / configuration.corner.spring.bellcrank_ratio;
+}
+
+static int SolveQuarterCarNewton(const TireVerticalQuarterCarConfiguration& configuration,
+    const TireVerticalQuarterCarState& previous_state,
+    const TireVerticalQuarterCarStepInput& input, int active_kind,
+    TireVerticalQuarterCarState& state, double& multiplier, double& residual_norm,
+    int& iterations)
+{
+    double mass_matrix[2][2] = {};
+    BuildQuarterCarMassMatrix(configuration, mass_matrix);
+    const int system_size = active_kind == TIRE_VERTICAL_CONSTRAINT_NONE ? 2 : 3;
+
+    for (int iteration = 0; iteration < TireVerticalMaximumNewtonIterations; ++iteration)
+    {
+        TireVerticalQuarterCarState evaluation_state = state;
+        evaluation_state.body_position_meters = previous_state.body_position_meters
+            + input.elapsed_seconds * state.body_velocity_meters_per_second;
+        evaluation_state.suspension_extension_meters =
+            previous_state.suspension_extension_meters
+            + input.elapsed_seconds * state.suspension_extension_velocity_meters_per_second;
+
+        double generalized_force[2] = {};
+        double jacobian_position[2][2] = {};
+        double jacobian_velocity[2][2] = {};
+        double suspension_force = 0.0;
+        double gap = 0.0;
+        double gap_velocity = 0.0;
+        double center_height = 0.0;
+        EvaluateQuarterCarForces(configuration, evaluation_state, input,
+            generalized_force, jacobian_position, jacobian_velocity,
+            suspension_force, gap, gap_velocity, center_height);
+
+        double residual[3] = {};
+        for (int row = 0; row < 2; ++row)
+        {
+            const double previous_velocity = row == 0
+                ? previous_state.body_velocity_meters_per_second
+                : previous_state.suspension_extension_velocity_meters_per_second;
+            const double velocity = row == 0
+                ? state.body_velocity_meters_per_second
+                : state.suspension_extension_velocity_meters_per_second;
+            residual[row] = mass_matrix[row][0]
+                * (state.body_velocity_meters_per_second
+                    - previous_state.body_velocity_meters_per_second)
+                + mass_matrix[row][1]
+                * (state.suspension_extension_velocity_meters_per_second
+                    - previous_state.suspension_extension_velocity_meters_per_second)
+                - input.elapsed_seconds * generalized_force[row];
+            (void)previous_velocity;
+            (void)velocity;
+        }
+        if (active_kind == TIRE_VERTICAL_CONSTRAINT_TIRE)
+        {
+            residual[0] -= input.elapsed_seconds * multiplier;
+            residual[1] += input.elapsed_seconds * multiplier;
+            residual[2] = gap;
+        }
+        else if (active_kind == TIRE_VERTICAL_CONSTRAINT_LOWER
+            || active_kind == TIRE_VERTICAL_CONSTRAINT_UPPER)
+        {
+            residual[1] -= input.elapsed_seconds * multiplier;
+            residual[2] = previous_state.suspension_extension_meters
+                + input.elapsed_seconds * state.suspension_extension_velocity_meters_per_second
+                - QuarterCarLimitPosition(configuration, active_kind);
+        }
+
+        const double norm = VectorNorm(residual, system_size);
+        residual_norm = norm;
+        if (norm <= TireVerticalResidualTolerance)
+        {
+            iterations = iteration;
+            return 1;
+        }
+
+        double jacobian[3][3] = {};
+        for (int row = 0; row < 2; ++row)
+        {
+            for (int column = 0; column < 2; ++column)
+            {
+                jacobian[row][column] = mass_matrix[row][column]
+                    - input.elapsed_seconds
+                        * (input.elapsed_seconds * jacobian_position[row][column]
+                            + jacobian_velocity[row][column]);
+            }
+        }
+        if (active_kind == TIRE_VERTICAL_CONSTRAINT_TIRE)
+        {
+            jacobian[0][2] = -input.elapsed_seconds;
+            jacobian[1][2] = input.elapsed_seconds;
+            jacobian[2][0] = input.elapsed_seconds;
+            jacobian[2][1] = -input.elapsed_seconds;
+        }
+        else if (active_kind == TIRE_VERTICAL_CONSTRAINT_LOWER
+            || active_kind == TIRE_VERTICAL_CONSTRAINT_UPPER)
+        {
+            jacobian[1][2] = -input.elapsed_seconds;
+            jacobian[2][1] = input.elapsed_seconds;
+        }
+
+        double delta[3] = {};
+        if (!SolveLinearSystem(&jacobian[0][0], 3, residual, delta, system_size))
+        {
+            iterations = iteration;
+            return 0;
+        }
+        for (int index = 0; index < system_size; ++index)
+        {
+            delta[index] = -delta[index];
+        }
+
+        double step_scale = 1.0;
+        double best_norm = norm;
+        TireVerticalQuarterCarState best_state = state;
+        double best_multiplier = multiplier;
+        int accepted = 0;
+        for (int line_search = 0; line_search < 10; ++line_search)
+        {
+            TireVerticalQuarterCarState trial_state = state;
+            trial_state.body_velocity_meters_per_second += step_scale * delta[0];
+            trial_state.suspension_extension_velocity_meters_per_second += step_scale * delta[1];
+            const double trial_multiplier = active_kind == TIRE_VERTICAL_CONSTRAINT_NONE
+                ? 0.0 : multiplier + step_scale * delta[2];
+
+            TireVerticalQuarterCarState trial_evaluation = trial_state;
+            trial_evaluation.body_position_meters = previous_state.body_position_meters
+                + input.elapsed_seconds * trial_state.body_velocity_meters_per_second;
+            trial_evaluation.suspension_extension_meters =
+                previous_state.suspension_extension_meters
+                + input.elapsed_seconds
+                    * trial_state.suspension_extension_velocity_meters_per_second;
+            double trial_force[2] = {};
+            double trial_jacobian_position[2][2] = {};
+            double trial_jacobian_velocity[2][2] = {};
+            double trial_suspension = 0.0;
+            double trial_gap = 0.0;
+            double trial_gap_velocity = 0.0;
+            double trial_center = 0.0;
+            EvaluateQuarterCarForces(configuration, trial_evaluation, input,
+                trial_force, trial_jacobian_position, trial_jacobian_velocity,
+                trial_suspension, trial_gap, trial_gap_velocity, trial_center);
+
+            double trial_residual[3] = {};
+            for (int row = 0; row < 2; ++row)
+            {
+                trial_residual[row] = mass_matrix[row][0]
+                    * (trial_state.body_velocity_meters_per_second
+                        - previous_state.body_velocity_meters_per_second)
+                    + mass_matrix[row][1]
+                    * (trial_state.suspension_extension_velocity_meters_per_second
+                        - previous_state.suspension_extension_velocity_meters_per_second)
+                    - input.elapsed_seconds * trial_force[row];
+            }
+            if (active_kind == TIRE_VERTICAL_CONSTRAINT_TIRE)
+            {
+                trial_residual[0] -= input.elapsed_seconds * trial_multiplier;
+                trial_residual[1] += input.elapsed_seconds * trial_multiplier;
+                trial_residual[2] = trial_gap;
+            }
+            else if (active_kind == TIRE_VERTICAL_CONSTRAINT_LOWER
+                || active_kind == TIRE_VERTICAL_CONSTRAINT_UPPER)
+            {
+                trial_residual[1] -= input.elapsed_seconds * trial_multiplier;
+                trial_residual[2] = previous_state.suspension_extension_meters
+                    + input.elapsed_seconds
+                        * trial_state.suspension_extension_velocity_meters_per_second
+                    - QuarterCarLimitPosition(configuration, active_kind);
+            }
+            const double trial_norm = VectorNorm(trial_residual, system_size);
+            if (trial_norm < best_norm)
+            {
+                best_norm = trial_norm;
+                best_state = trial_state;
+                best_multiplier = trial_multiplier;
+                accepted = 1;
+                break;
+            }
+            step_scale *= 0.5;
+        }
+        if (!accepted)
+        {
+            iterations = iteration;
+            return 0;
+        }
+        state = best_state;
+        multiplier = best_multiplier;
+        residual_norm = best_norm;
+    }
+
+    iterations = TireVerticalMaximumNewtonIterations;
+    return 0;
+}
+
 int TireVerticalQuarterCarInitializeEquilibrium(const TireVerticalQuarterCarConfiguration& configuration,
     double ground_height_meters, TireVerticalQuarterCarState& state,
     TireVerticalQuarterCarDiagnostics& diagnostics)
@@ -1631,93 +2694,108 @@ int TireVerticalQuarterCarInitializeEquilibrium(const TireVerticalQuarterCarConf
     const double bellcrank = configuration.corner.spring.bellcrank_ratio;
     state.suspension_extension_meters =
         configuration.corner.spring.reference_position_meters / bellcrank;
-    const double normal_force_guess = (configuration.sprung_mass_kilograms
-        + configuration.unsprung_mass_kilograms)
-        * configuration.gravity_meters_per_second_squared;
-    state.body_position_meters = state.suspension_extension_meters
-        - normal_force_guess / configuration.corner.tire_radial_stiffness_newtons_per_meter
-        + ground_height_meters;
+    state.body_position_meters = state.suspension_extension_meters + ground_height_meters;
 
     TireVerticalQuarterCarStepInput static_input = {};
     static_input.elapsed_seconds = 1.0;
     static_input.ground_height_meters = ground_height_meters;
 
-    double q[2] = { state.body_position_meters, state.suspension_extension_meters };
+    /* Solve the constrained static equilibrium with the tire in contact. */
+    double multiplier = (configuration.sprung_mass_kilograms
+        + configuration.unsprung_mass_kilograms)
+        * configuration.gravity_meters_per_second_squared;
+    double residual_norm = 0.0;
     for (int iteration = 0; iteration < 80; ++iteration)
     {
-        TireVerticalQuarterCarState trial_state = state;
-        trial_state.body_position_meters = q[0];
-        trial_state.suspension_extension_meters = q[1];
+        TireVerticalQuarterCarState trial = state;
         double force[2] = {};
         double jacobian_position[2][2] = {};
         double jacobian_velocity[2][2] = {};
-        double normal_force = 0.0;
         double suspension_force = 0.0;
-        double deflection = 0.0;
-        double deflection_velocity = 0.0;
-        double center_height = 0.0;
-        int contact = 0;
-        EvaluateQuarterCarForces(configuration, trial_state, static_input, force,
-            jacobian_position, jacobian_velocity, normal_force, suspension_force,
-            deflection, deflection_velocity, center_height, contact);
-        const double residual[2] = { force[0], force[1] };
-        const double norm = VectorNorm(residual, 2);
-        diagnostics.residual_norm = norm;
+        double gap = 0.0;
+        double gap_velocity = 0.0;
+        double center = 0.0;
+        EvaluateQuarterCarForces(configuration, trial, static_input, force,
+            jacobian_position, jacobian_velocity, suspension_force, gap,
+            gap_velocity, center);
+        double residual[3] = {
+            -force[0] - multiplier,
+            -force[1] + multiplier,
+            gap
+        };
+        const double norm = VectorNorm(residual, 3);
+        residual_norm = norm;
         if (norm <= 1.0e-7)
         {
-            const double lower = configuration.corner.spring.minimum_position_meters
-                / configuration.corner.spring.bellcrank_ratio;
-            const double upper = configuration.corner.spring.maximum_position_meters
-                / configuration.corner.spring.bellcrank_ratio;
-            if (trial_state.suspension_extension_meters < lower - 1.0e-6
-                || trial_state.suspension_extension_meters > upper + 1.0e-6)
-            {
-                diagnostics.converged = 0;
-                return 0;
-            }
-            state = trial_state;
-            state.body_velocity_meters_per_second = 0.0;
-            state.suspension_extension_velocity_meters_per_second = 0.0;
+            state = trial;
             diagnostics.converged = 1;
             diagnostics.newton_iterations = iteration;
-            diagnostics.tire_normal_force_newtons = normal_force;
+            diagnostics.residual_norm = residual_norm;
+            diagnostics.tire_normal_force_newtons = multiplier;
+            diagnostics.tire_contact_impulse_newton_seconds = 0.0;
+            diagnostics.tire_contact_support_seconds = 0.0;
+            diagnostics.tire_contact_supported_during_step = 1;
             diagnostics.suspension_force_newtons = suspension_force;
-            diagnostics.tire_deflection_meters = deflection;
-            diagnostics.wheel_center_height_meters = center_height;
-            diagnostics.tire_contact = contact;
+            diagnostics.tire_gap_meters = gap;
+            diagnostics.wheel_center_height_meters = center;
+            diagnostics.tire_contact = 1;
             return 1;
         }
 
-        double delta[2] = {};
-        if (!SolveLinearSystem(&jacobian_position[0][0], 2, residual, delta, 2))
+        double jacobian[3][3] = {};
+        for (int row = 0; row < 2; ++row)
         {
-            diagnostics.converged = 0;
+            for (int column = 0; column < 2; ++column)
+            {
+                jacobian[row][column] = -jacobian_position[row][column];
+            }
+        }
+        jacobian[0][2] = -1.0;
+        jacobian[1][2] = 1.0;
+        jacobian[2][0] = 1.0;
+        jacobian[2][1] = -1.0;
+
+        double delta[3] = {};
+        if (!SolveLinearSystem(&jacobian[0][0], 3, residual, delta, 3))
+        {
             return 0;
         }
-        delta[0] = -delta[0];
-        delta[1] = -delta[1];
-
+        for (int index = 0; index < 3; ++index)
+        {
+            delta[index] = -delta[index];
+        }
         double step_scale = 1.0;
         double best_norm = norm;
-        double best_q[2] = {};
+        TireVerticalQuarterCarState best_state = state;
+        double best_multiplier = multiplier;
         int accepted = 0;
         for (int line_search = 0; line_search < 12; ++line_search)
         {
-            const double candidate_q[2] = {
-                q[0] + step_scale * delta[0], q[1] + step_scale * delta[1]
+            TireVerticalQuarterCarState candidate = state;
+            candidate.body_position_meters += step_scale * delta[0];
+            candidate.suspension_extension_meters += step_scale * delta[1];
+            const double candidate_multiplier = multiplier + step_scale * delta[2];
+            double candidate_force[2] = {};
+            double candidate_jacobian_position[2][2] = {};
+            double candidate_jacobian_velocity[2][2] = {};
+            double candidate_suspension = 0.0;
+            double candidate_gap = 0.0;
+            double candidate_gap_velocity = 0.0;
+            double candidate_center = 0.0;
+            EvaluateQuarterCarForces(configuration, candidate, static_input,
+                candidate_force, candidate_jacobian_position, candidate_jacobian_velocity,
+                candidate_suspension, candidate_gap, candidate_gap_velocity, candidate_center);
+            double candidate_residual[3] = {
+                -candidate_force[0] - candidate_multiplier,
+                -candidate_force[1] + candidate_multiplier,
+                candidate_gap
             };
-            trial_state.body_position_meters = candidate_q[0];
-            trial_state.suspension_extension_meters = candidate_q[1];
-            EvaluateQuarterCarForces(configuration, trial_state, static_input, force,
-                jacobian_position, jacobian_velocity, normal_force, suspension_force,
-                deflection, deflection_velocity, center_height, contact);
-            const double candidate_residual[2] = { force[0], force[1] };
-            const double candidate_norm = VectorNorm(candidate_residual, 2);
+            const double candidate_norm = VectorNorm(candidate_residual, 3);
             if (candidate_norm < best_norm)
             {
                 best_norm = candidate_norm;
-                best_q[0] = candidate_q[0];
-                best_q[1] = candidate_q[1];
+                best_state = candidate;
+                best_multiplier = candidate_multiplier;
                 accepted = 1;
                 break;
             }
@@ -1725,25 +2803,12 @@ int TireVerticalQuarterCarInitializeEquilibrium(const TireVerticalQuarterCarConf
         }
         if (!accepted)
         {
-            diagnostics.converged = 0;
             return 0;
         }
-        q[0] = best_q[0];
-        q[1] = best_q[1];
+        state = best_state;
+        multiplier = best_multiplier;
     }
-
-    diagnostics.converged = 0;
     return 0;
-}
-
-static double QuarterCarLimitPosition(const TireVerticalQuarterCarConfiguration& configuration,
-    int kind)
-{
-    return kind == TIRE_VERTICAL_CONSTRAINT_LOWER
-        ? configuration.corner.spring.minimum_position_meters
-            / configuration.corner.spring.bellcrank_ratio
-        : configuration.corner.spring.maximum_position_meters
-            / configuration.corner.spring.bellcrank_ratio;
 }
 
 int TireVerticalQuarterCarStep(const TireVerticalQuarterCarConfiguration& configuration,
@@ -1751,211 +2816,133 @@ int TireVerticalQuarterCarStep(const TireVerticalQuarterCarConfiguration& config
     TireVerticalQuarterCarState& next_state, TireVerticalQuarterCarDiagnostics& diagnostics)
 {
     std::memset(&diagnostics, 0, sizeof(diagnostics));
+    next_state = previous_state;
+    const double finite_values[] = { previous_state.body_position_meters,
+        previous_state.body_velocity_meters_per_second, previous_state.suspension_extension_meters,
+        previous_state.suspension_extension_velocity_meters_per_second, input.elapsed_seconds,
+        input.ground_height_meters, input.ground_height_velocity_meters_per_second,
+        configuration.sprung_mass_kilograms, configuration.unsprung_mass_kilograms,
+        configuration.gravity_meters_per_second_squared };
+    if (!FiniteValues(finite_values, 10) || !FiniteSpring(configuration.corner.spring)
+        || !FiniteDamper(configuration.corner.damper) || input.elapsed_seconds < 0.0) return 0;
     if (!(input.elapsed_seconds > 0.0))
     {
         next_state = previous_state;
-        diagnostics.converged = 0;
-        return 0;
+        diagnostics.converged = 1;
+        diagnostics.no_op = 1;
+        return 1;
     }
 
-    double mass_matrix[2][2] = {};
-    BuildQuarterCarMassMatrix(configuration, mass_matrix);
     TireVerticalQuarterCarState state = previous_state;
     int active_kind = TIRE_VERTICAL_CONSTRAINT_NONE;
     double multiplier = 0.0;
-    int total_iterations = 0;
     double residual_norm = 0.0;
+    int total_iterations = 0;
+
+    const double gap_previous = previous_state.body_position_meters
+        - previous_state.suspension_extension_meters - input.ground_height_meters;
+    if (gap_previous < -TireVerticalInitialGapTolerance) return 0;
+    const double normal_velocity_previous = previous_state.body_velocity_meters_per_second
+        - previous_state.suspension_extension_velocity_meters_per_second
+        - input.ground_height_velocity_meters_per_second;
+    if (gap_previous <= 1.0e-6 && normal_velocity_previous <= 0.0)
+    {
+        active_kind = TIRE_VERTICAL_CONSTRAINT_TIRE;
+        multiplier = (configuration.sprung_mass_kilograms
+            + configuration.unsprung_mass_kilograms)
+            * configuration.gravity_meters_per_second_squared;
+    }
+    else
+    {
+        const double lower = QuarterCarLimitPosition(configuration,
+            TIRE_VERTICAL_CONSTRAINT_LOWER);
+        const double upper = QuarterCarLimitPosition(configuration,
+            TIRE_VERTICAL_CONSTRAINT_UPPER);
+        if (previous_state.suspension_extension_meters <= lower + 1.0e-9)
+        {
+            active_kind = TIRE_VERTICAL_CONSTRAINT_LOWER;
+        }
+        else if (previous_state.suspension_extension_meters >= upper - 1.0e-9)
+        {
+            active_kind = TIRE_VERTICAL_CONSTRAINT_UPPER;
+        }
+    }
 
     for (int active_set_iteration = 0; active_set_iteration < 8; ++active_set_iteration)
     {
-        int iteration_count = 0;
-        int solved = 0;
-        for (int iteration = 0; iteration < TireVerticalMaximumNewtonIterations; ++iteration)
-        {
-            iteration_count += 1;
-            TireVerticalQuarterCarState evaluation_state = state;
-            evaluation_state.body_position_meters = previous_state.body_position_meters
-                + input.elapsed_seconds * state.body_velocity_meters_per_second;
-            evaluation_state.suspension_extension_meters =
-                previous_state.suspension_extension_meters
-                + input.elapsed_seconds * state.suspension_extension_velocity_meters_per_second;
-            double force[2] = {};
-            double jacobian_position[2][2] = {};
-            double jacobian_velocity[2][2] = {};
-            double normal_force = 0.0;
-            double suspension_force = 0.0;
-            double deflection = 0.0;
-            double deflection_velocity = 0.0;
-            double center_height = 0.0;
-            int contact = 0;
-            EvaluateQuarterCarForces(configuration, evaluation_state, input, force,
-                jacobian_position, jacobian_velocity, normal_force, suspension_force,
-                deflection, deflection_velocity, center_height, contact);
-
-            double residual[3] = {};
-            residual[0] = mass_matrix[0][0] * (state.body_velocity_meters_per_second
-                    - previous_state.body_velocity_meters_per_second)
-                + mass_matrix[0][1] * (state.suspension_extension_velocity_meters_per_second
-                    - previous_state.suspension_extension_velocity_meters_per_second)
-                - input.elapsed_seconds * force[0];
-            residual[1] = mass_matrix[1][0] * (state.body_velocity_meters_per_second
-                    - previous_state.body_velocity_meters_per_second)
-                + mass_matrix[1][1] * (state.suspension_extension_velocity_meters_per_second
-                    - previous_state.suspension_extension_velocity_meters_per_second)
-                - input.elapsed_seconds * force[1];
-            if (active_kind != TIRE_VERTICAL_CONSTRAINT_NONE)
-            {
-                residual[1] -= input.elapsed_seconds * multiplier;
-                const double limit = QuarterCarLimitPosition(configuration, active_kind);
-                residual[2] = previous_state.suspension_extension_meters
-                    + input.elapsed_seconds * state.suspension_extension_velocity_meters_per_second
-                    - limit;
-            }
-            const int system_size = active_kind == TIRE_VERTICAL_CONSTRAINT_NONE ? 2 : 3;
-            const double norm = VectorNorm(residual, system_size);
-            residual_norm = norm;
-            if (norm <= TireVerticalResidualTolerance)
-            {
-                solved = 1;
-                break;
-            }
-
-            double jacobian[3][3] = {};
-            for (int row = 0; row < 2; ++row)
-            {
-                for (int column = 0; column < 2; ++column)
-                {
-                    jacobian[row][column] = mass_matrix[row][column]
-                        - input.elapsed_seconds
-                            * (input.elapsed_seconds * jacobian_position[row][column]
-                                + jacobian_velocity[row][column]);
-                }
-            }
-            if (active_kind != TIRE_VERTICAL_CONSTRAINT_NONE)
-            {
-                jacobian[1][2] = -input.elapsed_seconds;
-                jacobian[2][1] = input.elapsed_seconds;
-            }
-
-            double delta[3] = {};
-            if (!SolveLinearSystem(&jacobian[0][0], 3, residual, delta, system_size))
-            {
-                break;
-            }
-            for (int index = 0; index < system_size; ++index)
-            {
-                delta[index] = -delta[index];
-            }
-
-            double step_scale = 1.0;
-            TireVerticalQuarterCarState trial_state = state;
-            double trial_multiplier = multiplier;
-            double best_norm = norm;
-            int accepted = 0;
-            for (int line_search = 0; line_search < 10; ++line_search)
-            {
-                trial_state = state;
-                trial_state.body_velocity_meters_per_second += step_scale * delta[0];
-                trial_state.suspension_extension_velocity_meters_per_second += step_scale * delta[1];
-                if (active_kind != TIRE_VERTICAL_CONSTRAINT_NONE)
-                {
-                    trial_multiplier = multiplier + step_scale * delta[2];
-                }
-                TireVerticalQuarterCarState trial_evaluation_state = trial_state;
-                trial_evaluation_state.body_position_meters = previous_state.body_position_meters
-                    + input.elapsed_seconds * trial_state.body_velocity_meters_per_second;
-                trial_evaluation_state.suspension_extension_meters =
-                    previous_state.suspension_extension_meters
-                    + input.elapsed_seconds
-                        * trial_state.suspension_extension_velocity_meters_per_second;
-                EvaluateQuarterCarForces(configuration, trial_evaluation_state, input, force,
-                    jacobian_position, jacobian_velocity, normal_force, suspension_force,
-                    deflection, deflection_velocity, center_height, contact);
-                double trial_residual[3] = {};
-                trial_residual[0] = mass_matrix[0][0] * (trial_state.body_velocity_meters_per_second
-                        - previous_state.body_velocity_meters_per_second)
-                    + mass_matrix[0][1] * (trial_state.suspension_extension_velocity_meters_per_second
-                        - previous_state.suspension_extension_velocity_meters_per_second)
-                    - input.elapsed_seconds * force[0];
-                trial_residual[1] = mass_matrix[1][0] * (trial_state.body_velocity_meters_per_second
-                        - previous_state.body_velocity_meters_per_second)
-                    + mass_matrix[1][1] * (trial_state.suspension_extension_velocity_meters_per_second
-                        - previous_state.suspension_extension_velocity_meters_per_second)
-                    - input.elapsed_seconds * force[1];
-                if (active_kind != TIRE_VERTICAL_CONSTRAINT_NONE)
-                {
-                    trial_residual[1] -= input.elapsed_seconds * trial_multiplier;
-                    const double limit = QuarterCarLimitPosition(configuration, active_kind);
-                    trial_residual[2] = previous_state.suspension_extension_meters
-                        + input.elapsed_seconds
-                            * trial_state.suspension_extension_velocity_meters_per_second
-                        - limit;
-                }
-                const double trial_norm = VectorNorm(trial_residual, system_size);
-                if (trial_norm < best_norm)
-                {
-                    best_norm = trial_norm;
-                    accepted = 1;
-                    break;
-                }
-                step_scale *= 0.5;
-            }
-            if (!accepted)
-            {
-                break;
-            }
-            state = trial_state;
-            multiplier = trial_multiplier;
-            residual_norm = best_norm;
-        }
-        total_iterations += iteration_count;
-        if (!solved)
+        int iterations = 0;
+        if (!SolveQuarterCarNewton(configuration, previous_state, input, active_kind,
+                state, multiplier, residual_norm, iterations))
         {
             next_state = previous_state;
-            diagnostics.newton_iterations = total_iterations;
+            diagnostics.newton_iterations = total_iterations + iterations;
             diagnostics.residual_norm = residual_norm;
-            diagnostics.converged = 0;
             return 0;
         }
+        total_iterations += iterations;
 
-        const double position = previous_state.suspension_extension_meters
+        TireVerticalQuarterCarState end_state = state;
+        end_state.body_position_meters = previous_state.body_position_meters
+            + input.elapsed_seconds * state.body_velocity_meters_per_second;
+        end_state.suspension_extension_meters = previous_state.suspension_extension_meters
             + input.elapsed_seconds * state.suspension_extension_velocity_meters_per_second;
+        const double ground_end = input.ground_height_meters
+            + input.ground_height_velocity_meters_per_second * input.elapsed_seconds;
+        const double gap_end = end_state.body_position_meters
+            - end_state.suspension_extension_meters - ground_end;
+
         int changed = 0;
-        if (active_kind == TIRE_VERTICAL_CONSTRAINT_NONE)
+        if (active_kind == TIRE_VERTICAL_CONSTRAINT_TIRE)
         {
-            const double lower = QuarterCarLimitPosition(configuration,
-                TIRE_VERTICAL_CONSTRAINT_LOWER);
-            const double upper = QuarterCarLimitPosition(configuration,
-                TIRE_VERTICAL_CONSTRAINT_UPPER);
-            if (position < lower - TireVerticalLimitToleranceMeters)
+            if (multiplier < -TireVerticalMultiplierTolerance || gap_end > 1.0e-5)
             {
-                active_kind = TIRE_VERTICAL_CONSTRAINT_LOWER;
+                active_kind = TIRE_VERTICAL_CONSTRAINT_NONE;
                 multiplier = 0.0;
-                state.suspension_extension_velocity_meters_per_second =
-                    (lower - previous_state.suspension_extension_meters) / input.elapsed_seconds;
-                changed = 1;
-            }
-            else if (position > upper + TireVerticalLimitToleranceMeters)
-            {
-                active_kind = TIRE_VERTICAL_CONSTRAINT_UPPER;
-                multiplier = 0.0;
-                state.suspension_extension_velocity_meters_per_second =
-                    (upper - previous_state.suspension_extension_meters) / input.elapsed_seconds;
                 changed = 1;
             }
         }
-        else
+        else if (active_kind == TIRE_VERTICAL_CONSTRAINT_LOWER
+            || active_kind == TIRE_VERTICAL_CONSTRAINT_UPPER)
         {
             const double limit = QuarterCarLimitPosition(configuration, active_kind);
             const int valid_sign = active_kind == TIRE_VERTICAL_CONSTRAINT_LOWER
                 ? multiplier >= -TireVerticalMultiplierTolerance
                 : multiplier <= TireVerticalMultiplierTolerance;
-            const int valid_position = std::fabs(position - limit) <= 1.0e-8;
-            if (!valid_sign || !valid_position)
+            if (!valid_sign || std::fabs(end_state.suspension_extension_meters - limit) > 1.0e-8)
             {
                 active_kind = TIRE_VERTICAL_CONSTRAINT_NONE;
                 multiplier = 0.0;
                 changed = 1;
+            }
+        }
+        else
+        {
+            if (gap_end < -1.0e-9)
+            {
+                active_kind = TIRE_VERTICAL_CONSTRAINT_TIRE;
+                multiplier = (configuration.sprung_mass_kilograms
+                    + configuration.unsprung_mass_kilograms)
+                    * configuration.gravity_meters_per_second_squared;
+                changed = 1;
+            }
+            else
+            {
+                const double lower = QuarterCarLimitPosition(configuration,
+                    TIRE_VERTICAL_CONSTRAINT_LOWER);
+                const double upper = QuarterCarLimitPosition(configuration,
+                    TIRE_VERTICAL_CONSTRAINT_UPPER);
+                if (end_state.suspension_extension_meters < lower - 1.0e-9)
+                {
+                    active_kind = TIRE_VERTICAL_CONSTRAINT_LOWER;
+                    multiplier = 0.0;
+                    changed = 1;
+                }
+                else if (end_state.suspension_extension_meters > upper + 1.0e-9)
+                {
+                    active_kind = TIRE_VERTICAL_CONSTRAINT_UPPER;
+                    multiplier = 0.0;
+                    changed = 1;
+                }
             }
         }
         if (!changed)
@@ -1964,79 +2951,104 @@ int TireVerticalQuarterCarStep(const TireVerticalQuarterCarConfiguration& config
         }
     }
 
-    const double final_position = previous_state.suspension_extension_meters
+    TireVerticalQuarterCarState end_state = state;
+    end_state.body_position_meters = previous_state.body_position_meters
+        + input.elapsed_seconds * state.body_velocity_meters_per_second;
+    end_state.suspension_extension_meters = previous_state.suspension_extension_meters
         + input.elapsed_seconds * state.suspension_extension_velocity_meters_per_second;
-    const double lower_limit = QuarterCarLimitPosition(configuration,
-        TIRE_VERTICAL_CONSTRAINT_LOWER);
-    const double upper_limit = QuarterCarLimitPosition(configuration,
-        TIRE_VERTICAL_CONSTRAINT_UPPER);
-    const int valid_limit_sign = active_kind == TIRE_VERTICAL_CONSTRAINT_NONE
-        || (active_kind == TIRE_VERTICAL_CONSTRAINT_LOWER
-            && multiplier >= -TireVerticalMultiplierTolerance)
-        || (active_kind == TIRE_VERTICAL_CONSTRAINT_UPPER
-            && multiplier <= TireVerticalMultiplierTolerance);
-    if (final_position < lower_limit - 1.0e-7 || final_position > upper_limit + 1.0e-7
-        || !valid_limit_sign)
+    const double ground_end = input.ground_height_meters
+        + input.ground_height_velocity_meters_per_second * input.elapsed_seconds;
+    const double gap_end = end_state.body_position_meters
+        - end_state.suspension_extension_meters - ground_end;
+    if (gap_end < -1.0e-5)
     {
         next_state = previous_state;
-        diagnostics.newton_iterations = total_iterations;
         diagnostics.residual_norm = residual_norm;
-        diagnostics.converged = 0;
+        return 0;
+    }
+    const double lower = QuarterCarLimitPosition(configuration, TIRE_VERTICAL_CONSTRAINT_LOWER);
+    const double upper = QuarterCarLimitPosition(configuration, TIRE_VERTICAL_CONSTRAINT_UPPER);
+    if (end_state.suspension_extension_meters < lower - 1.0e-7
+        || end_state.suspension_extension_meters > upper + 1.0e-7)
+    {
+        next_state = previous_state;
+        diagnostics.residual_norm = residual_norm;
         return 0;
     }
 
-    next_state.body_position_meters = previous_state.body_position_meters
-        + input.elapsed_seconds * state.body_velocity_meters_per_second;
-    next_state.body_velocity_meters_per_second = state.body_velocity_meters_per_second;
-    next_state.suspension_extension_meters = final_position;
-    next_state.suspension_extension_velocity_meters_per_second =
-        state.suspension_extension_velocity_meters_per_second;
-
+    next_state = end_state;
     double force[2] = {};
     double jacobian_position[2][2] = {};
     double jacobian_velocity[2][2] = {};
-    double normal_force = 0.0;
     double suspension_force = 0.0;
-    double deflection = 0.0;
-    double deflection_velocity = 0.0;
-    double center_height = 0.0;
-    int contact = 0;
+    double gap = 0.0;
+    double gap_velocity = 0.0;
+    double center = 0.0;
     EvaluateQuarterCarForces(configuration, next_state, input, force,
-        jacobian_position, jacobian_velocity, normal_force, suspension_force,
-        deflection, deflection_velocity, center_height, contact);
+        jacobian_position, jacobian_velocity, suspension_force, gap,
+        gap_velocity, center);
 
     diagnostics.converged = 1;
     diagnostics.newton_iterations = total_iterations;
     diagnostics.residual_norm = residual_norm;
-    diagnostics.tire_normal_force_newtons = normal_force;
+    diagnostics.tire_normal_force_newtons =
+        active_kind == TIRE_VERTICAL_CONSTRAINT_TIRE ? multiplier : 0.0;
+    diagnostics.tire_contact_impulse_newton_seconds =
+        active_kind == TIRE_VERTICAL_CONSTRAINT_TIRE
+            ? input.elapsed_seconds * multiplier : 0.0;
+    diagnostics.tire_contact_support_seconds =
+        active_kind == TIRE_VERTICAL_CONSTRAINT_TIRE ? input.elapsed_seconds : 0.0;
+    diagnostics.tire_contact_supported_during_step =
+        active_kind == TIRE_VERTICAL_CONSTRAINT_TIRE ? 1 : 0;
     diagnostics.suspension_force_newtons = suspension_force;
-    diagnostics.tire_deflection_meters = deflection;
-    diagnostics.wheel_center_height_meters = center_height;
-    diagnostics.tire_contact = contact;
+    diagnostics.tire_gap_meters = gap;
+    diagnostics.wheel_center_height_meters = center;
+    diagnostics.tire_contact = gap <= 1.0e-5 ? 1 : 0;
     diagnostics.lower_limit_active = active_kind == TIRE_VERTICAL_CONSTRAINT_LOWER;
     diagnostics.upper_limit_active = active_kind == TIRE_VERTICAL_CONSTRAINT_UPPER;
-    diagnostics.limit_impulse_newton_seconds = input.elapsed_seconds * multiplier;
-    if (active_kind != TIRE_VERTICAL_CONSTRAINT_NONE)
+    diagnostics.limit_impulse_newton_seconds =
+        (active_kind == TIRE_VERTICAL_CONSTRAINT_LOWER
+            || active_kind == TIRE_VERTICAL_CONSTRAINT_UPPER)
+            ? input.elapsed_seconds * multiplier : 0.0;
+
+    const double bellcrank = configuration.corner.spring.bellcrank_ratio;
+    const double average_extension_velocity = 0.5
+        * (previous_state.suspension_extension_velocity_meters_per_second
+            + next_state.suspension_extension_velocity_meters_per_second);
+    const double damper_velocity = -bellcrank * average_extension_velocity;
+    const double damper_force = TireVerticalDamperForce(configuration.corner.damper,
+        damper_velocity);
+    diagnostics.damper_energy_loss_joules = std::max(0.0,
+        -bellcrank * damper_force * average_extension_velocity * input.elapsed_seconds);
+    diagnostics.tire_damping_energy_loss_joules = 0.0;
+
+    double constraint_loss = 0.0;
+    double constraint_work = 0.0;
+    if (active_kind == TIRE_VERTICAL_CONSTRAINT_TIRE)
+    {
+        const double previous_normal_velocity = previous_state.body_velocity_meters_per_second
+            - previous_state.suspension_extension_velocity_meters_per_second
+            - input.ground_height_velocity_meters_per_second;
+        const double next_normal_velocity = next_state.body_velocity_meters_per_second
+            - next_state.suspension_extension_velocity_meters_per_second
+            - input.ground_height_velocity_meters_per_second;
+        const double average_velocity = 0.5 * (previous_normal_velocity + next_normal_velocity);
+        const double work = input.elapsed_seconds * multiplier * average_velocity;
+        constraint_loss += std::max(0.0, -work);
+        constraint_work += work;
+    }
+    else if (active_kind == TIRE_VERTICAL_CONSTRAINT_LOWER
+        || active_kind == TIRE_VERTICAL_CONSTRAINT_UPPER)
     {
         const double average_velocity = 0.5
             * (previous_state.suspension_extension_velocity_meters_per_second
                 + next_state.suspension_extension_velocity_meters_per_second);
-        diagnostics.constraint_energy_loss_joules =
-            std::max(0.0, -input.elapsed_seconds * multiplier * average_velocity);
+        const double work = input.elapsed_seconds * multiplier * average_velocity;
+        constraint_loss += std::max(0.0, -work);
+        constraint_work += work;
     }
-
-    const double bellcrank = configuration.corner.spring.bellcrank_ratio;
-    const double damper_velocity = -bellcrank
-        * next_state.suspension_extension_velocity_meters_per_second;
-    const double damper_force = TireVerticalDamperForce(configuration.corner.damper,
-        damper_velocity);
-    diagnostics.damper_energy_loss_joules = std::max(0.0,
-        -bellcrank * damper_force
-            * next_state.suspension_extension_velocity_meters_per_second
-            * input.elapsed_seconds);
-    diagnostics.tire_damping_energy_loss_joules =
-        configuration.corner.tire_radial_damping_newtons_per_second_per_meter
-        * deflection_velocity * deflection_velocity * input.elapsed_seconds;
+    diagnostics.constraint_energy_loss_joules = constraint_loss;
+    diagnostics.constraint_work_joules = constraint_work;
     return 1;
 }
 
@@ -2066,15 +3078,9 @@ double TireVerticalQuarterCarEnergyJoules(const TireVerticalQuarterCarConfigurat
         + configuration.unsprung_mass_kilograms
             * configuration.gravity_meters_per_second_squared * center_height;
 
-    const double deflection = state.suspension_extension_meters
-        - (state.body_position_meters - ground_height_meters);
-    if (deflection > 0.0)
-    {
-        potential += 0.5 * configuration.corner.tire_radial_stiffness_newtons_per_meter
-            * deflection * deflection;
-    }
     const double bellcrank = configuration.corner.spring.bellcrank_ratio;
     potential += TireVerticalSpringPotentialJoules(configuration.corner.spring,
         bellcrank * state.suspension_extension_meters);
+    (void)ground_height_meters;
     return kinetic + potential;
 }

@@ -169,9 +169,9 @@ void TireThermalModelMechanicalModifiers(const TireThermalState& state,
     double thermal_grip = TireThermalGripScale(average_tread, configuration);
     double compliance = ClampValue(pow(pressure_ratio, ClampValue(pressure.compliance_sensitivity, -3.0, 3.0)),
         0.55, 1.80);
-    modifiers.vertical_stiffness_scale = ClampValue(compliance * carcass_structure, 0.55, 1.65);
-    modifiers.vertical_damping_scale = ClampValue(sqrt(compliance) * (2.0 - carcass_structure), 0.65, 1.55);
-    modifiers.maximum_deflection_scale = ClampValue(1.0 / compliance, 0.65, 1.55);
+    modifiers.empirical_compliance_scale = ClampValue(
+        1.0 / (compliance * carcass_structure), 0.55, 1.65);
+    modifiers.empirical_deformation_limit_scale = ClampValue(1.0 / compliance, 0.65, 1.55);
     modifiers.contact_patch_scale = 1.0;
     modifiers.relaxation_length_scale = ClampValue(pow(pressure_ratio,
         ClampValue(pressure.response_sensitivity, -3.0, 3.0)), 0.80, 1.30);
@@ -254,10 +254,7 @@ static void ThermalSubstep(TireThermalState& state, const TireThermalConfigurati
 
     double carcass_from_tread = -(tread_to_carcass_power[0] + tread_to_carcass_power[1]
         + tread_to_carcass_power[2]);
-    double flex_power = contact_fraction > 0.0
-        ? fmax(input.normal_force_newtons, 0.0) * fabs(input.deflection_velocity_meters_per_second)
-            * ClampValue(configuration.carcass_hysteresis_efficiency, 0.0, 1.0)
-        : 0.0;
+    double flex_power = 0.0; /* Retired radial carcass hysteresis: the tire no longer has an integrated radial velocity. */
     double carcass_to_gas_power = carcass_to_gas * (old_carcass - old_gas);
     double carcass_air_power = carcass_to_air * sqrt(airflow)
         * (input.ambient_temperature_kelvin - old_carcass);
@@ -316,10 +313,11 @@ void TireThermalModelUpdate(TireThermalState& state, const TireThermalConfigurat
             deposited_joules, external_joules);
     }
 
-    double deflection_ratio = input.maximum_deflection_meters > 1.0e-5
-        ? ClampValue(input.deflection_meters / input.maximum_deflection_meters, 0.0, 1.5) : 0.0;
+    double deformation_ratio = input.empirical_deformation_limit_meters > 1.0e-5
+        ? ClampValue(input.empirical_deformation_meters
+            / input.empirical_deformation_limit_meters, 0.0, 1.5) : 0.0;
     double absolute_pressure = TirePressureFromGas(pressure.cold_absolute_pascals[wheel_index],
-        pressure.reference_temperature_kelvin, state.gas_kelvin, deflection_ratio,
+        pressure.reference_temperature_kelvin, state.gas_kelvin, deformation_ratio,
         configuration.volume_deflection_gain, pressure.ambient_absolute_pascals);
     double gauge_pressure = absolute_pressure - pressure.ambient_absolute_pascals;
     double clamped_gauge = ClampValue(gauge_pressure,

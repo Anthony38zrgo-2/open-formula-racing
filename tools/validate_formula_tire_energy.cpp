@@ -38,9 +38,8 @@ int main()
                     input.vehicle_speed_meters_per_second = speed;
                     input.ambient_temperature_kelvin = 303.15;
                     input.track_temperature_kelvin = 308.15;
-                    input.deflection_meters = 0.008;
-                    input.maximum_deflection_meters = 0.04;
-                    input.deflection_velocity_meters_per_second = speed > 0.0 ? 0.03 : 0.0;
+                    input.empirical_deformation_meters = 0.008;
+                    input.empirical_deformation_limit_meters = 0.04;
                     input.zone_contact_weights[0] = 1.0;
                     input.zone_contact_weights[1] = 2.0;
                     input.zone_contact_weights[2] = 1.0;
