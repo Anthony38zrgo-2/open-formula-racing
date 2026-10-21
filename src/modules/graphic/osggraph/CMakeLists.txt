@@ -80,7 +80,7 @@ SET(OSGGRAPH_SOURCES Utils/OsgMath.cpp
                      Viewer/OsgDebugHUD.cpp
                      Viewer/OsgGraphicsWindow.cpp
 
-                     Car/OsgCar.cpp
+                     Car/OsgCar.cpp Car/OsgGaragePreview.cpp
                      Car/OsgCarLight.cpp
                      Car/OsgWheel.cpp
                      Car/OsgBrake.cpp

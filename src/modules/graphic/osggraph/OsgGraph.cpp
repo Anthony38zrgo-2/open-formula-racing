@@ -18,6 +18,8 @@
 
 #include "OsgGraph.h"
 #include "OsgMain.h"
+#include "Car/OsgCar.h"
+#include "Car/OsgGaragePreview.h"
 
 // The OsgGraph: singleton.
 OsgGraph* OsgGraph::_pSelf = 0;
@@ -56,13 +58,33 @@ OsgGraph& OsgGraph::self()
 }
 
 OsgGraph::OsgGraph(const std::string& strShLibName, void* hShLibHandle)
-    : GfModule(strShLibName, hShLibHandle)
+    : GfModule(strShLibName, hShLibHandle), _garagePreview(new osggraph::GarageCarPreview), _garagePreviewCar(nullptr)
 {
     GfLogDebug("OsgGraph::Init\n");
 }
 
 OsgGraph::~OsgGraph()
 {
+    delete _garagePreview;
+}
+
+void OsgGraph::resetGarageCarPreview()
+{
+    _garagePreview->clear(); _garagePreviewCar = nullptr;
+}
+
+bool OsgGraph::drawGarageCarPreview(CarElt* car, int x, int y, int width, int height, bool side)
+{
+    if (!car || !osggraph::getCars()) return false;
+    if (_garagePreviewCar != car)
+    {
+        osggraph::SDCar* model = osggraph::getCars()->getCar(car);
+        if (!model || !_garagePreview->capture(model->getCarOsgGroup().get())) return false;
+        _garagePreviewCar = car;
+        GfLogInfo("Garage 3D: captured %s, %u triangles, no textures or driver\n",
+            car->_carName, (unsigned)_garagePreview->triangleCount());
+    }
+    return _garagePreview->draw(x, y, width, height, side);
 }
 
 // Implementation of IGraphicsEngine ****************************************
@@ -91,6 +113,7 @@ void OsgGraph::redrawView(tSituation* pSituation)
 
 void OsgGraph::unloadCars()
 {
+    resetGarageCarPreview();
     GfLogDebug("OsgGraph::unloadCars\n");
     osggraph::shutdownCars();
 }

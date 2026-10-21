@@ -627,5 +627,97 @@
       "evidence_directory": "D:/open-formula-migration-evidence/rigid-contact-active-set-20261021",
       "report": "implementation/reports/rigid_contact_active_set_fix.md"
     }
+  },
+  "garage_html_ui": {
+    "date": "2026-10-21",
+    "physics_commit": "4212abf",
+    "reference": "implementation/ui/formula-garage/reference.html",
+    "native_implementation": "src/modules/userinterface/legacymenu/racescreens/formula_garage_menu.cpp",
+    "status": "implemented, compiled, rendered in isolated native harness and installed; complete in-game flow validation pending",
+    "validation_checks": 8445,
+    "validation_failures": 0,
+    "all_previous_setup_fields_reachable": true,
+    "input_sizes_tested": [
+      [
+        1920,
+        1080
+      ],
+      [
+        1280,
+        720
+      ],
+      [
+        1024,
+        768
+      ]
+    ],
+    "legacymenu_dll_sha256": "F1870BAED9C9F5AC42EAEC885FD4D615C49099E33B10EA9A491A286BD785B4E0",
+    "distribution_manifest_sha256": "6A114FD0B048628BBBE78F2C8B04CBB8EFD5D02153633FAED3244C720E26FBFA",
+    "backup_directory": "D:/open-formula-migration-evidence/garage-html-ui-20261021",
+    "physics_or_vehicle_configuration_changed": false,
+    "strategy_scope": "live fuel and tire service; no fabricated stop scheduling, compound changes or wear estimates",
+    "human_runtime_acceptance": false,
+    "report": "implementation/reports/garage_html_ui.md"
+  },
+  "garage_player_3d": {
+    "date": "2026-10-21",
+    "status": "implemented, natively rendered and installed; full in-game flow pending",
+    "renderer": "osggraph, optional ICarPreviewRenderer capability; IGraphicsEngine vtable unchanged",
+    "source": "live player car geometry, including wheel transforms, copied without source materials or textures",
+    "driver": "excluded",
+    "views": {
+      "suspension": "orthographic top, nose up",
+      "aero_wheels": "orthographic side, horizontal",
+      "powertrain": "orthographic top"
+    },
+    "material": "neutral matte gray, soft fixed-function diffuse lighting and restrained specular; no custom GLSL required",
+    "snapshot_policy": "CPU geometry cached for one garage edit visit; refreshed on open and cleared before car unload",
+    "validation_checks": 8468,
+    "validation_failures": 0,
+    "installed_dll_sha256": {
+      "osggraph.dll": "4144E762F8CB51C7C0451508A2D8E6B62486AE9E34852845F71899908FA18E9E",
+      "legacymenu.dll": "1058DB123883CD6B5B0C5D6E6F03CFA8317BA02A69DE86A89785480A56EE437A"
+    },
+    "distribution_manifest_sha256": "CA1C5EDE215996E989E6959A7C201407148E7A2BD10B09B2106D7CA2CF3B0375",
+    "physics_or_vehicle_configuration_changed": false,
+    "complete_in_game_validation": false,
+    "evidence_directory": "D:/open-formula-migration-evidence/garage-player-3d-20261021",
+    "report": "implementation/reports/garage_player_3d.md"
+  },
+  "garage_music": {
+    "date": "2026-10-21",
+    "status": "implemented, natively validated and installed; in-game listening pending",
+    "asset": "implementation/audio/garage/run.mp3",
+    "source_sha256": "68038B826A7803290F5CF676F2BE1931670F0A602C2FA7D8B49CEC14A819B530",
+    "scope": "Formula Garage setup editor, all tabs; fade out to PIT, driving, cancel/apply, or shutdown",
+    "fade_in_ms": 800,
+    "fade_out_ms": 800,
+    "final_teardown_fade_ms": 150,
+    "respects_music_enable_and_volume": true,
+    "dedicated_mixer_channel": true,
+    "original_mp3_preserved": true,
+    "music_bench_checks": 24,
+    "music_bench_failures": 0,
+    "ui_regression_checks": 8468,
+    "ui_regression_failures": 0,
+    "legacymenu_dll_sha256": "172BA258425BEE3B678212FE0A691472F8DAFC4BCF302B0B4C26BA4A87390311",
+    "distribution_manifest_sha256": "F459CF1F6FB51D750B9E92285123098CD78568D29A1519283FB0ECF4CB89FB05",
+    "backup_directory": "D:/open-formula-migration-evidence/garage-music-20261021",
+    "human_listening_acceptance": false,
+    "report": "implementation/reports/garage_music.md"
+  },
+  "garage_tab_images": {
+    "date": "2026-10-21",
+    "status": "installed and visually checked in native UI harness; in-game flow pending",
+    "motor_tab": "user engine.png replaces 3D car in powertrain tab",
+    "strategy_tab": "user strategy.jpg centered between fuel, service and temperature cards",
+    "preserve_aspect_and_png_alpha": true,
+    "originals_byte_identical": true,
+    "validation_checks": 8470,
+    "validation_failures": 0,
+    "legacymenu_dll_sha256": "69F21BED44CCA41D29358849F0F920B1FC52A27ABED3FAF1D0B5927CBEFC5339",
+    "distribution_manifest_sha256": "35A9A5FDB990FB089383595EB01895D8D29D6CE44147F35A218087DB90FF8F50",
+    "evidence_directory": "D:/open-formula-migration-evidence/garage-tab-images-20261021",
+    "report": "implementation/reports/garage_tab_images.md"
   }
 }

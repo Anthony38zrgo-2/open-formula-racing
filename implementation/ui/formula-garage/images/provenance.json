@@ -1,0 +1,18 @@
+{
+  "images": [
+    {
+      "file": "engine.png",
+      "source": "C:\\Users\\bill\\Downloads\\Motor de alto rendimiento con pistón independiente.png",
+      "sha256": "7fc0ea01636056aae48005bdfefc7837f88f9426cfe16b2e2422e4bbb5432cc3",
+      "provided_by": "user",
+      "modifications": "none; original bytes preserved"
+    },
+    {
+      "file": "strategy.jpg",
+      "source": "C:\\Users\\bill\\AppData\\Local\\Temp\\codex-clipboard-465accb9-50f1-4701-b33a-e7d5644acd6b.jpg",
+      "sha256": "924d7ff73b3386dd33cba37d9fb107738a2b58d702f0f2b91eb3526bfdaa8bd6",
+      "provided_by": "user",
+      "modifications": "none; original bytes preserved"
+    }
+  ]
+}

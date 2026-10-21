@@ -1,11 +1,16 @@
 #include <glfeatures.h>
 #include "formula_garage_menu.h"
+#include "formula_garage_music.h"
 #include "legacymenu.h"
 #include "racescreens.h"
 #include <tgfclient.h>
 #include <robottools.h>
 #include <iphysicsengine.h>
+#include <icarpreview.h>
+#include <musicplayer.h>
+#include <sound.h>
 #include <SDL.h>
+#include <SDL_ttf.h>
 #include <GL/gl.h>
 #include <GL/glu.h>
 #include <algorithm>
@@ -24,9 +29,15 @@ constexpr double garagePositionX = 940.04363594;
 constexpr double garagePositionY = 511.07507842;
 constexpr double garageGroundHeight = 33.21259947;
 constexpr double garageHeading = -0.0066;
-float turquoise[4] = {0.27f, 0.72f, 0.75f, 1.0f};
-float white[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-float gold[4] = {1.0f, 0.84f, 0.05f, 1.0f};
+// Native rendering of implementation/ui/formula-garage/reference.html.
+float turquoise[4] = {0.3765f, 0.4941f, 0.5686f, 1.0f};
+float white[4] = {0.9137f, 0.9255f, 0.9098f, 1.0f};
+float gold[4] = {0.8902f, 0.6980f, 0.2353f, 1.0f};
+float graphite[4] = {0.0902f, 0.1059f, 0.1216f, 1.0f};
+float panelColor[4] = {0.116f, 0.141f, 0.162f, 1.0f};
+float muted[4] = {0.66f, 0.71f, 0.73f, 1.0f};
+constexpr int editorWidth = 1280;
+constexpr int editorHeight = 800;
 void* garageScreen = nullptr;
 tCarElt* garageCar = nullptr;
 bool initialArrivalPending = false;
@@ -59,6 +70,9 @@ struct GarageTexture
     int paddedHeight = 0;
 };
 std::map<std::string, GarageTexture> textures;
+std::map<std::string, GarageTexture> imageTextures;
+std::map<int, TTF_Font*> garageFonts;
+FormulaGarageMusic garageMusic;
 
 struct GarageField
 {
@@ -121,36 +135,95 @@ void Outline(double left, double bottom, double width, double height, const floa
     glVertex2d(left + width, bottom + height); glVertex2d(left, bottom + height);
     glEnd();
 }
+void ClearGarageText()
+{
+    for (const auto& entry : textures)
+        if (entry.second.identifier) glDeleteTextures(1, &entry.second.identifier);
+    textures.clear();
+}
 void Text(const std::string& text, double horizontal, double vertical, int font = GFUI_FONT_SMALL,
     float* color = turquoise, int alignment = GFUI_ALIGN_HC)
 {
+    if (editorOpen && !text.empty())
+    {
+        if (!garageFonts.count(font))
+        {
+            const char* file = font == GFUI_FONT_BIG || font == GFUI_FONT_MEDIUM
+                ? "ChakraPetch-Bold.ttf" : "Rajdhani-SemiBold.ttf";
+            const int size = font == GFUI_FONT_BIG ? 36 : font == GFUI_FONT_MEDIUM ? 19 : 15;
+            const std::string path = std::string(GfDataDir()) + "data/fonts/formula-garage/" + file;
+            garageFonts[font] = TTF_OpenFont(path.c_str(), size * 2);
+            if (!garageFonts[font]) GfLogWarning("Garage font unavailable: %s; using menu font\n", path.c_str());
+        }
+        if (garageFonts[font])
+        {
+            // Cache white glyph textures; palette changes use GL modulation.
+            // Bound the cache because dragging sliders creates new strings.
+            if (textures.size() >= 512) ClearGarageText();
+            const std::string key = std::to_string(font) + ":" + text;
+            if (!textures.count(key))
+            {
+                SDL_Color ink = {255, 255, 255, 255};
+                SDL_Surface* rendered = TTF_RenderUTF8_Blended(garageFonts[font], text.c_str(), ink);
+                SDL_Surface* rgba = rendered ? SDL_ConvertSurfaceFormat(rendered, SDL_PIXELFORMAT_RGBA32, 0) : nullptr;
+                if (rendered) SDL_FreeSurface(rendered);
+                if (!rgba) return;
+                GarageTexture texture;
+                texture.width = rgba->w; texture.height = rgba->h;
+                glGenTextures(1, &texture.identifier);
+                glBindTexture(GL_TEXTURE_2D, texture.identifier);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, rgba->w, rgba->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba->pixels);
+                SDL_FreeSurface(rgba);
+                textures[key] = texture;
+            }
+            const GarageTexture& texture = textures[key];
+            const double width = texture.width * .5, height = texture.height * .5;
+            double x = horizontal;
+            if (alignment == GFUI_ALIGN_HC) x -= width * .5;
+            else if (alignment == GFUI_ALIGN_HR) x -= width;
+            glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, texture.identifier);
+            glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+            glColor4fv(color);
+            glBegin(GL_QUADS);
+            glTexCoord2d(0, 1); glVertex2d(x, vertical);
+            glTexCoord2d(1, 1); glVertex2d(x + width, vertical);
+            glTexCoord2d(1, 0); glVertex2d(x + width, vertical + height);
+            glTexCoord2d(0, 0); glVertex2d(x, vertical + height);
+            glEnd();
+            glDisable(GL_TEXTURE_2D);
+            return;
+        }
+    }
     GfuiDrawString(text.c_str(), color, font, (int)horizontal, (int)vertical, 0, alignment);
 }
-void Image(const std::string& name, double left, double bottom, double width, double height)
+void TabImage(const std::string& name, double x, double y, double width, double height)
 {
-    if (!textures.count(name))
+    if (!imageTextures.count(name))
     {
         GarageTexture texture;
-        std::string path = std::string(GfDataDir()) + "data/img/formula-garage/" + name;
+        const std::string path = std::string(GfDataDir()) + "data/img/formula-garage/" + name;
         texture.identifier = GfTexReadTexture(path.c_str(), &texture.width, &texture.height,
             &texture.paddedWidth, &texture.paddedHeight);
-        textures[name] = texture;
+        imageTextures[name] = texture;
     }
-    const GarageTexture& texture = textures[name];
-    if (!texture.identifier) return;
-    glEnable(GL_TEXTURE_2D);
-    glBindTexture(GL_TEXTURE_2D, texture.identifier);
-    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
-    glColor4f(1, 1, 1, 1);
-    const double maximumHorizontal = (double)texture.width / texture.paddedWidth;
-    const double minimumVertical = 1.0 - (double)texture.height / texture.paddedHeight;
+    const GarageTexture& texture = imageTextures[name];
+    if (!texture.identifier || texture.width <= 0 || texture.height <= 0) return;
+    const double scale = std::min(width / texture.width, height / texture.height);
+    const double w = texture.width * scale, h = texture.height * scale;
+    x += (width - w) / 2; y += (height - h) / 2;
+    const double u = (double)texture.width / texture.paddedWidth;
+    const double v = 1.0 - (double)texture.height / texture.paddedHeight;
+    glEnable(GL_TEXTURE_2D); glBindTexture(GL_TEXTURE_2D, texture.identifier);
+    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE); glColor4f(1, 1, 1, 1);
     glBegin(GL_QUADS);
-    glTexCoord2d(0, minimumVertical); glVertex2d(left, bottom);
-    glTexCoord2d(maximumHorizontal, minimumVertical); glVertex2d(left + width, bottom);
-    glTexCoord2d(maximumHorizontal, 1); glVertex2d(left + width, bottom + height);
-    glTexCoord2d(0, 1); glVertex2d(left, bottom + height);
-    glEnd();
-    glDisable(GL_TEXTURE_2D);
+    glTexCoord2d(0, v); glVertex2d(x, y);
+    glTexCoord2d(u, v); glVertex2d(x + w, y);
+    glTexCoord2d(u, 1); glVertex2d(x + w, y + h);
+    glTexCoord2d(0, 1); glVertex2d(x, y + h);
+    glEnd(); glDisable(GL_TEXTURE_2D);
 }
 std::string Number(double value, const std::string& unit)
 {
@@ -255,122 +328,222 @@ void ChangeField(int fieldIndex, double value)
         std::round(value / field.step) * field.step));
     if (field.wheel >= 0 && (field.wheel < 2 ? symmetricFront : symmetricRear))
     {
-        for (int counterpart : pages[selectedPage].fields)
-            if (fields[counterpart].wheel == (field.wheel ^ 1))
-                fields[counterpart].value = std::max(fields[counterpart].minimum,
-                    std::min(fields[counterpart].maximum, field.value));
+        // A tab now contains several parameter families. Mirror only this
+        // field's original family, never another setting on the same wheel.
+        for (const GaragePage& page : pages)
+            if (std::find(page.fields.begin(), page.fields.end(), fieldIndex) != page.fields.end())
+                for (int counterpart : page.fields)
+                    if (fields[counterpart].wheel == (field.wheel ^ 1))
+                        fields[counterpart].value = std::max(fields[counterpart].minimum,
+                            std::min(fields[counterpart].maximum, field.value));
     }
 }
-void DrawSlider(int fieldIndex, double horizontal, double vertical, double length, bool upright)
+void StyledButton(double x, double y, double width, double height,
+    const std::string& label, const std::function<void()>& action, bool primary = false)
 {
-    GarageField& field = fields[fieldIndex];
-    const double proportion = (field.value - field.minimum) / std::max(field.maximum - field.minimum, 1.0e-9);
-    if (upright)
-    {
-        Rectangle(horizontal - 1, vertical, 2, length, turquoise);
-        Rectangle(horizontal - 7, vertical, 14, 2, turquoise);
-        Rectangle(horizontal - 7, vertical + length, 14, 2, turquoise);
-        Image("SimuRegleCurseurH.png", horizontal - 8, vertical + length * proportion - 5, 16, 10);
-        controls.push_back({horizontal - 13, vertical - 6, 26, length + 12, field.name, fieldIndex, true, {}});
-        Text(field.name, horizontal, vertical + length + 29, GFUI_FONT_SMALL_C);
-        Text(Number(field.maximum, ""), horizontal, vertical + length + 10, GFUI_FONT_SMALL_C);
-        Text(Number(field.value, field.unit), horizontal, vertical - 26, GFUI_FONT_SMALL_C);
-    }
-    else
-    {
-        Rectangle(horizontal, vertical - 1, length, 2, turquoise);
-        Rectangle(horizontal, vertical - 7, 2, 14, turquoise);
-        Rectangle(horizontal + length, vertical - 7, 2, 14, turquoise);
-        Image("SimuRegleCurseur__simureglecurseur.png", horizontal + length * proportion - 5, vertical - 9, 10, 18);
-        controls.push_back({horizontal - 6, vertical - 12, length + 12, 24, field.name, fieldIndex, false, {}});
-        Text(field.name, horizontal + length * 0.5, vertical + 19, GFUI_FONT_SMALL);
-        Text(Number(field.value, field.unit), horizontal + length * 0.5, vertical - 28, GFUI_FONT_MEDIUM_C);
-    }
+    Rectangle(x, y, width, height, primary ? gold : panelColor);
+    Outline(x, y, width, height, primary ? gold : turquoise);
+    Text(label, x + width / 2, y + (height - 14) / 2, GFUI_FONT_SMALL,
+        primary ? graphite : white);
+    AddButton(x, y, width, height, label, action);
+}
+void Panel(double x, double y, double width, double height, const std::string& title,
+    const std::string& tag)
+{
+    Rectangle(x, y, width, height, panelColor);
+    Outline(x, y, width, height, turquoise);
+    Text(title, x + 14, y + height - 28, GFUI_FONT_MEDIUM, gold, GFUI_ALIGN_HL);
+    Text(tag, x + width - 14, y + height - 26, GFUI_FONT_SMALL_C, muted, GFUI_ALIGN_HR);
+    Rectangle(x + 14, y + height - 40, width - 28, 1, turquoise);
+}
+void Parameter(int index, const std::string& label, double x, double y, double width)
+{
+    GarageField& field = fields[index];
+    const double ratio = (field.value - field.minimum) / std::max(field.maximum - field.minimum, 1e-9);
+    const double minus = x + width * .32;
+    const double slider = minus + 26;
+    const double length = width * .25;
+    Text(label, x, y + 5, GFUI_FONT_SMALL_C, white, GFUI_ALIGN_HL);
+    StyledButton(minus, y + 2, 18, 20, "-", [index]() { ChangeField(index, fields[index].value - fields[index].step); });
+    Rectangle(slider, y + 9, length, 6, turquoise);
+    Rectangle(slider, y + 9, length * ratio, 6, gold);
+    Rectangle(slider + length * ratio - 3, y + 4, 6, 16, white);
+    controls.push_back({slider - 6, y, length + 12, 24, label, index, false, {}});
+    Text(Number(field.value, field.unit), x + width - 29, y + 5, GFUI_FONT_SMALL_C, muted, GFUI_ALIGN_HR);
+    StyledButton(x + width - 20, y + 2, 18, 20, "+", [index]() { ChangeField(index, fields[index].value + fields[index].step); });
+}
+void PageParameter(int page, int item, const std::string& label, double x, double y, double width)
+{
+    if (item < (int)pages[page].fields.size()) Parameter(pages[page].fields[item], label, x, y, width);
+}
+void CarDiagram(double x, double y)
+{
+    auto* preview = dynamic_cast<ICarPreviewRenderer*>(LegacyMenu::self().graphicsEngine());
+    const double width = 324, height = 270;
+    const int left = viewportLeft + (int)((x - width / 2) * viewportWidth / editorWidth);
+    const int bottom = viewportBottom + (int)((y - height / 2) * viewportHeight / editorHeight);
+    if (!preview || !preview->drawGarageCarPreview(garageCar, left, bottom,
+        (int)(width * viewportWidth / editorWidth), (int)(height * viewportHeight / editorHeight), selectedPage == 1))
+        Text("Vista 3D no disponible", x, y, GFUI_FONT_SMALL_C, muted);
 }
 void BuildEditorControls()
 {
-    Image("SimuFondGarage.png", 0, 0, 640, 480);
-    const GaragePage& page = pages[selectedPage];
-    Text("OK", 51, 426, GFUI_FONT_MEDIUM, turquoise);
-    AddButton(24, 418, 58, 40, "Apply setup", ApplyEditor);
-    const char* categoryIcons[] = {"Aero", "Steering", "Brakes", "Gear", "Tyres", "Quant"};
-    const int categoryPages[] = {0, 12, 13, 14, 15, 16};
-    for (int category = 0; category < 6; ++category)
+    Rectangle(0, 0, editorWidth, editorHeight, graphite);
+    for (int y = 0; y < editorHeight; y += 7)
     {
-        const int pageIndex = categoryPages[category];
-        Image(std::string("SimuIcon") + categoryIcons[category] + (pageIndex == selectedPage ? "Ena.png" : "Dis.png"),
-            35, 330 - category * 52, 35, 35);
-        AddButton(30, 325 - category * 52, 46, 44, pages[pageIndex].title,
-            [pageIndex]() { selectedPage = pageIndex; selectedControl = 0; });
+        float line[4] = {turquoise[0], turquoise[1], turquoise[2], .04f};
+        Rectangle(0, y, editorWidth, 1, line);
     }
-    const int secondaryPages[] = {0, 1, 2, 4, 5, 11};
-    for (int secondary = 0; secondary < 6; ++secondary)
+    glDisable(GL_TEXTURE_2D);
+    glBegin(GL_QUADS);
+    glColor4fv(gold); glVertex2d(20, 706); glVertex2d(20, 780);
+    glColor4fv(graphite); glVertex2d(1260, 780); glVertex2d(1260, 706);
+    glEnd();
+    Rectangle(20, 706, 7, 74, gold);
+    Rectangle(20, 706, 1240, 2, gold);
+    Text("OPEN FORMULA", 44, 740, GFUI_FONT_BIG, white, GFUI_ALIGN_HL);
+    Text("SIMULATION / GARAGE", 46, 719, GFUI_FONT_SMALL, graphite, GFUI_ALIGN_HL);
+    const tRmInfo* race = LmRaceEngine().inData();
+    Text(race->track->name ? race->track->name : "PRACTICE", 1238, 746, GFUI_FONT_MEDIUM, white, GFUI_ALIGN_HR);
+    Text(garageCar->_name, 1238, 723, GFUI_FONT_SMALL_C, muted, GFUI_ALIGN_HR);
+    const char* tabs[] = {"SUSPENSION", "AERO / RUEDAS", "MOTOR / TRANSMISION", "ESTRATEGIA / BOXES"};
+    for (int tab = 0; tab < 4; ++tab)
     {
-        const int pageIndex = secondaryPages[secondary];
-        Image("SimuIcon" + pages[pageIndex].icon + (pageIndex == selectedPage ? "Ena.png" : "Dis.png"),
-            96, 365 - secondary * 52, 37, 37);
-        AddButton(92, 360 - secondary * 52, 46, 45, pages[pageIndex].title,
-            [pageIndex]() { selectedPage = pageIndex; selectedControl = 0; });
+        const double x = 20 + tab * 312;
+        Rectangle(x, 644, 304, 46, selectedPage == tab ? turquoise : panelColor);
+        Outline(x, 644, 304, 46, turquoise);
+        if (selectedPage == tab) Rectangle(x, 644, 304, 3, gold);
+        Text(tabs[tab], x + 152, 660, GFUI_FONT_SMALL, white);
+        AddButton(x, 644, 304, 46, tabs[tab], [tab]() {
+            selectedPage = tab; selectedControl = 0; draggedControl = -1;
+        });
     }
-    Image(page.image, 185, 70, 415, 320);
-    Text(page.title, 600, 426, GFUI_FONT_BIG, white, GFUI_ALIGN_HR);
-    if (page.vertical)
+    Rectangle(20, 598, 1240, 32, panelColor);
+    Rectangle(20, 598, 3, 32, gold);
+    Text("REGLAJES DEL VEHICULO", 35, 608, GFUI_FONT_SMALL_C, gold, GFUI_ALIGN_HL);
+    if (selectedPage < 2)
     {
-        const double horizontal[4] = {300, 237, 539, 475};
-        for (size_t wheel = 0; wheel < page.fields.size(); ++wheel)
-            DrawSlider(page.fields[wheel], horizontal[wheel], 185, 112, true);
-        Text("symmetry", 386, 257, GFUI_FONT_SMALL_C, white);
-        Text(symmetricFront ? "Front: ON" : "Front: OFF", 386, 235, GFUI_FONT_SMALL_C);
-        Text(symmetricRear ? "Rear: ON" : "Rear: OFF", 386, 211, GFUI_FONT_SMALL_C);
-        AddButton(345, 230, 85, 23, "Front symmetry", []() { symmetricFront = !symmetricFront; });
-        AddButton(345, 204, 85, 23, "Rear symmetry", []() { symmetricRear = !symmetricRear; });
+        StyledButton(270, 603, 165, 22, symmetricFront ? "[X] Simetria delantera" : "[ ] Simetria delantera",
+            []() { symmetricFront = !symmetricFront; });
+        StyledButton(446, 603, 165, 22, symmetricRear ? "[X] Simetria trasera" : "[ ] Simetria trasera",
+            []() { symmetricRear = !symmetricRear; });
+    }
+    Text("Arrastra o usa - / +", 1242, 608, GFUI_FONT_SMALL_C, muted, GFUI_ALIGN_HR);
+    if (selectedPage < 2)
+    {
+        const char* corners[] = {"DELANTERA IZQUIERDA", "DELANTERA DERECHA", "TRASERA IZQUIERDA", "TRASERA DERECHA"};
+        const int wheels[] = {1, 0, 3, 2};
+        const int families[] = {4, 9, 8, 7, 6, 5, 1};
+        const char* names[] = {"Topes", "Compresion rapida", "Extension rapida", "Compresion lenta", "Extension lenta", "Muelle", "Altura"};
+        for (int corner = 0; corner < 4; ++corner)
+        {
+            const double x = corner % 2 ? 838 : 20;
+            const double y = corner < 2 ? 353 : 108;
+            Panel(x, y, 422, 231, corners[corner], selectedPage == 0 ? "SUSPENSION" : "NEUMATICO");
+            if (selectedPage == 0)
+                for (int row = 0; row < 7; ++row)
+                    PageParameter(families[row], wheels[corner], names[row], x + 14, y + 158 - row * 24, 394);
+            else
+            {
+                PageParameter(15, wheels[corner], "Presion fria", x + 14, y + 151, 394);
+                PageParameter(2, wheels[corner], "Caida", x + 14, y + 113, 394);
+                PageParameter(3, wheels[corner], "Convergencia", x + 14, y + 75, 394);
+                Text(Number(garageCar->_tyreT_mid(wheels[corner]) - 273.15, "C / banda actual"),
+                    x + 14, y + 29, GFUI_FONT_SMALL_C, muted, GFUI_ALIGN_HL);
+            }
+        }
+        Panel(458, 108, 360, 476, selectedPage == 0 ? "BARRAS / CHASIS" : "BALANCE / REGLAJES", "");
+        CarDiagram(638, 287);
+        if (selectedPage == 0)
+        {
+            PageParameter(10, 0, "Barra del.", 472, 492, 332);
+            PageParameter(10, 1, "Barra tras.", 472, 459, 332);
+            PageParameter(12, 0, "Direccion", 472, 145, 332);
+            Text("Vista superior / modelo 3D", 638, 119, GFUI_FONT_SMALL_C, muted);
+        }
+        else
+        {
+            PageParameter(0, 0, "Ala del.", 472, 492, 332);
+            PageParameter(0, 1, "Ala tras.", 472, 459, 332);
+            Text("Vista lateral / modelo 3D", 638, 200, GFUI_FONT_SMALL_C, muted);
+            PageParameter(13, 0, "Freno del.", 472, 145, 332);
+            PageParameter(13, 1, "Presion", 472, 115, 332);
+        }
+    }
+    else if (selectedPage == 2)
+    {
+        Panel(20, 353, 422, 231, "MOTOR", "LIMITADOR");
+        PageParameter(11, 0, "Regimen max.", 34, 492, 394);
+        Text("Valores reales del motor instalado", 34, 460, GFUI_FONT_SMALL_C, muted, GFUI_ALIGN_HL);
+        Panel(20, 108, 422, 231, "DIRECCION / FRENADA", "CONTROLES");
+        PageParameter(12, 0, "Tope direccion", 34, 260, 394);
+        PageParameter(12, 1, "Giro volante", 34, 218, 394);
+        PageParameter(13, 1, "Presion freno", 34, 176, 394);
+        Panel(458, 108, 360, 476, "DIFERENCIAL", "TRASERO");
+        for (int i = 0; i < 3; ++i)
+            PageParameter(17, i, i == 0 ? "Aceleracion" : i == 1 ? "Retencion" : "Precarga", 472, 492 - i * 35, 332);
+        TabImage("engine.png", 472, 124, 332, 274);
+        for (int half = 0; half < 2; ++half)
+        {
+            const double y = half == 0 ? 353 : 108;
+            Panel(838, y, 422, 231, half == 0 ? "CAJA / 1 - 3" : "CAJA / 4 - 6", "RELACIONES");
+            for (int row = 0; row < 3; ++row)
+                PageParameter(14, half * 3 + row, "Marcha " + std::to_string(half * 3 + row + 1), 852, y + 145 - row * 35, 394);
+            if (half == 1)
+            {
+                const int finalDrive = (int)pages[14].fields.size() - 1;
+                PageParameter(14, finalDrive, "Grupo final", 852, y + 35, 394);
+            }
+        }
     }
     else
     {
-        const bool many = page.fields.size() > 3;
-        for (size_t index = 0; index < page.fields.size(); ++index)
+        Panel(20, 353, 422, 231, "COMBUSTIBLE", "CARGA AL SALIR");
+        PageParameter(16, 0, "Combustible", 34, 492, 394);
+        Text("Carga actual: " + Number(garageCar->_fuel, "L"), 34, 452, GFUI_FONT_SMALL_C, muted, GFUI_ALIGN_HL);
+        Text("Se aplica al confirmar los reglajes.", 34, 419, GFUI_FONT_SMALL_C, muted, GFUI_ALIGN_HL);
+        Panel(838, 353, 422, 231, "NEUMATICOS", "SERVICIO");
+        StyledButton(852, 485, 394, 34, replaceTires ? "[X] Montar neumaticos nuevos" : "[ ] Montar neumaticos nuevos",
+            []() { replaceTires = !replaceTires; }, replaceTires);
+        Text("Presiones: pestana Aero / Ruedas.", 852, 448, GFUI_FONT_SMALL_C, muted, GFUI_ALIGN_HL);
+        Panel(458, 108, 360, 476, "ESTRATEGIA / BOXES", "");
+        TabImage("strategy.jpg", 472, 129, 332, 401);
+        Panel(20, 108, 422, 231, "TEMPERATURAS", "DELANTERAS");
+        Panel(838, 108, 422, 231, "TEMPERATURAS", "TRASERAS");
+        const char* corners[] = {"DEL. IZQ.", "DEL. DER.", "TRAS. IZQ.", "TRAS. DER."};
+        const int wheels[] = {1, 0, 3, 2};
+        for (int i = 0; i < 4; ++i)
         {
-            if (many)
-                DrawSlider(page.fields[index], 222, 350 - index * 37, 170, false);
-            else if (selectedPage == 0)
-                DrawSlider(page.fields[index], index == 0 ? 215 : 445, index == 0 ? 350 : 190, 120, false);
-            else
-                DrawSlider(page.fields[index], 250, 335 - index * 87, 280, false);
+            const double x = i < 2 ? 34 : 852;
+            const double y = i % 2 == 0 ? 252 : 179;
+            Text(corners[i], x, y, GFUI_FONT_SMALL, gold, GFUI_ALIGN_HL);
+            Text(Number(garageCar->_tyreT_mid(wheels[i]) - 273.15, "C / banda"),
+                x, y - 27, GFUI_FONT_MEDIUM, white, GFUI_ALIGN_HL);
         }
     }
-    if (selectedPage == 15)
-    {
-        Text(replaceTires ? "FIT NEW TYRES: YES" : "FIT NEW TYRES: NO", 450, 117, GFUI_FONT_SMALL_C, white);
-        AddButton(370, 105, 190, 28, "Fit new tyres", []() { replaceTires = !replaceTires; });
-        char state[160];
-        std::snprintf(state, sizeof(state), "Current tread: %.0f / %.0f / %.0f / %.0f C",
-            garageCar->_tyreT_mid(0) - 273.15, garageCar->_tyreT_mid(1) - 273.15,
-            garageCar->_tyreT_mid(2) - 273.15, garageCar->_tyreT_mid(3) - 273.15);
-        Text(state, 400, 89, GFUI_FONT_SMALL_C, white);
-    }
-    Text("<", 165, 421, GFUI_FONT_MEDIUM, gold);
-    Text(">", 195, 421, GFUI_FONT_MEDIUM, gold);
-    AddButton(150, 410, 30, 30, "Previous setup page", []() { selectedPage = (selectedPage + pages.size() - 1) % pages.size(); selectedControl = 0; });
-    AddButton(182, 410, 30, 30, "Next setup page", []() { selectedPage = (selectedPage + 1) % pages.size(); selectedControl = 0; });
-    Text("RESET", 395, 63, GFUI_FONT_SMALL_C);
-    AddButton(360, 55, 70, 24, "Reset this page", []() { for (int field : pages[selectedPage].fields) fields[field].value = fields[field].original; });
-    Text("B", 602, 75, GFUI_FONT_MEDIUM, white);
-    Text("back", 602, 58, GFUI_FONT_SMALL_C);
-    Text("A", 602, 41, GFUI_FONT_MEDIUM, gold);
-    Text("valid", 602, 23, GFUI_FONT_SMALL_C);
-    AddButton(581, 55, 42, 39, "Discard changes", CancelEditor);
-    AddButton(581, 15, 42, 39, "Apply setup", ApplyEditor);
-    Text(page.information, 380, 6, GFUI_FONT_SMALL_C, white);
+    bool changed = replaceTires;
+    for (const GarageField& field : fields) changed = changed || field.value != field.original;
+    Text(changed ? "Cambios sin aplicar" : "Configuracion actual", 24, 75, GFUI_FONT_SMALL, changed ? gold : muted, GFUI_ALIGN_HL);
+    Text("TAB / D-pad: navegar   Flechas: ajustar   LB / RB: pestana   START / F5: aplicar", 24, 48, GFUI_FONT_SMALL_C, muted, GFUI_ALIGN_HL);
+    StyledButton(711, 37, 150, 42, "RESTABLECER", []() {
+        for (GarageField& field : fields) field.value = field.original;
+        replaceTires = false;
+    });
+    StyledButton(875, 37, 154, 42, "CANCELAR", CancelEditor);
+    StyledButton(1043, 37, 217, 42, "APLICAR Y VOLVER", ApplyEditor, true);
 }
 void DrawGarage()
 {
     if (!garageOpen) return;
+    garageMusic.update(getMusicVolume());
     if (!editorOpen && LegacyMenu::self().graphicsEngine())
         LegacyMenu::self().redrawGraphicsView(LmRaceEngine().inData()->s);
     int screenWidth, screenHeight, viewWidth, viewHeight;
     GfScrGetSize(&screenWidth, &screenHeight, &viewWidth, &viewHeight);
-    const double scale = std::min(viewWidth / 640.0, viewHeight / 480.0);
-    viewportWidth = (int)(640 * scale); viewportHeight = (int)(480 * scale);
+    const int canvasWidth = editorOpen ? editorWidth : 640;
+    const int canvasHeight = editorOpen ? editorHeight : 480;
+    const double scale = std::min((double)viewWidth / canvasWidth, (double)viewHeight / canvasHeight);
+    viewportWidth = (int)(canvasWidth * scale); viewportHeight = (int)(canvasHeight * scale);
     viewportLeft = (screenWidth - viewportWidth) / 2; viewportBottom = (screenHeight - viewportHeight) / 2;
     static auto selectProgram = reinterpret_cast<void(APIENTRY*)(GLuint)>(SDL_GL_GetProcAddress("glUseProgram"));
     static auto selectTexture = reinterpret_cast<void(APIENTRY*)(GLenum)>(SDL_GL_GetProcAddress("glActiveTexture"));
@@ -380,7 +553,7 @@ void DrawGarage()
     glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     if (editorOpen) { glViewport(0, 0, screenWidth, screenHeight); glClearColor(0, 0, 0, 1); glClear(GL_COLOR_BUFFER_BIT); }
     glViewport(viewportLeft, viewportBottom, viewportWidth, viewportHeight);
-    glMatrixMode(GL_PROJECTION); glLoadIdentity(); gluOrtho2D(0, 640, 0, 480);
+    glMatrixMode(GL_PROJECTION); glLoadIdentity(); gluOrtho2D(0, canvasWidth, 0, canvasHeight);
     glMatrixMode(GL_MODELVIEW); glLoadIdentity(); glMatrixMode(GL_TEXTURE); glLoadIdentity(); glMatrixMode(GL_MODELVIEW);
     controls.clear();
     if (editorOpen) BuildEditorControls();
@@ -407,7 +580,7 @@ void DrawGarage()
         const GarageControl& control = controls[selectedControl];
         Outline(control.left, control.bottom, control.width, control.height, gold);
     }
-    if (!statusMessage.empty()) Text(statusMessage, 320, 465, GFUI_FONT_SMALL_C, white);
+    if (!statusMessage.empty()) Text(statusMessage, canvasWidth / 2, canvasHeight - 18, GFUI_FONT_SMALL_C, white);
     glDisable(GL_TEXTURE_2D);
     glColor4fv(white);
     glBegin(GL_TRIANGLES);
@@ -432,8 +605,8 @@ void MouseMotion(int horizontal, int vertical)
 {
     int screenWidth, screenHeight, viewWidth, viewHeight;
     GfScrGetSize(&screenWidth, &screenHeight, &viewWidth, &viewHeight);
-    mousePositionX = (horizontal - viewportLeft) * 640 / std::max(viewportWidth, 1);
-    mousePositionY = (screenHeight - vertical - viewportBottom) * 480 / std::max(viewportHeight, 1);
+    mousePositionX = (horizontal - viewportLeft) * (editorOpen ? editorWidth : 640) / std::max(viewportWidth, 1);
+    mousePositionY = (screenHeight - vertical - viewportBottom) * (editorOpen ? editorHeight : 480) / std::max(viewportHeight, 1);
     if (draggedControl >= 0) SetSliderFromMouse(draggedControl, mousePositionX, mousePositionY);
     else for (size_t index = 0; index < controls.size(); ++index)
     {
@@ -466,7 +639,7 @@ void Keyboard(int key, int, int, int)
     if (key == SDLK_g && !editorOpen) { OpenEditor(); return; }
     if (key == SDLK_PAGEUP || key == SDLK_PAGEDOWN)
     {
-        if (editorOpen) { selectedPage = (selectedPage + (key == SDLK_PAGEUP ? pages.size() - 1 : 1)) % pages.size(); selectedControl = 0; }
+        if (editorOpen) { selectedPage = (selectedPage + (key == SDLK_PAGEUP ? 3 : 1)) % 4; selectedControl = 0; draggedControl = -1; }
         return;
     }
     if (key == SDLK_F5 && editorOpen) { ApplyEditor(); return; }
@@ -515,7 +688,11 @@ void PollController()
 }
 void ActivateGarageScreen()
 {
-    if (!garageScreen) garageScreen = GfuiScreenCreate(nullptr, nullptr, nullptr, nullptr, nullptr, 0);
+    if (!garageScreen)
+    {
+        garageScreen = GfuiScreenCreate(nullptr, nullptr, nullptr, nullptr, nullptr, 0);
+        GfuiScreenAddMusic(garageScreen, "None");
+    }
     GfuiScreenActivate(garageScreen);
     GfuiApp().eventLoop().setKeyboardDownCB(Keyboard);
     GfuiApp().eventLoop().setKeyboardUpCB(nullptr);
@@ -562,16 +739,24 @@ void ResetPhysics(bool relocate)
 }
 void ShowPit()
 {
+    garageMusic.stop();
     editorOpen = false; selectedControl = 0; draggedControl = -1;
     ActivateGarageScreen();
     GfLogInfo("Formula garage state: PIT, controls locked, x=%.3f y=%.3f\n", garageCar->_pos_X, garageCar->_pos_Y);
 }
 void OpenEditor()
 {
+    if (auto* preview = dynamic_cast<ICarPreviewRenderer*>(LegacyMenu::self().graphicsEngine()))
+        preview->resetGarageCarPreview();
     BuildPages(); replaceTires = false;
     editorOpen = true; selectedPage = 0; selectedControl = 0; draggedControl = -1;
     statusMessage.clear();
     GfLogInfo("Formula garage state: GARAGE, reading current live setup\n");
+    void* sound = GfParmReadFileLocal(SND_PARAM_FILE, GFPARM_RMODE_STD);
+    const bool enabled = !std::strcmp(GfParmGetStr(sound, SND_SCT_MUSIC,
+        SND_ATT_MUSIC_STATE, SND_VAL_MUSIC_STATE_DISABLED), SND_VAL_MUSIC_STATE_ENABLED);
+    if (sound) GfParmReleaseHandle(sound);
+    if (enabled) garageMusic.start(std::string(GfDataDir()) + "data/music/formula-garage/run.mp3", getMusicVolume());
 }
 void ApplyEditor()
 {
@@ -612,6 +797,7 @@ void CancelEditor()
 }
 void BeginDriving()
 {
+    garageMusic.stop();
     garageOpen = false; editorOpen = false; arrivalArmed = false;
     garageCar->ctrl = {};
     garageCar->_state &= ~RM_CAR_STATE_PIT;
@@ -660,12 +846,17 @@ void FormulaGarageReturnToPit(void*)
 }
 void FormulaGarageShutdown()
 {
+    garageMusic.shutdown();
     garageOpen = editorOpen = initialArrivalPending = arrivalArmed = false;
     garageCar = nullptr;
     fields.clear(); pages.clear(); controls.clear();
     if (garageScreen) { GfuiScreenRelease(garageScreen); garageScreen = nullptr; }
-    for (const auto& entry : textures) if (entry.second.identifier) GfTexFreeTexture(entry.second.identifier);
-    textures.clear();
+    ClearGarageText();
+    for (const auto& entry : imageTextures)
+        if (entry.second.identifier) GfTexFreeTexture(entry.second.identifier);
+    imageTextures.clear();
+    for (const auto& entry : garageFonts) if (entry.second) TTF_CloseFont(entry.second);
+    garageFonts.clear();
     if (menuController) { SDL_GameControllerClose(menuController); menuController = nullptr; }
     previousControllerButtons = 0;
     statusMessage.clear();

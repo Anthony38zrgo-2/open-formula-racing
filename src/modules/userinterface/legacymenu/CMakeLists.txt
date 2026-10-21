@@ -67,7 +67,7 @@ SET(RACESCREENS_SOURCES ${RS}/raceselectmenu.cpp
                         ${RS}/raceparamsmenu.cpp ${RS}/carsetupmenu.cpp
                         ${RS}/raceloadingmenu.cpp ${RS}/racerunningmenus.cpp
                         ${RS}/raceoptimizationmenu.cpp
-                        ${RS}/racestopmenu.cpp ${RS}/racestartmenu.cpp ${RS}/racepitmenu.cpp ${RS}/formula_garage_menu.cpp
+                        ${RS}/racestopmenu.cpp ${RS}/racestartmenu.cpp ${RS}/racepitmenu.cpp ${RS}/formula_garage_menu.cpp ${RS}/formula_garage_music.cpp
                         ${RS}/raceresultsmenus.cpp ${RS}/racenexteventmenu.cpp)
 IF(OPTION_CLIENT_SERVER)
    SET(RACESCREENS_SOURCES ${RACESCREENS_SOURCES} ${RS}/csnetworkingmenu.cpp
@@ -137,6 +137,9 @@ SD_ADD_LIBRARY(legacymenu MODULE ${LEGACYMENU_SOURCES} ${LEGACYMENU_HEADERS})
 #SET_TARGET_PROPERTIES(legacymenu PROPERTIES VERSION ${VERSION} SOVERSION 0.0.0)
 
 find_package(rhash REQUIRED)
+find_package(SDL2_ttf REQUIRED)
+target_include_directories(legacymenu PRIVATE ${SDL2_TTF_INCLUDE_DIRS})
+target_link_libraries(legacymenu ${SDL2_TTF_LIBRARY})
 
 ADD_SDLIB_LIBRARY(legacymenu
     portability
@@ -154,6 +157,8 @@ set_target_properties(legacymenu PROPERTIES CXX_STANDARD 11 CXX_EXTENSIONS OFF)
 
 ADD_PLIB_LIBRARY(legacymenu)
 ADD_SDL2_LIBRARY(legacymenu)
+ADD_SDL2_MIXER_INCLUDEDIR()
+ADD_SDL2_MIXER_LIBRARY(legacymenu)
 ADD_ENET_LIBRARY(legacymenu)
 ADD_CURL_LIBRARY(legacymenu)
 ADD_CJSON_LIBRARY(legacymenu)
@@ -161,5 +166,11 @@ ADD_ZLIB_LIBRARY(legacymenu)
 ADD_MINIZIP_LIBRARY(legacymenu)
 
 SD_INSTALL_FILES(LIB modules/userinterface TARGETS legacymenu)
+INSTALL(DIRECTORY ${CMAKE_SOURCE_DIR}/implementation/ui/formula-garage/images/
+        DESTINATION ${SD_DATADIR}/data/img/formula-garage)
+INSTALL(FILES ${CMAKE_SOURCE_DIR}/implementation/audio/garage/run.mp3
+        DESTINATION ${SD_DATADIR}/data/music/formula-garage)
+INSTALL(DIRECTORY ${CMAKE_SOURCE_DIR}/implementation/ui/formula-garage/fonts/
+        DESTINATION ${SD_DATADIR}/data/fonts/formula-garage)
 INSTALL(FILES ${CMAKE_SOURCE_DIR}/implementation/loading-screen/pit-lane-background.png
         DESTINATION ${SD_DATADIR}/data/img)

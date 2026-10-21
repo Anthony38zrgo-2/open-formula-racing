@@ -23,6 +23,7 @@
 #define _OSGGRAPH_H_
 
 #include <igraphicsengine.h>
+#include <icarpreview.h>
 
 #include <tgf.hpp>
 
@@ -47,7 +48,8 @@ extern "C" int OSGGRAPH_API closeGfModule();
 
 // The module main class
 // (Singleton, inherits GfModule, and implements IGraphicsEngine).
-class OSGGRAPH_API OsgGraph : public GfModule, public IGraphicsEngine
+namespace osggraph { class GarageCarPreview; }
+class OSGGRAPH_API OsgGraph : public GfModule, public IGraphicsEngine, public ICarPreviewRenderer
 {
 public:
 
@@ -60,6 +62,8 @@ public:
     virtual void unloadCars();
     virtual void unloadTrack();
     virtual Camera *getCurCam();
+    bool drawGarageCarPreview(CarElt* car, int x, int y, int width, int height, bool sideView) override;
+    void resetGarageCarPreview() override;
 
     // Accessor to the singleton.
     static OsgGraph& self();
@@ -80,6 +84,8 @@ protected:
 
     // The singleton.
     static OsgGraph* _pSelf;
+    osggraph::GarageCarPreview* _garagePreview;
+    CarElt* _garagePreviewCar;
 };
 
 #endif /* _OSGGRAPH_H_ */

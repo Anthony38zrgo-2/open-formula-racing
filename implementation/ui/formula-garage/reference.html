@@ -1,0 +1,934 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Open Formula Simulation — Garage</title>
+  <meta name="description" content="Garaje interactivo con ajustes del monoplaza y estrategia de paradas, repostaje y desgaste de neumáticos." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      /* Cuatro colores base; los matices se generan sin añadir otros tonos. */
+      --yellow:#E3B23C; /* Amarillo industrial */
+      --gray:#171B1F; /* Gris grafito, fondo dark */
+      --steel:#607E91; /* Azul acero */
+      --smoke:#E9ECE8; /* Blanco humo */
+      --bg:var(--gray); --deep:var(--gray);
+      --navy:color-mix(in srgb, var(--gray) 85%, var(--steel));
+      --navy2:color-mix(in srgb, var(--gray) 65%, var(--steel));
+      --orange:var(--yellow); --orange2:var(--yellow);
+      --cyan:var(--yellow); --cyan2:var(--steel);
+      --white:var(--smoke); --muted:color-mix(in srgb, var(--smoke) 52%,var(--steel));
+      --line:color-mix(in srgb, var(--gray) 54%,var(--steel)); --control:var(--steel);
+      --font:'Rajdhani','Arial Narrow','Segoe UI',sans-serif;
+      --display:'Chakra Petch','Arial Narrow',sans-serif;
+      color-scheme:dark;
+    }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; min-width:320px; color:var(--white); background:
+      radial-gradient(ellipse at 49% 12%,color-mix(in srgb, color-mix(in srgb, var(--gray) 45%, var(--steel)) 26%, transparent),transparent 55%),
+      radial-gradient(ellipse at 2% 85%,color-mix(in srgb, color-mix(in srgb, var(--gray) 82%, var(--steel)) 36%, transparent),transparent 58%),
+      var(--gray); font-family:var(--font); font-size:16px; }
+    body::before { content:""; pointer-events:none; position:fixed; inset:0; opacity:.21;
+      background: repeating-linear-gradient(0deg,transparent 0px,transparent 5px,color-mix(in srgb, color-mix(in srgb, var(--steel) 35%, var(--smoke)) 6.5%, transparent) 6px),
+      repeating-linear-gradient(104deg,transparent 0px,transparent 190px,color-mix(in srgb, color-mix(in srgb, var(--steel) 78%, var(--smoke)) 14%, transparent) 192px,transparent 194px); z-index:-1; }
+    button, input, select {font:inherit;}
+    button {cursor:pointer;}
+    button:focus-visible, input:focus-visible, select:focus-visible {outline:2px solid var(--cyan);outline-offset:3px;}
+    .app {max-width:1610px;margin:0 auto;padding:20px 23px 14px;}
+    .header {display:flex;align-items:center;gap:22px;min-height:94px;position:relative;overflow:hidden;
+      padding:14px 26px 14px 110px;border-bottom:2px solid var(--yellow);
+      background:linear-gradient(105deg,color-mix(in srgb, var(--yellow) 94%, transparent),color-mix(in srgb, var(--yellow) 88%, transparent) 40%,color-mix(in srgb, color-mix(in srgb, var(--gray) 82%, var(--steel)) 18%, transparent) 74%,transparent 100%);}
+    .header:before {content:"";position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(-13deg,transparent 0,transparent 7px,color-mix(in srgb, var(--smoke) 3.2%, transparent) 8px,transparent 11px);}
+    .helmet {position:absolute;left:24px;top:9px;width:75px;height:75px;filter:drop-shadow(0 8px 3px color-mix(in srgb, var(--gray) 50%, transparent));transform:rotate(-12deg);}
+    .title-wrap {display:flex;align-items:baseline;flex-wrap:wrap;gap:20px;position:relative;}
+    .brand {font-family:var(--display);font-size:clamp(28px,3.1vw,49px);font-weight:700;letter-spacing:-2px;font-style:italic;text-transform:uppercase;text-shadow:1px 2px 0 color-mix(in srgb, var(--gray) 40%, transparent);line-height:1;}
+    .header-sub {font-family:var(--display);font-size:clamp(13px,1.3vw,21px);font-weight:600;font-style:italic;letter-spacing:.8px;}
+    .event {margin-left:auto;position:relative;text-align:right;color:color-mix(in srgb, var(--steel) 17%, var(--smoke));text-transform:uppercase;letter-spacing:1px;font-size:13px;line-height:1.13;white-space:nowrap;}
+    .event strong {display:block;color:var(--smoke);font-size:20px;font-weight:700;letter-spacing:1.6px;}
+    .nav {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:14px 0 13px;}
+    .tab {min-width:0;min-height:64px;display:flex;align-items:center;justify-content:center;gap:12px;border-radius:8px 8px 2px 2px;
+      border:1px solid color-mix(in srgb, var(--gray) 45%, var(--steel));border-bottom:3px solid color-mix(in srgb, var(--gray) 45%, var(--steel));color:color-mix(in srgb, var(--steel) 35%, var(--smoke));background:linear-gradient(145deg,color-mix(in srgb, var(--gray) 82%, var(--steel)),var(--gray) 75%);
+      text-transform:uppercase;font:700 16px var(--font);letter-spacing:1px;transform:skew(-6deg);transition:background .2s,color .2s,box-shadow .2s;}
+    .tab>* {transform:skew(6deg);} .tab svg{width:26px;height:26px;stroke:var(--yellow);stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0;}
+    .tab.active {border-color:color-mix(in srgb, var(--steel) 55%, var(--smoke));border-bottom-color:var(--cyan);color:var(--smoke);background:linear-gradient(160deg,color-mix(in srgb, var(--gray) 45%, var(--steel)),color-mix(in srgb, var(--gray) 82%, var(--steel)) 73%);box-shadow:inset 0 0 21px color-mix(in srgb, color-mix(in srgb, var(--steel) 78%, var(--smoke)) 26%, transparent),0 0 13px color-mix(in srgb, color-mix(in srgb, var(--steel) 55%, var(--smoke)) 13%, transparent);}
+    .tab.active svg {stroke:var(--smoke);filter:drop-shadow(0 0 6px color-mix(in srgb, var(--steel) 55%, var(--smoke)));}
+    .utility {display:flex;flex-wrap:wrap;align-items:center;gap:12px 18px;margin-bottom:13px;min-height:36px;padding:5px 12px;color:color-mix(in srgb, var(--steel) 35%, var(--smoke));border-left:3px solid var(--orange);
+      background:linear-gradient(90deg,color-mix(in srgb, color-mix(in srgb, var(--gray) 82%, var(--steel)) 65%, transparent),transparent);}
+    .utility .identifier {font:600 12px var(--display);letter-spacing:1.6px;color:var(--orange);}
+    .switchline {display:flex;align-items:center;gap:9px;cursor:pointer;font-weight:600;font-size:15px;}
+    .switchline input {accent-color:var(--orange);width:18px;height:18px;margin:0;cursor:pointer;}
+    .utility .separator {width:1px;height:19px;background:color-mix(in srgb, var(--gray) 45%, var(--steel));}
+    .utility .hint {margin-left:auto;font-size:13px;color:color-mix(in srgb, var(--steel) 35%, var(--smoke));}
+    .workspace {display:grid;grid-template-columns:minmax(315px,1fr) minmax(260px,320px) minmax(315px,1fr);
+      grid-template-rows:1fr 1fr;grid-template-areas:'lf car rf' 'lr car rr';gap:13px;min-height:644px;align-items:stretch;}
+    .area-lf{grid-area:lf}.area-rf{grid-area:rf}.area-lr{grid-area:lr}.area-rr{grid-area:rr}
+    .panel {min-width:0; padding:13px 15px 12px;border:1px solid var(--steel);border-radius:10px 10px 10px 10px;
+      background:linear-gradient(160deg,color-mix(in srgb, color-mix(in srgb, var(--gray) 91%, var(--steel)) 95%, transparent),color-mix(in srgb, var(--gray) 93%, transparent) 82%);
+      box-shadow:inset 0 1px color-mix(in srgb, color-mix(in srgb, var(--steel) 17%, var(--smoke)) 7%, transparent),0 5px 28px color-mix(in srgb, var(--gray) 18%, transparent);}
+    .panel-head {display:flex;align-items:center;justify-content:space-between;gap:8px;padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid var(--steel);}
+    .panel-title {color:var(--cyan);font:700 clamp(16px,1.4vw,20px) var(--display);font-style:italic;letter-spacing:.3px;text-transform:uppercase;white-space:nowrap;}
+    .panel-tag {font:600 12px var(--font);white-space:nowrap;color:color-mix(in srgb, var(--steel) 55%, var(--smoke));letter-spacing:.4px;}
+    .panel-tag b {font-weight:700;color:var(--yellow);font-size:15px;margin-left:3px;}
+    .panel-description {color:color-mix(in srgb, var(--steel) 55%, var(--smoke));font-size:13px;margin:1px 0 10px;line-height:1.2;}
+    .parameter {display:grid;grid-template-columns:minmax(95px,1.15fr) 21px minmax(70px,1.25fr) minmax(61px,.6fr) 21px 17px;gap:6px;align-items:center;min-height:31px;padding:2px 0;}
+    .parameter+.parameter {border-top:1px solid color-mix(in srgb, color-mix(in srgb, var(--gray) 45%, var(--steel)) 25%, transparent);}
+    .param-name {font-size:14px;line-height:1.04;color:color-mix(in srgb, var(--steel) 17%, var(--smoke));overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .adjust {display:grid;place-items:center;height:21px;width:21px;padding:0;color:var(--smoke);background:linear-gradient(var(--steel),color-mix(in srgb, var(--gray) 82%, var(--steel)));border:1px solid color-mix(in srgb, var(--steel) 78%, var(--smoke));border-radius:3px;line-height:1;font:700 19px var(--font);}
+    .adjust:active{transform:translateY(1px);}
+    .range {--pct:45%;width:100%;min-width:0;appearance:none;-webkit-appearance:none;height:10px;border:1px solid color-mix(in srgb, var(--steel) 78%, var(--smoke));border-radius:50px;cursor:pointer;
+      background:linear-gradient(90deg,var(--yellow) 0%,var(--yellow) var(--pct),var(--steel) var(--pct),color-mix(in srgb, var(--gray) 82%, var(--steel)) 100%);
+      box-shadow:inset 0 2px 3px color-mix(in srgb, var(--gray) 56%, transparent),0 0 6px color-mix(in srgb, color-mix(in srgb, var(--steel) 78%, var(--smoke)) 17%, transparent);}
+    .range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;height:22px;width:11px;border-radius:2px;border:1px solid color-mix(in srgb, var(--steel) 17%, var(--smoke));background:linear-gradient(90deg,color-mix(in srgb, var(--steel) 55%, var(--smoke)),var(--smoke) 40%,color-mix(in srgb, var(--steel) 17%, var(--smoke)));box-shadow:1px 1px 4px color-mix(in srgb, var(--gray) 91%, var(--steel));}
+    .range::-moz-range-thumb{height:20px;width:10px;border-radius:2px;border:1px solid color-mix(in srgb, var(--steel) 17%, var(--smoke));background:linear-gradient(90deg,color-mix(in srgb, var(--steel) 55%, var(--smoke)),var(--smoke) 40%,color-mix(in srgb, var(--steel) 17%, var(--smoke)));}
+    .param-value {white-space:nowrap;color:color-mix(in srgb, var(--steel) 35%, var(--smoke));text-align:right;font:700 14px var(--font);font-variant-numeric:tabular-nums;}
+    .info {width:17px;height:17px;line-height:15px;border:1px solid var(--steel);border-radius:50%;padding:0;color:color-mix(in srgb, var(--steel) 35%, var(--smoke));background:transparent;font:700 12px var(--font);}
+    .info:hover,.info:focus-visible{border-color:var(--cyan);color:var(--smoke);}
+    .panel-note {color:color-mix(in srgb, var(--steel) 55%, var(--smoke));font-size:13px;line-height:1.25;margin-top:9px;padding:8px 9px;background:color-mix(in srgb, var(--gray) 91%, var(--steel));border-left:2px solid color-mix(in srgb, var(--steel) 78%, var(--smoke));}
+    .status {display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:9px 0 0;color:color-mix(in srgb, var(--steel) 35%, var(--smoke));font-size:13px;}
+    .status b{color:var(--smoke);font-weight:700;}
+    .pill{font-size:11px;padding:2px 6px;border:1px solid color-mix(in srgb, var(--gray) 45%, var(--steel));border-radius:3px;background:color-mix(in srgb, var(--gray) 82%, var(--steel));color:color-mix(in srgb, var(--steel) 35%, var(--smoke));letter-spacing:.5px;text-transform:uppercase;}
+    .center {grid-area:car;min-width:0;position:relative;border-radius:10px;background:radial-gradient(ellipse at 50% 44%,color-mix(in srgb, var(--gray) 82%, var(--steel)) 0%,color-mix(in srgb, color-mix(in srgb, var(--gray) 91%, var(--steel)) 66%, transparent) 39%,color-mix(in srgb, var(--gray) 36%, transparent) 73%);
+      display:flex;flex-direction:column;align-items:stretch;padding:6px 3px 10px;gap:5px;}
+    .center:before,.center:after{content:"";position:absolute;top:15%;bottom:18%;width:1px;background:linear-gradient(transparent,color-mix(in srgb, color-mix(in srgb, var(--steel) 78%, var(--smoke)) 30%, transparent),transparent);}
+    .center:before{left:9%}.center:after{right:9%}
+    .center-top {display:flex;align-items:center;justify-content:center;gap:7px;color:var(--cyan);font:700 12px var(--display);letter-spacing:2px;z-index:1;}
+    .center-top .dash {flex:1;max-width:36px;height:1px;background:var(--steel);}
+    .car-wrap{position:relative;flex:1;display:flex;justify-content:center;align-items:center;min-height:365px;}
+    .car-wrap::before{content:"";position:absolute;left:50%;top:1%;height:97%;border-left:1px dashed color-mix(in srgb, color-mix(in srgb, var(--steel) 55%, var(--smoke)) 22%, transparent);}
+    .car-svg {width:min(100%,280px);height:100%;max-height:525px;min-height:350px;filter:drop-shadow(0 13px 12px color-mix(in srgb, var(--gray) 75%, transparent));z-index:1;}
+    .center-adjust {position:relative;z-index:2;border:1px solid var(--steel);border-radius:6px;padding:9px 10px;margin:1px 4px 0;background:color-mix(in srgb, color-mix(in srgb, var(--gray) 91%, var(--steel)) 92%, transparent);}
+    .center-adjust .parameter {grid-template-columns:minmax(65px,1fr) 20px minmax(70px,1.1fr) minmax(65px,.65fr) 20px 17px;}
+    .center-adjust .center-label {font:700 12px var(--display);color:var(--cyan);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;}
+    .middle-message {font-size:12px;line-height:1.2;color:color-mix(in srgb, var(--steel) 35%, var(--smoke));text-align:center;margin-top:3px;}
+    .compound {display:flex;gap:4px;flex-wrap:wrap;}
+    .compound button {flex:1;padding:7px 3px;min-width:53px;background:color-mix(in srgb, var(--gray) 82%, var(--steel));border:1px solid var(--steel);color:color-mix(in srgb, var(--steel) 35%, var(--smoke));border-radius:4px;font:700 13px var(--font);}
+    .compound button.selected {background:linear-gradient(var(--yellow),var(--yellow));border-color:var(--yellow);color:var(--smoke);}
+    .global-footer {display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:13px;padding:13px 16px;
+      border-top:2px solid var(--steel);background:linear-gradient(100deg,color-mix(in srgb, var(--gray) 80%, transparent),color-mix(in srgb, var(--yellow) 78%, transparent) 76%,color-mix(in srgb, color-mix(in srgb, var(--gray) 82%, var(--steel)) 95%, transparent));}
+    .footleft,.footright{display:flex;align-items:center;flex-wrap:wrap;gap:9px;}
+    .action {padding:7px 12px;border-radius:5px;background:color-mix(in srgb, var(--gray) 82%, var(--steel));border:1px solid var(--steel);color:color-mix(in srgb, var(--steel) 17%, var(--smoke));font-weight:700;letter-spacing:.5px;}
+    .action:hover{border-color:color-mix(in srgb, var(--steel) 35%, var(--smoke));color:var(--smoke);}
+    .action.primary{background:linear-gradient(var(--yellow),var(--yellow));border-color:var(--yellow);color:var(--smoke);}
+    .kbd {display:inline-grid;place-items:center;margin-right:5px;width:22px;height:22px;border-radius:50%;font:700 14px var(--font);background:linear-gradient(125deg,color-mix(in srgb, var(--steel) 78%, var(--smoke)),color-mix(in srgb, var(--gray) 45%, var(--steel)));color:var(--smoke);}
+    .action.primary .kbd {background:linear-gradient(var(--yellow),var(--yellow));}
+    .saved {min-width:140px;font-size:13px;color:color-mix(in srgb, var(--steel) 35%, var(--smoke));}
+    .learn {display:grid;grid-template-columns:1.2fr 1fr;gap:0;margin-top:13px;border:1px solid color-mix(in srgb, var(--gray) 45%, var(--steel));border-radius:8px;overflow:hidden;background:color-mix(in srgb, color-mix(in srgb, var(--gray) 91%, var(--steel)) 85%, transparent);}
+    .learn section {padding:14px 19px;}
+    .learn section+section{border-left:1px solid color-mix(in srgb, var(--gray) 45%, var(--steel));}
+    .learn small {display:block;color:var(--orange);letter-spacing:2px;font:700 11px var(--display);margin-bottom:5px;text-transform:uppercase;}
+    .learn h2 {font:700 19px var(--display);margin:0 0 6px;color:var(--smoke);}
+    .learn p {margin:0;color:color-mix(in srgb, var(--steel) 35%, var(--smoke));font-size:15px;line-height:1.35;}
+    .fine-print{font-size:12px;line-height:1.3;color:color-mix(in srgb, var(--steel) 78%, var(--smoke));margin:11px 5px;}
+    .toast {position:fixed;bottom:16px;left:50%;transform:translateX(-50%) translateY(10px);padding:10px 18px;border:1px solid var(--cyan);border-radius:5px;background:color-mix(in srgb, var(--gray) 82%, var(--steel));z-index:50;box-shadow:0 12px 25px color-mix(in srgb, var(--gray) 60%, transparent);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;}
+    .toast.show {opacity:1;transform:translateX(-50%) translateY(0);}
+    .hidden{display:none!important;}
+    @media (max-width:1220px){
+      .app{padding:10px 12px;}
+      .workspace{grid-template-columns:minmax(270px,1fr) minmax(230px,270px) minmax(270px,1fr);gap:9px;}
+      .panel{padding:11px 9px;}
+      .parameter{grid-template-columns:minmax(82px,1fr) 19px minmax(55px,1.05fr) minmax(55px,.65fr) 19px 15px;gap:4px;}
+      .adjust{height:19px;width:19px;}
+      .param-name{font-size:12.5px;}.param-value{font-size:12px;}.info{width:15px;height:15px;line-height:13px;}
+    }
+    @media (max-width:925px){
+      .workspace{grid-template-columns:1fr 1fr;grid-template-rows:auto;grid-template-areas:'car car' 'lf rf' 'lr rr';min-height:0;}
+      .center{max-width:100%;display:grid;grid-template-columns:1fr 240px;grid-template-rows:25px 1fr;gap:0;padding:8px 12px;}
+      .center-top {grid-column:1 / 3;grid-row:1;}
+      .car-wrap{grid-row:2;grid-column:1;min-height:315px;}
+      .car-svg{min-height:300px;max-height:360px;}
+      .center-adjust{grid-row:2;grid-column:2;align-self:center;}
+      .center .middle-message{grid-row:3;grid-column:1/3;}
+      .parameter{grid-template-columns:minmax(95px,1.15fr) 21px minmax(80px,1fr) minmax(65px,.6fr) 21px 17px;}
+      .param-name{font-size:14px;}.param-value{font-size:14px;}
+      .learn{grid-template-columns:1fr;}.learn section+section{border-left:0;border-top:1px solid color-mix(in srgb, var(--gray) 45%, var(--steel));}
+    }
+    @media (max-width:630px){
+      .header{padding:13px 12px 13px 72px;min-height:77px;}
+      .helmet{width:54px;height:54px;top:11px;left:12px;}
+      .brand{font-size:29px;letter-spacing:-1px;}.header-sub{font-size:13px;}.title-wrap{gap:3px 13px;}
+      .event{display:none;}
+      .nav{grid-template-columns:1fr 1fr;gap:5px;}
+      .tab{min-height:51px;font-size:13px;gap:6px;}.tab svg{width:19px;height:19px;}
+      .utility{font-size:12px;padding:7px;}.utility .hint{margin-left:0;}
+      .workspace{grid-template-columns:1fr;grid-template-areas:'car' 'lf' 'rf' 'lr' 'rr';}
+      .center{display:flex;flex-direction:column;padding:9px 7px;}
+      .car-wrap{min-height:320px;max-height:365px;}
+      .center-adjust{align-self:stretch;padding:9px 12px;}
+      .center-adjust .parameter{grid-template-columns:minmax(75px,1fr) 20px minmax(85px,1fr) minmax(72px,.7fr) 20px 17px;gap:4px;}
+      .center-adjust .param-name{font-size:13px;}.center-adjust .param-value{font-size:12px;}
+      .car-svg{min-height:300px;}
+      .panel{padding:11px 12px;}.panel-title{font-size:17px;}
+      .global-footer{padding:10px;}.footleft,.footright{width:100%;justify-content:space-around;}
+      .saved{width:100%;text-align:center;}
+    }
+    @media (prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important;}}
+      /* V2: overview and context-sensitive illustration surfaces */
+    .nav {grid-template-columns:repeat(5,minmax(0,1fr));}
+    .tab.tab-home svg{stroke:color-mix(in srgb, var(--steel) 35%, var(--smoke));}
+    .tab{font-size:14px;gap:9px;}
+    .overview{min-height:690px;overflow:hidden;padding:22px 25px 19px;border:1px solid var(--steel);border-radius:10px;position:relative;
+      background:radial-gradient(ellipse at 49% 58%,color-mix(in srgb, color-mix(in srgb, var(--gray) 68%, var(--steel)) 38%, transparent),transparent 54%),linear-gradient(150deg,color-mix(in srgb, var(--gray) 98%, transparent),color-mix(in srgb, var(--gray) 95%, transparent));}
+    .overview:before{content:'';position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,transparent 0,transparent 42px,color-mix(in srgb, color-mix(in srgb, var(--steel) 78%, var(--smoke)) 4.5%, transparent) 43px,transparent 44px);}
+    .overview-head{display:flex;justify-content:space-between;align-items:center;gap:24px;position:relative;z-index:1;margin-bottom:12px;}
+    .eyebrow{font:700 12px var(--display);letter-spacing:2.5px;color:var(--yellow);}
+    .overview-head h1{font:italic 700 clamp(24px,3.3vw,44px) var(--display);letter-spacing:-.8px;line-height:1.15;margin:8px 0 6px;color:var(--smoke);}
+    .headline-dot{color:var(--yellow);}
+    .overview-head p{font-size:16px;color:color-mix(in srgb, var(--steel) 35%, var(--smoke));margin:0;}
+    .overview-help{font:700 12px/1.6 var(--display);color:color-mix(in srgb, var(--steel) 55%, var(--smoke));letter-spacing:1px;text-align:right;white-space:nowrap;}
+    .help-indicator{font-size:19px;color:var(--yellow);}
+    .overview-cards{display:flex;justify-content:space-between;gap:18px;position:relative;z-index:2;}
+    .overview-callout{--zone:var(--smoke);display:flex;align-items:center;gap:13px;width:min(40%,395px);padding:13px 17px;text-align:left;background:linear-gradient(105deg,color-mix(in srgb, color-mix(in srgb, var(--gray) 91%, var(--steel)) 98%, transparent),color-mix(in srgb, var(--gray) 95%, transparent));border:1px solid var(--steel);border-left:4px solid var(--zone);border-radius:6px;color:var(--smoke);position:relative;overflow:hidden;box-shadow:0 6px 19px color-mix(in srgb, var(--gray) 26.6667%, transparent);transition:border-color .2s,box-shadow .2s,transform .2s;}
+    .overview-callout:before{content:'';position:absolute;inset:0;opacity:.06;background:linear-gradient(90deg,var(--zone),transparent 80%);}
+    .overview-callout:hover,.overview-callout:focus-visible{border-color:var(--zone);box-shadow:0 0 19px color-mix(in srgb,var(--zone) 25%,transparent),inset 0 0 20px color-mix(in srgb, var(--smoke) 3.52941%, transparent);transform:translateY(-2px);}
+    .overview-index{color:var(--zone);font:700 28px var(--display);font-style:italic;border-right:1px solid color-mix(in srgb, var(--gray) 45%, var(--steel));padding-right:13px;}
+    .overview-card-copy{display:flex;flex-direction:column;align-items:flex-start;min-width:0;gap:3px;}
+    .overview-card-title{font:700 clamp(14px,1.45vw,19px) var(--display);letter-spacing:.8px;font-style:italic;}
+    .open-arrow{color:var(--zone);}
+    .overview-card-desc{font:600 14px var(--font);color:color-mix(in srgb, var(--steel) 35%, var(--smoke));}
+    .overview-card-cta{font:700 10px var(--display);color:var(--zone);letter-spacing:1.1px;margin-top:4px;}
+    .overview-stage{--focus:none;position:relative;min-height:365px;display:flex;align-items:center;justify-content:center;margin:-5px 0 0;}
+    .overview-glow{position:absolute;inset:13% 12%;pointer-events:none;background:radial-gradient(ellipse,color-mix(in srgb, color-mix(in srgb, var(--gray) 45%, var(--steel)) 34%, transparent),transparent 75%);}
+    .overview-gridlines{position:absolute;inset:5% 0;pointer-events:none;background:linear-gradient(90deg,transparent 49.95%,color-mix(in srgb, var(--steel) 20.7843%, transparent) 50%,transparent 50.05%),repeating-linear-gradient(90deg,transparent 0,transparent 90px,color-mix(in srgb, color-mix(in srgb, var(--steel) 35%, var(--smoke)) 6.27451%, transparent) 91px,transparent 92px),repeating-linear-gradient(0deg,transparent 0,transparent 59px,color-mix(in srgb, color-mix(in srgb, var(--steel) 35%, var(--smoke)) 6.27451%, transparent) 60px,transparent 61px);mask-image:linear-gradient(90deg,transparent,var(--gray) 12%,var(--gray) 90%,transparent);}
+    .side-svg{position:relative;width:100%;height:auto;max-height:365px;overflow:visible;filter:drop-shadow(0 18px 18px color-mix(in srgb, var(--gray) 66.6667%, transparent));z-index:1;}
+    .side-svg .car-zone{transition:filter .18s,opacity .18s;outline:none;}
+    .overview-stage .click-zone .touch-target{stroke-opacity:0;transition:stroke-opacity .2s,filter .2s;}
+    .overview-stage .click-zone:hover .touch-target,.overview-stage .click-zone:focus .touch-target{stroke-opacity:1;filter:drop-shadow(0 0 5px currentColor);}
+    .detail-side .click-zone{display:none;}
+    .overview-stage .side-svg .car-zone:hover,.overview-stage .side-svg .car-zone:focus{filter:drop-shadow(0 0 9px color-mix(in srgb, var(--smoke) 56.4706%, transparent)) brightness(1.23);}
+    .overview-stage:has(.car-zone[data-tab="suspension"]:hover) .car-zone:not([data-tab="suspension"]),
+    .overview-stage:has(.car-zone[data-tab="aero"]:hover) .car-zone:not([data-tab="aero"]),
+    .overview-stage:has(.car-zone[data-tab="wheels"]:hover) .car-zone:not([data-tab="wheels"]),
+    .overview-stage:has(.car-zone[data-tab="power"]:hover) .car-zone:not([data-tab="power"]){opacity:.43;}
+    .overview-float{position:absolute;bottom:12px;font:700 11px var(--display);letter-spacing:1.5px;color:color-mix(in srgb, var(--steel) 78%, var(--smoke));}
+    .overview-float span{color:var(--yellow);}.overview-float-left{left:11px;}.overview-float-right{right:11px;}
+    .overview-bottom{display:flex;justify-content:space-between;gap:14px;align-items:center;flex-wrap:wrap;border-top:1px solid color-mix(in srgb, var(--gray) 45%, var(--steel));padding-top:15px;margin-top:16px;position:relative;}
+    .overview-caption{font:700 11px var(--display);color:color-mix(in srgb, var(--steel) 35%, var(--smoke));letter-spacing:1.4px;}
+    .pulse-mark{display:inline-block;width:7px;height:7px;background:color-mix(in srgb, var(--steel) 35%, var(--smoke));border-radius:50%;box-shadow:0 0 9px color-mix(in srgb, var(--steel) 35%, var(--smoke));margin-right:8px;}
+    .overview-legend{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px;}
+    .legend-chip{display:inline-flex;align-items:center;gap:6px;color:color-mix(in srgb, var(--steel) 17%, var(--smoke));background:color-mix(in srgb, var(--gray) 82%, var(--steel));border:1px solid color-mix(in srgb, var(--gray) 45%, var(--steel));border-radius:4px;font:700 11px var(--display);letter-spacing:.4px;padding:7px 8px;}
+    .legend-chip:hover{border-color:var(--zone);color:var(--smoke);}.legend-dot{width:7px;height:7px;border-radius:2px;background:var(--zone);}
+    .utility.overview-mode,.global-footer.overview-mode,.learn.overview-mode{display:none;}
+    .overview:has(.overview-callout[data-zone="suspension"]:hover) .car-zone:not([data-tab="suspension"]),
+    .overview:has(.overview-callout[data-zone="aero"]:hover) .car-zone:not([data-tab="aero"]),
+    .overview:has(.overview-callout[data-zone="wheels"]:hover) .car-zone:not([data-tab="wheels"]),
+    .overview:has(.overview-callout[data-zone="power"]:hover) .car-zone:not([data-tab="power"]){opacity:.45;}
+    .overview:has(.overview-callout[data-zone="suspension"]:hover) .car-zone[data-tab="suspension"],
+    .overview:has(.overview-callout[data-zone="aero"]:hover) .car-zone[data-tab="aero"],
+    .overview:has(.overview-callout[data-zone="wheels"]:hover) .car-zone[data-tab="wheels"],
+    .overview:has(.overview-callout[data-zone="power"]:hover) .car-zone[data-tab="power"]{filter:drop-shadow(0 0 10px color-mix(in srgb, var(--smoke) 50.1961%, transparent)) brightness(1.18);}
+
+    .workspace.workspace-wide{grid-template-columns:repeat(4,minmax(0,1fr));grid-template-rows:auto auto;grid-template-areas:'car car car car' 'lf fr lr rr';min-height:0;align-items:stretch;}
+    .workspace.workspace-wide .center{display:grid;grid-template-columns:minmax(0,1fr) minmax(230px,280px);grid-template-rows:24px 1fr auto;gap:8px;padding:12px;min-height:310px;}
+    .workspace.workspace-wide .center-top{grid-column:1/-1;grid-row:1;}
+    .workspace.workspace-wide .center .car-wrap{grid-column:1;grid-row:2;min-height:245px;max-height:295px;padding:0 12px;}
+    .workspace.workspace-wide .center .car-wrap::before{display:none;}
+    .workspace.workspace-wide .center .center-adjust{grid-column:2;grid-row:2;align-self:center;margin:0;}
+    .workspace.workspace-wide .center .middle-message{grid-column:1/-1;grid-row:3;}
+    .workspace.workspace-wide .side-svg,.workspace.workspace-wide .v10-svg{width:100%;height:100%;max-height:285px;filter:drop-shadow(0 12px 8px color-mix(in srgb, var(--gray) 53.3333%, transparent));}
+    .workspace.workspace-wide .panel{padding:13px 13px;}
+    .workspace.workspace-wide .parameter{grid-template-columns:minmax(63px,1.1fr) 18px minmax(50px,.9fr) minmax(53px,.65fr) 18px 15px;gap:4px;}
+    .workspace.workspace-wide .param-name{font-size:12px;}.workspace.workspace-wide .param-value{font-size:12px;}
+    .workspace.workspace-wide .adjust{width:18px;height:18px;}
+    .workspace.workspace-wide .panel-title{font-size:17px;}
+    .workspace.workspace-wide .center-adjust .parameter{grid-template-columns:minmax(66px,1fr) 18px minmax(60px,1fr) minmax(56px,.5fr) 18px 14px;}
+    .workspace.workspace-wide .center-adjust .param-name{font-size:13px;}
+    .workspace.workspace-wide .center-adjust .param-value{font-size:12px;}
+    .detail-side .car-zone{cursor:default!important;}
+    @media(max-width:1050px){
+      .overview{padding:15px;min-height:0;}.overview-stage{min-height:275px;}
+      .workspace.workspace-wide{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:'car car' 'lf fr' 'lr rr';}
+      .workspace.workspace-wide .parameter{grid-template-columns:minmax(85px,1fr) 20px minmax(65px,1.15fr) minmax(55px,.5fr) 20px 17px;}
+    }
+    @media(max-width:750px){
+      .overview-head{flex-direction:column;align-items:flex-start;gap:4px;}
+      .overview-help{display:none;}
+      .overview-cards{gap:7px;}
+      .overview-callout{width:50%;padding:10px;gap:8px;min-height:83px;}
+      .overview-index{font-size:20px;padding-right:7px;}.overview-card-title{font-size:13px;}
+      .overview-card-desc{font-size:11px;line-height:1.2;}
+      .overview-card-cta{font-size:9px;letter-spacing:.3px;}
+      .overview-stage{min-height:220px;}
+      .overview-legend{justify-content:flex-start;}
+      .workspace.workspace-wide .center{grid-template-columns:1fr;grid-template-rows:25px auto auto auto;}
+      .workspace.workspace-wide .center .car-wrap{grid-column:1;grid-row:2;min-height:195px;max-height:260px;}
+      .workspace.workspace-wide .center .center-adjust{grid-column:1;grid-row:3;}
+      .workspace.workspace-wide .center .middle-message{grid-column:1;grid-row:4;}
+      .tab{font-size:12px;gap:5px;}
+    }
+    @media(max-width:630px){
+      .nav{grid-template-columns:repeat(2,minmax(0,1fr));}
+      .tab.tab-home{grid-column:1/-1;}
+      .overview-head h1{font-size:24px;}
+      .overview-stage{min-height:160px;}
+      .overview-callout{padding:8px;}
+      .overview-index{display:none;}
+      .overview-card-title{font-size:12px;}
+      .overview-card-desc{font-size:10px;}
+      .overview-card-cta{font-size:9px;}
+      .overview-float{font-size:9px;bottom:2px;}
+      .workspace.workspace-wide{grid-template-columns:1fr;grid-template-areas:'car' 'lf' 'fr' 'lr' 'rr';}
+    }
+
+
+    /* Compact modern layout and pit strategy */
+    .app{max-width:1510px;padding:16px 22px 18px;}
+    .header{min-height:78px;padding:10px 24px 10px 94px;border-radius:8px 8px 2px 2px;}
+    .helmet{left:20px;top:7px;width:65px;height:65px;}
+    .brand{font-size:clamp(32px,3vw,45px);letter-spacing:.4px;font-style:normal;}
+    .nav{grid-template-columns:repeat(4,minmax(0,1fr));margin:12px 0;gap:9px;}
+    .tab{min-height:62px;border-radius:6px;transform:none;font-size:15px;gap:9px;}
+    .tab>*{transform:none;}.tab svg{width:23px;height:23px;}
+    .utility{min-height:27px;margin-bottom:10px;border:0;padding:2px 4px;background:none;}
+    .switchline{font-size:13px;color:color-mix(in srgb, var(--steel) 35%, var(--smoke));}.switchline input{width:16px;height:16px;}
+    .workspace{grid-template-columns:minmax(260px,1fr) minmax(230px,290px) minmax(260px,1fr);grid-template-rows:1fr 1fr;gap:12px;min-height:540px;}
+    .panel{padding:15px 17px;border-radius:8px;}
+    .center{justify-content:center;align-items:stretch;min-height:0;padding:16px 10px;gap:13px;}
+    .center::before,.center::after{display:none;}
+    .center-top{font-size:12px;letter-spacing:1.2px;}
+    .center-adjust{padding:12px 11px;margin:0;border-radius:8px;}
+    .center-adjust .center-label{font-size:13px;margin-bottom:12px;}
+    .center-adjust .center-label.with-gap{margin-top:18px;}
+    .panel-head{margin-bottom:12px;}
+    .parameter,.center-adjust .parameter{grid-template-columns:minmax(100px,1.25fr) 21px minmax(66px,1fr) minmax(58px,.7fr) 21px;gap:7px;min-height:35px;}
+    .center-adjust .parameter{grid-template-columns:minmax(85px,1.5fr) 20px minmax(48px,1fr) minmax(52px,.7fr) 20px;gap:4px;}
+    .param-name{font-size:14px;}.param-value{font-size:14px;}.adjust{width:21px;height:22px;}
+    .center-adjust .param-name,.center-adjust .param-value{font-size:12.5px;}
+    .panel-title{font-size:19px;}.panel-tag{font-size:11px;}
+    .thin-divider{height:1px;background:color-mix(in srgb, var(--gray) 45%, var(--steel));margin:9px 0;}
+    .engine-metrics{display:grid;gap:11px;margin:13px 0 4px;}
+    .engine-metrics div{display:flex;flex-direction:column;border-bottom:1px solid color-mix(in srgb, var(--gray) 45%, var(--steel));padding:6px 0 9px;}
+    .engine-metrics strong{font:700 26px var(--display);color:var(--smoke);letter-spacing:1px;}
+    .engine-metrics span{font-size:13px;color:color-mix(in srgb, var(--steel) 35%, var(--smoke));}
+    .global-footer{margin-top:13px;border-radius:7px;gap:9px;background:linear-gradient(100deg,color-mix(in srgb, var(--gray) 91%, var(--steel)),color-mix(in srgb, var(--gray) 82%, var(--steel)));}
+    .action{padding:12px 16px;min-height:44px;font-size:15px;}
+    .action-exit{border-color:var(--yellow);background:color-mix(in srgb, var(--gray) 68%, var(--steel));color:var(--smoke);}
+    .action:disabled{opacity:.4;cursor:not-allowed;}
+    .saved{min-width:140px;text-align:right;}
+    /* Pit board */
+    .strategy-board{display:flex;flex-direction:column;gap:13px;}
+    .strategy-top{display:grid;grid-template-columns:1.3fr 1fr;gap:13px;}
+    .strategy-config,.strategy-service{min-height:234px;}
+    .strategy-config-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;margin:12px 0 16px;}
+    .strategy-field{display:flex;flex-direction:column;gap:5px;font-weight:600;min-width:0;}
+    .strategy-field>span{font-size:13px;color:color-mix(in srgb, var(--steel) 55%, var(--smoke));white-space:nowrap;}
+    .strategy-input-wrap{display:flex;min-width:0;height:40px;border:1px solid var(--steel);border-radius:5px;background:color-mix(in srgb, var(--gray) 91%, var(--steel));align-items:center;}
+    .strategy-input-wrap:focus-within{border-color:color-mix(in srgb, var(--steel) 35%, var(--smoke));}
+    .strategy-input-wrap input{height:100%;min-width:0;flex:1;width:100%;border:0;background:transparent;color:var(--smoke);font:700 19px var(--display);padding:5px 7px 5px 11px;outline:none;}
+    .strategy-input-wrap span{flex-shrink:0;color:color-mix(in srgb, var(--steel) 55%, var(--smoke));padding:0 9px;font-size:13px;}
+    .strategy-field select{height:40px;padding:4px 8px;border:1px solid var(--steel);background:color-mix(in srgb, var(--gray) 91%, var(--steel));color:var(--smoke);font:700 18px var(--display);border-radius:5px;}
+    .pit-compound-label{font:700 11px var(--display);letter-spacing:1.25px;color:var(--cyan);margin-bottom:8px;}
+    .compound-toggles{display:flex;flex-wrap:wrap;gap:6px;}
+    .tyre-type{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-width:69px;flex:1;padding:7px 9px;border:1px solid color-mix(in srgb, var(--gray) 45%, var(--steel));background:color-mix(in srgb, var(--gray) 82%, var(--steel));color:color-mix(in srgb, var(--steel) 35%, var(--smoke));border-radius:5px;font-weight:700;font-size:13px;}
+    .tyre-type.is-selected{border-color:color-mix(in srgb, var(--steel) 35%, var(--smoke));background:color-mix(in srgb, var(--gray) 68%, var(--steel));color:var(--smoke);box-shadow:inset 0 0 0 1px var(--steel);}
+    .tyre-dot{height:10px;width:10px;border-radius:50%;display:inline-block;background:var(--tire-color);}
+    .service-inputs{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+    .pit-total{display:flex;justify-content:space-between;align-items:flex-end;border-top:1px solid color-mix(in srgb, var(--gray) 45%, var(--steel));padding-top:12px;margin-top:12px;gap:10px;}
+    .pit-total>span{font:700 12px var(--display);color:color-mix(in srgb, var(--steel) 35%, var(--smoke));letter-spacing:1px;max-width:150px;}
+    .pit-total strong{font:700 32px var(--display);color:var(--yellow);white-space:nowrap;}
+    .pit-total small{font-size:18px;}
+    .pit-service-stats{display:flex;gap:15px;justify-content:space-between;margin-top:8px;}
+    .pit-service-stats>div{display:flex;flex-direction:column;font-size:12px;color:color-mix(in srgb, var(--steel) 55%, var(--smoke));}
+    .pit-service-stats b{font:700 17px var(--display);color:var(--smoke);}
+    .service-footnote{font-size:11px;color:color-mix(in srgb, var(--steel) 78%, var(--smoke));margin-top:7px;}
+    .strategy-stops-section{min-width:0;}
+    .strategy-section-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:4px 0 10px;flex-wrap:wrap;}
+    .strategy-section-head h2{font:700 16px var(--display);letter-spacing:.5px;color:var(--smoke);margin:0;}
+    .pit-add{padding:7px 11px;min-height:34px;font-size:13px;}
+    .pit-stops-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;}
+    .pit-stop-card{background:linear-gradient(135deg,color-mix(in srgb, var(--gray) 91%, var(--steel)),var(--gray));border:1px solid color-mix(in srgb, var(--gray) 45%, var(--steel));border-radius:8px;padding:12px 14px;min-width:0;}
+    .pit-stop-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+    .stop-index{font:700 15px var(--display);color:var(--cyan);letter-spacing:.7px;}
+    .pit-remove{border:1px solid color-mix(in srgb, var(--gray) 45%, var(--steel));background:color-mix(in srgb, var(--gray) 82%, var(--steel));border-radius:4px;color:color-mix(in srgb, var(--steel) 35%, var(--smoke));font-size:20px;line-height:20px;width:25px;height:26px;}
+    .pit-remove:hover{color:var(--smoke);border-color:var(--yellow);}
+    .pit-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:15px;}
+    .pit-stop-card .pit-calc{margin-top:13px;border-top:1px solid color-mix(in srgb, var(--gray) 45%, var(--steel));padding-top:8px;display:grid;gap:4px;}
+    .pit-calc>div{display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:13px;color:color-mix(in srgb, var(--steel) 55%, var(--smoke));}
+    .pit-calc b{font:700 15px var(--display);color:var(--smoke);white-space:nowrap;}
+    .pit-calc .pit-calc-total{margin-top:7px;border-top:1px solid color-mix(in srgb, var(--gray) 45%, var(--steel));padding-top:8px;color:color-mix(in srgb, var(--steel) 17%, var(--smoke));font:700 13px var(--display);letter-spacing:.6px;}
+    .pit-calc-total strong{color:var(--yellow);font:700 23px var(--display);white-space:nowrap;}
+    .no-stops{grid-column:1/-1;border:1px dashed color-mix(in srgb, var(--gray) 45%, var(--steel));border-radius:7px;color:color-mix(in srgb, var(--steel) 35%, var(--smoke));padding:20px;text-align:center;}
+    .wear-panel{padding:14px 17px;}
+    .wear-caption{font-size:11px;color:color-mix(in srgb, var(--steel) 55%, var(--smoke));letter-spacing:1px;margin-top:5px;}
+    .wear-legend{display:flex;flex-wrap:wrap;gap:10px 15px;}
+    .wear-legend span{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:color-mix(in srgb, var(--steel) 35%, var(--smoke));}
+    .wear-legend i,.stint-compound i{width:10px;height:10px;display:inline-block;border-radius:50%;}
+    .chart-shell{height:245px;position:relative;border:1px solid color-mix(in srgb, var(--gray) 45%, var(--steel));border-radius:6px;background:linear-gradient(180deg,color-mix(in srgb, color-mix(in srgb, var(--gray) 91%, var(--steel)) 78%, transparent),color-mix(in srgb, var(--gray) 90%, transparent));margin:12px 0 14px;}
+    #wear-chart{height:100%;width:100%;display:block;}
+    .stint-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;}
+    .stint-chip{border:1px solid color-mix(in srgb, var(--gray) 45%, var(--steel));border-radius:5px;padding:10px 12px;background:color-mix(in srgb, var(--gray) 91%, var(--steel));min-width:0;}
+    .stint-label{display:flex;align-items:center;justify-content:space-between;gap:8px;font:700 12px var(--display);color:var(--cyan);}
+    .stint-compound{display:inline-flex;align-items:center;gap:4px;color:color-mix(in srgb, var(--steel) 17%, var(--smoke));font-size:11px;}
+    .stint-chip>strong{display:block;font:700 18px var(--display);margin:4px 0 8px;color:var(--smoke);}
+    .stint-chip>div:not(.stint-label){display:flex;justify-content:space-between;gap:8px;font-size:12px;color:color-mix(in srgb, var(--steel) 35%, var(--smoke));margin-top:3px;}
+    .stint-chip b{color:var(--smoke);font:700 14px var(--display);}
+    .alert-text{color:var(--yellow)!important;}
+    .strategy-warning{margin-top:9px;color:var(--yellow);border-left:2px solid var(--yellow);font-size:13px;padding:8px 11px;background:color-mix(in srgb, var(--gray) 82%, var(--steel));}
+    .strategy-disclaimer{font-size:12px;color:color-mix(in srgb, var(--steel) 55%, var(--smoke));margin:10px 0 0;}
+    @media(max-width:1100px){.strategy-config-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.strategy-top{grid-template-columns:1fr 1fr;}.workspace{grid-template-columns:1fr 240px 1fr;}.parameter{grid-template-columns:minmax(80px,1.3fr) 20px minmax(50px,1fr) 48px 20px;gap:4px;}.param-name{font-size:12px;}.param-value{font-size:12px;}}
+    @media(max-width:900px){.strategy-top{grid-template-columns:1fr;}.workspace{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:auto;grid-template-areas:'car car' 'lf rf' 'lr rr';min-height:0;}.center{padding:12px;}.center-adjust{margin:0;}.strategy-stops-section .pit-stops-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.stint-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.saved{order:3;}}
+    @media(max-width:620px){.app{padding:9px;}.nav{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;}.tab{min-height:54px;font-size:13px;}.workspace{grid-template-columns:1fr;grid-template-areas:'car' 'lf' 'rf' 'lr' 'rr';}.strategy-config-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}.strategy-stops-section .pit-stops-grid{grid-template-columns:1fr;}.stint-grid{grid-template-columns:1fr;}.pit-service-stats{gap:6px;}.strategy-field>span{font-size:12px;}.panel{padding:12px;}.global-footer{padding:9px;}.footleft,.footright{justify-content:flex-start;}.action{padding:10px 12px;min-height:41px;font-size:13px;}.saved{order:9;text-align:left;width:100%;}}
+
+    /* Open Formula: paleta industrial de cuatro colores; acabado dark mate. */
+    body {
+      background:
+        radial-gradient(ellipse at 60% 0%,color-mix(in srgb,var(--steel) 13%,transparent),transparent 62%),
+        var(--gray);
+      color:var(--smoke);
+    }
+    body::before{opacity:.07;background:repeating-linear-gradient(0deg,transparent 0px,transparent 6px,color-mix(in srgb,var(--steel) 35%,transparent) 7px);}
+    .header{
+      border:1px solid color-mix(in srgb,var(--steel) 42%,var(--gray));
+      border-bottom:2px solid var(--yellow);
+      background:linear-gradient(105deg,color-mix(in srgb,var(--gray) 65%,var(--steel)),var(--gray) 82%);
+    }
+    .brand{color:var(--smoke);text-shadow:none;}
+    .event{color:color-mix(in srgb,var(--smoke) 64%,var(--steel));}
+    .event strong{color:var(--yellow);}
+    .tab{
+      color:color-mix(in srgb,var(--smoke) 72%,var(--steel));
+      background:linear-gradient(145deg,color-mix(in srgb,var(--gray) 78%,var(--steel)),var(--gray));
+      border:1px solid color-mix(in srgb,var(--steel) 57%,var(--gray));
+      border-bottom:2px solid color-mix(in srgb,var(--steel) 55%,var(--gray));
+      box-shadow:none;
+    }
+    .tab svg{stroke:var(--steel);filter:none;}
+    .tab:hover{background:color-mix(in srgb,var(--steel) 19%,var(--gray));color:var(--smoke);}
+    .tab.active{
+      border:1px solid var(--yellow);border-bottom:3px solid var(--yellow);
+      color:var(--smoke);background:linear-gradient(135deg,color-mix(in srgb,var(--gray) 56%,var(--steel)),color-mix(in srgb,var(--gray) 84%,var(--steel)));
+      box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--yellow) 14%,transparent);
+    }
+    .tab.active svg{stroke:var(--yellow);filter:none;}
+    .panel,.pit-stop-card,.stint-chip,.center-adjust{
+      border-color:color-mix(in srgb,var(--steel) 42%,var(--gray));
+      background:linear-gradient(155deg,color-mix(in srgb,var(--gray) 82%,var(--steel)),var(--gray));
+      box-shadow:none;
+    }
+    .panel-title,.center-label,.center-top,.stop-index,.stint-label{color:var(--smoke);}
+    .panel-head{border-bottom-color:color-mix(in srgb,var(--steel) 42%,var(--gray));}
+    .panel-tag{color:color-mix(in srgb,var(--smoke) 60%,var(--steel));}
+    .panel-tag b,.param-value,.pit-total strong,.pit-calc-total strong{color:var(--yellow);}
+    .param-name,.strategy-field>span{color:color-mix(in srgb,var(--smoke) 84%,var(--steel));}
+    .adjust{
+      color:var(--smoke);border:1px solid color-mix(in srgb,var(--steel) 75%,var(--gray));
+      background:color-mix(in srgb,var(--gray) 58%,var(--steel));box-shadow:none;
+    }
+    .adjust:hover{border-color:var(--yellow);color:var(--yellow);}
+    .range{
+      border:1px solid color-mix(in srgb,var(--steel) 65%,var(--gray));
+      background:linear-gradient(90deg,var(--yellow) 0%,var(--yellow) var(--pct),color-mix(in srgb,var(--gray) 58%,var(--steel)) var(--pct),color-mix(in srgb,var(--gray) 58%,var(--steel)) 100%);
+      box-shadow:none;
+    }
+    .range::-webkit-slider-thumb{border:1px solid var(--smoke);background:var(--smoke);box-shadow:none;}
+    .range::-moz-range-thumb{border:1px solid var(--smoke);background:var(--smoke);box-shadow:none;}
+    .strategy-field select,.strategy-input-wrap{
+      color:var(--smoke);background:color-mix(in srgb,var(--gray) 86%,var(--steel));
+      border:1px solid color-mix(in srgb,var(--steel) 67%,var(--gray));
+    }
+    .strategy-input-wrap input,.strategy-field select{color:var(--smoke);}
+    .strategy-input-wrap:focus-within,.strategy-field select:focus{border-color:var(--yellow);}
+    button:focus-visible,input:focus-visible,select:focus-visible{outline-color:var(--yellow);}
+    .tyre-type{
+      color:color-mix(in srgb,var(--smoke) 77%,var(--steel));
+      background:color-mix(in srgb,var(--gray) 80%,var(--steel));
+      border-color:color-mix(in srgb,var(--gray) 45%,var(--steel));
+    }
+    .tyre-type.is-selected{border-color:var(--yellow);background:color-mix(in srgb,var(--gray) 65%,var(--steel));color:var(--smoke);box-shadow:none;}
+    .tyre-type[data-initial-compound="Rain"] .tyre-dot,.tyre-type[data-stop-compound="Rain"] .tyre-dot{border:2px dashed var(--smoke);}
+    .chart-shell{border-color:color-mix(in srgb,var(--steel) 45%,var(--gray));background:var(--gray);}
+    .global-footer{border:1px solid color-mix(in srgb,var(--steel) 40%,var(--gray));background:color-mix(in srgb,var(--gray) 88%,var(--steel));}
+    .action{background:color-mix(in srgb,var(--gray) 65%,var(--steel));border:1px solid var(--steel);color:var(--smoke);}
+    .action:hover{border-color:var(--yellow);color:var(--smoke);}
+    .action.primary{background:var(--yellow);color:var(--gray);border-color:var(--yellow);}
+    .action.primary:hover{background:color-mix(in srgb,var(--yellow) 81%,var(--smoke));color:var(--gray);}
+    .action-exit{background:var(--gray);border-color:var(--steel);color:var(--smoke);}
+    .alert-text,.strategy-warning{color:var(--yellow)!important;}
+    .strategy-warning{border-color:var(--yellow);background:color-mix(in srgb,var(--gray) 80%,var(--yellow));}
+    .toast{color:var(--smoke);background:color-mix(in srgb,var(--gray) 60%,var(--steel));border-color:var(--yellow);}
+    .switchline input{accent-color:var(--yellow);}
+    .tyre-dot,.wear-legend i,.stint-compound i{box-shadow:none;}
+
+
+    /* Simulator masthead: centered title on a full-width white band. */
+    .sim-title-band{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      width:100%;
+      min-height:83px;
+      margin:0 0 9px;
+      padding:17px 20px;
+      background:#FFFFFF;
+      border-radius:5px 5px 2px 2px;
+      text-align:center;
+    }
+    .sim-title{
+      margin:0;
+      color:var(--steel); /* Fallback where gradient text is unavailable. */
+      background:linear-gradient(100deg,#62696D 0%,#64727B 46%,#607E91 100%);
+      -webkit-background-clip:text;
+      background-clip:text;
+      -webkit-text-fill-color:transparent;
+      font:700 clamp(24px,2.5vw,35px)/1.18 var(--display);
+      letter-spacing:1.6px;
+      text-align:center;
+    }
+    .header{padding:13px 23px;min-height:68px;}
+    .brand{margin:0;font-size:clamp(29px,2.8vw,39px);}
+    /* Intentional exception to the four-color palette: the exit action. */
+    .action.action-exit{
+      background:#B4232B;
+      border:1px solid #C94049;
+      color:#FFFFFF;
+    }
+    .action.action-exit:hover,.action.action-exit:focus-visible{
+      background:#C52D36;
+      border-color:#EB6C72;
+      color:#FFFFFF;
+    }
+    @media(max-width:630px){
+      .sim-title-band{min-height:66px;padding:14px 12px;margin-bottom:8px;}
+      .sim-title{font-size:clamp(19px,5.5vw,26px);letter-spacing:.7px;}
+      .header{padding:10px 13px;min-height:59px;}
+      .brand{font-size:29px;}
+    }
+
+  </style>
+</head>
+<body>
+  <main class="app">
+    <div class="sim-title-band">
+      <h1 class="sim-title">OPEN FORMULA SIMULATION</h1>
+    </div>
+    <header class="header">
+      <div class="title-wrap"><h2 class="brand">GARAGE</h2></div>
+      <div class="event">Circuit setup<strong>Australia</strong></div>
+    </header>
+    <nav class="nav" id="nav" aria-label="Categorías del garaje"></nav>
+    <div class="utility" id="symmetry-row"><label class="switchline"><input type="checkbox" id="symmetry" checked /> Ajustes simétricos L/R</label></div>
+    <div id="workspace" class="workspace" aria-live="off"></div>
+    <footer class="global-footer">
+      <div class="footleft">
+        <button class="action" id="reset">↺ Restaurar pestaña</button>
+        <button class="action" id="export">↓ Exportar JSON</button>
+        <button class="action" id="import">↑ Importar JSON</button>
+        <input type="file" id="import-file" accept=".json,application/json" class="hidden" aria-label="Importar configuración JSON" />
+      </div>
+      <div class="footright">
+        <span class="saved" id="save-state">Configuración guardada</span>
+        <button class="action primary" id="save">Guardar</button>
+        <button class="action action-exit" id="exit">Salir de Garaje</button>
+      </div>
+    </footer>
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script>
+    'use strict';
+    const svg=(contents)=>`<svg viewBox="0 0 24 24" aria-hidden="true">${contents}</svg>`;
+    const icon={
+      suspension:svg('<path d="M9 2h6v3H9zM5 5h14M12 5v3M7 9l10 2-10 2 10 2-10 2 10 2M12 20v2"/>'),
+      aero:svg('<path d="M2 5h13c5 0 6 6 1 7M2 12h19M2 19h11c6 0 6-6 1-6"/>'),
+      wheels:svg('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v6m0 6v6M3 12h6m6 0h6M5.6 5.6l4.2 4.2m4.4 4.4 4.2 4.2m0-12.8-4.2 4.2m-4.4 4.4-4.2 4.2"/>'),
+      power:svg('<path d="M4 7h13l3 3v6H4zM7 7V4h5v3M2 10h2m-2 4h2m16-4h2m-2 4h2M7 19h10M8 10v3m4-3v3m4-3v3"/>'),
+      pits:svg('<path d="M4 21V5l8-3 8 3v16M4 9h16M8 13v4m4-4v4m4-4v4M2 21h20"/>')
+    };
+    const categories=[
+      {id:'aeroWheels',label:'Aero y Ruedas',icon:'aero'},
+      {id:'suspension',label:'Suspensión',icon:'suspension'},
+      {id:'power',label:'Motor y Caja',icon:'power'},
+      {id:'strategy',label:'Estrategia de Pits',icon:'pits'}
+    ];
+    const defaults={
+      suspension:{
+        FL:{packers:0,fastBump:3,fastRebound:6,slowBump:8,slowRebound:20,spring:1200,rideHeight:33},
+        FR:{packers:0,fastBump:3,fastRebound:6,slowBump:8,slowRebound:20,spring:1200,rideHeight:33},
+        RL:{packers:0,fastBump:2,fastRebound:5,slowBump:6,slowRebound:18,spring:1000,rideHeight:52},
+        RR:{packers:0,fastBump:2,fastRebound:5,slowBump:6,slowRebound:18,spring:1000,rideHeight:52}},
+      antiRoll:{front:3000,rear:3000},
+      aero:{frontWing:14,rearWing:14},
+      wheels:{
+        FL:{camber:-4,toe:1,pressure:23},FR:{camber:-4,toe:1,pressure:23},
+        RL:{camber:-1,toe:0.5,pressure:22},RR:{camber:-1,toe:0.5,pressure:22}},
+      brakes:{bias:54,frontDuct:3,rearDuct:3},
+      tires:{compound:'Soft'},
+      power:{rpm:16400,radiator:45,ratio1:17,ratio2:25,ratio3:31,ratio4:35,ratio5:39,ratio6:43},
+      pitStrategy:{totalLaps:58,initialFuel:58,initialCompound:'Soft',fuelPerLap:3,refuelRate:12,tireChangeTime:5.2,stops:[{lap:18,compound:'Medium',fuelAfter:68},{lap:39,compound:'Hard',fuelAfter:64}]}
+    };
+    const deepCopy=o=>JSON.parse(JSON.stringify(o));
+    const descriptions={
+      packers:['Packers / topes de suspensión','Limitan la carrera disponible antes de que el conjunto llegue al tope.','Un contacto prematuro con el tope puede provocar pérdidas repentinas de agarre sobre pianos o baches.'],
+      fastBump:['Compresión rápida','Resistencia del amortiguador cuando la rueda se comprime rápidamente, por ejemplo, al pasar sobre un piano.','Más rigidez puede controlar impactos grandes, pero también dificultar que la rueda siga las irregularidades.'],
+      fastRebound:['Extensión rápida','Resistencia cuando la suspensión se extiende a gran velocidad tras un impacto.','Un valor excesivo puede retrasar la recuperación de la rueda tras superar un piano.'],
+      slowBump:['Compresión lenta','Control del amortiguador durante movimientos lentos de la carrocería, como balanceo y cabeceo.','Más compresión lenta puede reducir movimientos transitorios, a costa de alterar la transferencia dinámica de carga.'],
+      slowRebound:['Extensión lenta','Control de la extensión del amortiguador durante transferencias de peso suaves.','Ayuda a modular el balance transitorio; demasiado valor puede dejar la suspensión comprimida entre eventos.'],
+      spring:['Muelles / spring rate','Rigidez del resorte principal: fuerza necesaria por unidad de compresión.','Más rigidez reduce movimiento de suspensión, pero puede perjudicar el agarre mecánico en asfalto irregular.'],
+      rideHeight:['Altura al suelo','Separación estática del chasis respecto de la pista en el eje seleccionado.','Una altura baja puede mejorar la plataforma aerodinámica, pero aumenta riesgo de tocar el suelo o llegar a topes.'],
+      front:['Barra estabilizadora delantera','Resistencia del eje delantero al balanceo diferencial entre ruedas.','Aumentarla suele desplazar el reparto de transferencia lateral hacia delante, favoreciendo el subviraje en condiciones comparables.'],
+      rear:['Barra estabilizadora trasera','Resistencia del eje trasero al balanceo diferencial entre ruedas.','Aumentarla suele desplazar transferencia lateral hacia atrás, pudiendo favorecer la rotación y el sobreviraje.'],
+      frontWing:['Ala delantera','Nivel relativo de carga aerodinámica producida por el alerón delantero.','Más ala suele incrementar agarre delantero a velocidad, junto con la resistencia aerodinámica.'],
+      rearWing:['Ala trasera','Nivel relativo de carga aerodinámica del alerón trasero.','Más ala puede mejorar estabilidad trasera en curvas rápidas, con penalización por drag.'],
+      camber:['Caída / camber','Ángulo de inclinación de la rueda respecto de la vertical; negativo significa la parte superior inclinada hacia dentro.','Mayor caída negativa puede beneficiar curvas cargadas, pero reduce la huella en recta y afecta desgaste y temperatura.'],
+      toe:['Convergencia / toe','Ángulo de orientación de la rueda respecto del eje longitudinal; el signo depende de la convención de cada simulador.','Puede estabilizar o agilizar la respuesta inicial, pero valores altos elevan la resistencia y temperatura.'],
+      pressure:['Presión del neumático','Presión de inflado de la cubierta, expresada aquí en psi.','Cambia la rigidez, respuesta, temperatura y huella del neumático; no existe una presión óptima universal.'],
+      bias:['Reparto de frenada','Porcentaje de fuerza de frenado solicitado al eje delantero.','Más porcentaje delantero suele dar estabilidad, pero puede bloquear primero las ruedas delanteras.'],
+      frontDuct:['Conducto delantero de frenos','Apertura relativa de ventilación de los discos delanteros.','Más ventilación reduce temperatura, pero aumenta la resistencia y puede impedir llegar a la temperatura operativa.'],
+      rearDuct:['Conducto trasero de frenos','Apertura relativa de ventilación de los discos traseros.','Más ventilación protege frente a sobrecalentamiento y puede enfriar demasiado en trayectos de baja exigencia.'],
+      radiator:['Apertura de radiador','Porcentaje de apertura de refrigeración.','Una apertura mayor puede reducir temperaturas del motor a costa de más resistencia aerodinámica.'],
+      rpm:['Límite de revoluciones','Régimen máximo permitido antes del limitador de encendido.','Un límite superior puede ampliar el rango útil, pero en un motor real podría comprometer durabilidad.'],
+      fuel:['Combustible','Litros de combustible cargados para la salida.','Más combustible aumenta autonomía y masa inicial; el efecto exacto depende de densidad y consumo.'],
+      ratio:['Relación de transmisión','Ajuste numérico simplificado de una de las seis marchas; esta demo no fija una convención física de dientes.','Relaciones más cortas pueden mejorar aceleración y exigir más cambios; las largas ayudan a velocidad punta según el motor.']
+    };
+    const spec={
+      packers:{label:'Packers',min:0,max:20,step:1,unit:'mm',advanced:true},
+      fastBump:{label:'Fast bump',min:0,max:15,step:1,advanced:true},
+      fastRebound:{label:'Fast rebound',min:0,max:20,step:1,advanced:true},
+      slowBump:{label:'Slow bump',min:0,max:20,step:1},
+      slowRebound:{label:'Slow rebound',min:0,max:25,step:1},
+      spring:{label:'Spring rate',min:800,max:1600,step:25,unit:' lb/in'},
+      rideHeight:{label:'Ride height',min:20,max:85,step:1,unit:' mm'},
+      front:{label:'Front',min:0,max:6000,step:100,unit:' lb/in'},
+      rear:{label:'Rear',min:0,max:6000,step:100,unit:' lb/in'},
+      frontWing:{label:'Front wing',min:0,max:25,step:1},
+      rearWing:{label:'Rear wing',min:0,max:25,step:1},
+      pressure:{label:'Pressure',min:18,max:32,step:0.5,unit:' psi'},
+      camber:{label:'Camber',min:-8,max:1,step:0.1,unit:'°'},
+      toe:{label:'Toe',min:-2,max:2,step:0.1,unit:'°'},
+      bias:{label:'Front bias',min:45,max:65,step:1,unit:'%'},
+      frontDuct:{label:'Front ducts',min:0,max:6,step:1},
+      rearDuct:{label:'Rear ducts',min:0,max:6,step:1},
+      rpm:{label:'Max RPM',min:15000,max:17500,step:100,unit:' rpm'},
+      radiator:{label:'Apertura radiador',min:0,max:100,step:1,unit:'%'},
+      fuel:{label:'Fuel quantity',min:5,max:120,step:1,unit:' L'},
+      ratio:{label:'Gear ratio',min:5,max:60,step:1}
+    };
+    const locationNames={FL:'Left front',FR:'Right front',RL:'Left rear',RR:'Right rear'};
+    const regionTitle={FL:'LEFT FRONT',FR:'RIGHT FRONT',RL:'LEFT REAR',RR:'RIGHT REAR'};
+    let data=deepCopy(defaults),saved=deepCopy(defaults),current='aeroWheels',quick=false,symmetry=true,lastHelp='spring',changed=false;
+    const mergeDefaults=(def,raw)=>{
+      if(Array.isArray(def))return Array.isArray(raw)?deepCopy(raw):deepCopy(def);
+      if(def&&typeof def==='object')return Object.fromEntries(Object.entries(def).map(([key,value])=>[key,mergeDefaults(value,raw?.[key])]));
+      return raw===undefined?def:raw;
+    };
+    const normalizeSetup=raw=>{
+      const result=mergeDefaults(defaults,raw);
+      if(!raw?.pitStrategy){
+        if(typeof raw?.power?.fuel==='number')result.pitStrategy.initialFuel=raw.power.fuel;
+        if(['Soft','Medium','Hard','Rain'].includes(raw?.tires?.compound))result.pitStrategy.initialCompound=raw.tires.compound;
+      }
+      result.tires.compound=result.pitStrategy.initialCompound;
+      return result;
+    };
+    try {const stored=localStorage.getItem('open-formula-garage-demo-v1'); if(stored){const o=JSON.parse(stored);if(o&&o.suspension&&o.antiRoll&&o.power&&o.wheels) {data=normalizeSetup(o);saved=deepCopy(data);}}}catch(e){}
+    const get=(path,obj=data)=>path.split('.').reduce((v,k)=>v?.[k],obj);
+    const set=(path,value,obj=data)=>{const parts=path.split('.');let p=obj;for(let i=0;i<parts.length-1;i++)p=p[parts[i]];p[parts.at(-1)]=value;};
+    const esc=v=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const fmt=(val,s)=>{const dec=Number.isInteger(s.step)?0:(s.step===.5?1:1);return `${Number(val).toFixed(dec)}${s.unit||''}`;};
+    const fmtShort=(val,s)=>`${Number(val).toLocaleString('en-US',{maximumFractionDigits:1})}${s.unit||''}`;
+    const help=()=>{};
+    const param=(path,key,label=null)=>{
+      const s=spec[key],val=get(path);if(!s||val===undefined)return '';
+      const pct=Math.max(0,Math.min(100,(val-s.min)/(s.max-s.min)*100));
+      return `<div class="parameter" data-param-row="${esc(path)}"><span class="param-name" title="${esc(label||s.label)}">${esc(label||s.label)}</span><button type="button" class="adjust" data-op="minus" data-path="${esc(path)}" data-key="${key}" aria-label="Reducir ${esc(label||s.label)}">−</button><input class="range" type="range" min="${s.min}" max="${s.max}" step="${s.step}" value="${val}" style="--pct:${pct}%" data-path="${esc(path)}" data-key="${key}" aria-label="${esc(label||s.label)}" /><output class="param-value" data-output="${esc(path)}">${esc(fmt(val,s))}</output><button class="adjust" type="button" data-op="plus" data-path="${esc(path)}" data-key="${key}" aria-label="Aumentar ${esc(label||s.label)}">+</button></div>`;
+    };
+    const panel=(slot,title,tag,body,description='')=>`<section class="panel area-${slot.toLowerCase()}"><div class="panel-head"><span class="panel-title">${title}</span><span class="panel-tag">${tag}</span></div>${description?`<div class="panel-description">${description}</div>`:''}${body}</section>`;
+    const quickFilter=(fields)=>quick?fields.filter(k=>!spec[k].advanced):fields;
+    const wheelCard=(slot)=>{
+      const isSuspension=current==='suspension';
+      const fields=isSuspension?['packers','fastBump','fastRebound','slowBump','slowRebound','spring','rideHeight']:['pressure','camber','toe'];
+      const group=isSuspension?'suspension':'wheels';
+      let contents=fields.map(k=>param(`${group}.${slot}.${k}`,k)).join('');
+      if(!isSuspension&&slot==='FL')contents+=`<div class="thin-divider"></div>${param('brakes.frontDuct','frontDuct','Conducto freno · del.')}`;
+      if(!isSuspension&&slot==='RL')contents+=`<div class="thin-divider"></div>${param('brakes.rearDuct','rearDuct','Conducto freno · tras.')}`;
+      return panel(slot,regionTitle[slot],isSuspension?'SUSPENSION':'TIRE / BRAKE',contents);
+    };
+    const powerCard=(slot)=>{
+      if(slot==='FL')return panel(slot,'MOTOR','V10 · NA',param('power.rpm','rpm'));
+      if(slot==='FR')return panel(slot,'CAJA / 1—3','6 VELOCIDADES',[1,2,3].map(n=>param(`power.ratio${n}`,'ratio',`Marcha ${n}`)).join(''));
+      if(slot==='RL')return panel(slot,'REFRIGERACIÓN','RADIADOR',param('power.radiator','radiator'));
+      return panel(slot,'CAJA / 4—6','6 VELOCIDADES',[4,5,6].map(n=>param(`power.ratio${n}`,'ratio',`Marcha ${n}`)).join(''));
+    };
+    const getCenterAdjust=()=>{
+      if(current==='suspension')return `<div class="center-label">BARRAS ESTABILIZADORAS</div>${param('antiRoll.front','front','Delantera')}${param('antiRoll.rear','rear','Trasera')}`;
+      if(current==='aeroWheels')return `<div class="center-label">AERODINÁMICA</div>${param('aero.frontWing','frontWing','Ala delantera')}${param('aero.rearWing','rearWing','Ala trasera')}<div class="center-label with-gap">FRENADA</div>${param('brakes.bias','bias','Balance delantero')}<div class="middle-message" id="rear-bias">Trasero: ${100-data.brakes.bias}%</div>`;
+      return `<div class="center-label">V10 · CAJA SECUENCIAL</div><div class="engine-metrics"><div><strong>${Number(data.power.rpm).toLocaleString('en-US')}</strong><span>RPM máximo</span></div><div><strong>6</strong><span>Marchas</span></div><div><strong>${data.power.radiator}%</strong><span>Radiador</span></div></div>`;
+    };
+    // Neumáticos: cuatro colores como máximo. Rain comparte azul acero con Hard y usa una línea discontinua.
+    const COMPOUNDS={
+      Soft:{color:'var(--yellow)',rate:3.15},
+      Medium:{color:'var(--smoke)',rate:2.10},
+      Hard:{color:'var(--steel)',rate:1.43},
+      Rain:{color:'var(--steel)',rate:2.50}
+    };
+    const numFmt=(v,d=1)=>Number(v).toLocaleString('es-PE',{minimumFractionDigits:d,maximumFractionDigits:d});
+    const bound=(x,min,max)=>Math.min(max,Math.max(min,x));
+    const ps=()=>data.pitStrategy;
+    const compoundButtons=(chosen,selector,extra='')=>`<div class="compound-toggles">${Object.entries(COMPOUNDS).map(([name,v])=>`<button type="button" class="tyre-type ${name===chosen?'is-selected':''}" ${selector}="${name}" ${extra} aria-pressed="${name===chosen}"><span class="tyre-dot" style="--tire-color:${v.color}"></span>${name}</button>`).join('')}</div>`;
+    function tidyStops(){
+      const p=ps();p.totalLaps=Math.round(bound(Number(p.totalLaps)||58,2,200));
+      p.stops=Array.isArray(p.stops)?p.stops.slice(0,4):[];
+      p.stops.forEach((stop,i)=>{
+        stop.lap=Math.round(bound(Number(stop.lap)||Math.round(p.totalLaps*(i+1)/(p.stops.length+1)),1,p.totalLaps-1));
+        stop.fuelAfter=bound(Number(stop.fuelAfter)||0,0,120);
+        if(!COMPOUNDS[stop.compound])stop.compound='Medium';
+      });
+      p.stops.sort((a,b)=>a.lap-b.lap);
+      // Unique service laps, preserving order when a user enters a duplicate.
+      p.stops.forEach((stop,i)=>{stop.lap=Math.max(stop.lap,i? p.stops[i-1].lap+1:1);});
+      for(let i=p.stops.length-1;i>=0;i--)p.stops[i].lap=Math.min(p.stops[i].lap,p.totalLaps-(p.stops.length-i));
+    }
+    function calculateStrategy(){
+      const p=ps(),laps=Number(p.totalLaps),consumption=Number(p.fuelPerLap),rate=Number(p.refuelRate),tyreSecs=Number(p.tireChangeTime);
+      let fuel=Number(p.initialFuel),lastLap=0,compound=p.initialCompound,totalService=0,added=0,warnings=[];
+      const stints=[];const services=[];
+      for(let i=0;i<=p.stops.length;i++){
+        const stop=p.stops[i],endLap=stop?stop.lap:laps,len=endLap-lastLap;
+        const fuelEnd=fuel-len*consumption;
+        const base=COMPOUNDS[compound]||COMPOUNDS.Soft;
+        const wear=base.rate*len*(1+.0025*len);
+        const stint={number:i+1,startLap:lastLap+1,endLap,laps:len,compound,wear,fuelStart:fuel,fuelEnd};
+        stints.push(stint);
+        if(fuelEnd<0)warnings.push(`Stint ${i+1}: déficit de ${numFmt(-fuelEnd)} L`);
+        if(wear>100)warnings.push(`Stint ${i+1}: desgaste supera 100 %`);
+        if(stop){
+          const refueled=Math.max(0,Number(stop.fuelAfter)-Math.max(0,fuelEnd));
+          const fuelOut=Math.min(120,Math.max(fuelEnd,Number(stop.fuelAfter)));
+          if(Number(stop.fuelAfter)<fuelEnd)warnings.push(`Parada ${i+1}: combustible objetivo inferior al remanente`);
+          const refillSec=refueled/Math.max(.1,rate),serviceSec=refillSec+tyreSecs;
+          services.push({number:i+1,lap:stop.lap,fuelIn:fuelEnd,fuelOut,refueled,refillSec,tyreSec:tyreSecs,serviceSec,compound:stop.compound});
+          totalService+=serviceSec;added+=refueled;fuel=fuelOut;compound=stop.compound;
+        }
+        lastLap=endLap;
+      }
+      return {stints,services,totalService,added,warnings,finalFuel:stints.at(-1)?.fuelEnd??0};
+    }
+    function stopCard(stop,index,computed){
+      const service=computed.services[index];
+      return `<article class="pit-stop-card"><div class="pit-stop-head"><span class="stop-index">PARADA ${String(index+1).padStart(2,'0')}</span><button class="pit-remove" data-remove-stop="${index}" title="Eliminar esta parada" aria-label="Eliminar parada ${index+1}">×</button></div>
+        <div class="pit-fields"><label class="strategy-field"><span>Vuelta de entrada</span><div class="strategy-input-wrap"><input type="number" min="1" max="${ps().totalLaps-1}" step="1" data-stop-field="lap" data-stop-index="${index}" value="${stop.lap}"><span>V.</span></div></label>
+        <label class="strategy-field"><span>Combustible tras parada</span><div class="strategy-input-wrap"><input type="number" min="0" max="120" step="1" data-stop-field="fuelAfter" data-stop-index="${index}" value="${stop.fuelAfter}"><span>L</span></div></label></div>
+        <div class="pit-compound-label">NEUMÁTICO A MONTAR</div>${compoundButtons(stop.compound,'data-stop-compound',`data-stop-index="${index}"`)}
+        <div class="pit-calc"><div><span>Combustible al llegar</span><b class="${service.fuelIn<0?'alert-text':''}">${numFmt(service.fuelIn)} L</b></div><div><span>Repostaje (${numFmt(service.refueled)} L)</span><b>${numFmt(service.refillSec)} s</b></div><div><span>Cambio de ruedas</span><b>${numFmt(service.tyreSec)} s</b></div><div class="pit-calc-total"><span>SERVICIO TOTAL</span><strong>${numFmt(service.serviceSec)} s</strong></div></div>
+      </article>`;
+    }
+    function renderStrategy(){
+      tidyStops();const p=ps(),calc=calculateStrategy();
+      const stopsHtml=p.stops.map((stop,index)=>stopCard(stop,index,calc)).join('')||'<div class="no-stops">Sin paradas programadas. La carrera se realiza con el compuesto y combustible iniciales.</div>';
+      return `<div class="strategy-board">
+        <div class="strategy-top">
+          <section class="panel strategy-config"><div class="panel-head"><span class="panel-title">PLAN DE CARRERA</span><span class="panel-tag">CONFIGURACIÓN INICIAL</span></div>
+            <div class="strategy-config-grid">
+              <label class="strategy-field"><span>Vueltas de carrera</span><div class="strategy-input-wrap"><input type="number" min="2" max="200" step="1" data-strategy-field="totalLaps" value="${p.totalLaps}"><span>V.</span></div></label>
+              <label class="strategy-field"><span>Combustible inicial</span><div class="strategy-input-wrap"><input type="number" min="0" max="120" step="1" data-strategy-field="initialFuel" value="${p.initialFuel}"><span>L</span></div></label>
+              <label class="strategy-field"><span>Número de paradas</span><select data-strategy-count aria-label="Número de paradas">${[0,1,2,3,4].map(v=>`<option value="${v}" ${v===p.stops.length?'selected':''}>${v}</option>`).join('')}</select></label>
+              <label class="strategy-field"><span>Consumo estimado</span><div class="strategy-input-wrap"><input type="number" min="0.1" max="10" step="0.1" data-strategy-field="fuelPerLap" value="${p.fuelPerLap}"><span>L/vuelta</span></div></label>
+            </div><div class="pit-compound-label">COMPUESTO DE SALIDA</div>${compoundButtons(p.initialCompound,'data-initial-compound')}
+          </section>
+          <section class="panel strategy-service"><div class="panel-head"><span class="panel-title">TIEMPO EN BOXES</span><span class="panel-tag">REPOSTAJE + RUEDAS</span></div>
+            <div class="service-inputs">
+              <label class="strategy-field"><span>Caudal de repostaje</span><div class="strategy-input-wrap"><input type="number" min="1" max="20" step="0.5" data-strategy-field="refuelRate" value="${p.refuelRate}"><span>L/s</span></div></label>
+              <label class="strategy-field"><span>Cambio de 4 ruedas</span><div class="strategy-input-wrap"><input type="number" min="1" max="30" step="0.1" data-strategy-field="tireChangeTime" value="${p.tireChangeTime}"><span>s</span></div></label>
+            </div><div class="pit-total"><span>TIEMPO TOTAL DE SERVICIO</span><strong>${numFmt(calc.totalService)} <small>s</small></strong></div>
+            <div class="pit-service-stats"><div><span>Combustible añadido</span><b>${numFmt(calc.added)} L</b></div><div><span>Combustible en meta</span><b class="${calc.finalFuel<0?'alert-text':''}">${numFmt(calc.finalFuel)} L</b></div></div>
+            <div class="service-footnote">Estimación secuencial. No incluye entrada ni salida del pitlane.</div>
+          </section>
+        </div>
+        <section class="strategy-stops-section"><div class="strategy-section-head"><h2>PARADAS PROGRAMADAS</h2><button class="action pit-add" id="add-stop" ${p.stops.length>=4?'disabled':''}>+ Añadir parada</button></div><div class="pit-stops-grid">${stopsHtml}</div></section>
+        <section class="panel wear-panel"><div class="strategy-section-head"><div><h2>CURVAS DE DESGASTE</h2><div class="wear-caption">DESGASTE ESTIMADO DE NEUMÁTICOS · % POR STINT</div></div><div class="wear-legend">${Object.entries(COMPOUNDS).map(([key,v])=>`<span><i style="background:${v.color}"></i>${key}</span>`).join('')}</div></div>
+          <div class="chart-shell"><canvas id="wear-chart" role="img" aria-label="Curvas de desgaste estimado por stint durante ${p.totalLaps} vueltas"></canvas></div>
+          <div class="stint-grid">${calc.stints.map(stint=>`<article class="stint-chip"><div class="stint-label"><span>STINT ${String(stint.number).padStart(2,'0')}</span><span class="stint-compound"><i style="background:${COMPOUNDS[stint.compound].color}"></i>${stint.compound}</span></div><strong>V. ${stint.startLap}—${stint.endLap}</strong><div><span>Desgaste</span><b class="${stint.wear>=95?'alert-text':''}">${numFmt(stint.wear,0)}%</b></div><div><span>Fuel remanente</span><b class="${stint.fuelEnd<0?'alert-text':''}">${numFmt(stint.fuelEnd)} L</b></div></article>`).join('')}</div>
+          ${calc.warnings.length?`<div class="strategy-warning">${calc.warnings.map(esc).join(' · ')}</div>`:''}
+          <p class="strategy-disclaimer">Las curvas son orientativas; el desgaste se calcula a partir de tasas ilustrativas por compuesto, no de la telemetría del simulador.</p>
+        </section>
+      </div>`;
+    }
+    function drawWearChart(){
+      const canvas=document.querySelector('#wear-chart');if(!canvas)return;
+      const p=ps(),calc=calculateStrategy(),r=canvas.getBoundingClientRect(),w=Math.max(320,r.width),h=Math.max(180,r.height);
+      const scale=window.devicePixelRatio||1;canvas.width=Math.round(w*scale);canvas.height=Math.round(h*scale);
+      const ctx=canvas.getContext('2d');ctx.setTransform(scale,0,0,scale,0,0);ctx.clearRect(0,0,w,h);
+      const computed=getComputedStyle(document.documentElement);
+      const ink={
+        smoke:computed.getPropertyValue('--smoke').trim(),
+        steel:computed.getPropertyValue('--steel').trim(),
+        yellow:computed.getPropertyValue('--yellow').trim()
+      };
+      const left=43,right=16,top=13,bottom=30,cw=w-left-right,ch=h-top-bottom;
+      const x=lap=>left+lap/p.totalLaps*cw,y=wear=>top+ch*(1-Math.min(100,Math.max(0,wear))/100);
+      ctx.lineWidth=1;ctx.font='12px Rajdhani, sans-serif';ctx.textAlign='right';ctx.textBaseline='middle';
+      for(let v=0;v<=100;v+=25){
+        const py=y(v);
+        ctx.globalAlpha=.3;ctx.strokeStyle=ink.steel;ctx.beginPath();ctx.moveTo(left,py);ctx.lineTo(w-right,py);ctx.stroke();
+        ctx.globalAlpha=.8;ctx.fillStyle=ink.smoke;ctx.fillText(`${v}%`,left-7,py);
+      }
+      ctx.globalAlpha=.78;ctx.fillStyle=ink.smoke;ctx.textAlign='center';ctx.textBaseline='top';
+      for(let i=0;i<=5;i++){const lap=Math.round(i*p.totalLaps/5);ctx.fillText(String(lap),x(lap),h-bottom+8);}
+      ctx.lineWidth=1;ctx.globalAlpha=.7;ctx.strokeStyle=ink.steel;ctx.beginPath();ctx.moveTo(left,top);ctx.lineTo(left,h-bottom);ctx.lineTo(w-right,h-bottom);ctx.stroke();
+      for(const stop of p.stops){
+        const px=x(stop.lap);ctx.globalAlpha=.4;ctx.setLineDash([4,5]);ctx.strokeStyle=ink.smoke;
+        ctx.beginPath();ctx.moveTo(px,top);ctx.lineTo(px,h-bottom);ctx.stroke();ctx.setLineDash([]);
+      }
+      ctx.globalAlpha=1;
+      for(const stint of calc.stints){const info=COMPOUNDS[stint.compound],start=stint.startLap-1,finish=stint.endLap,rate=info.rate;
+        ctx.strokeStyle=stint.compound==='Soft'?ink.yellow:stint.compound==='Medium'?ink.smoke:ink.steel;
+        ctx.setLineDash(stint.compound==='Rain'?[7,4]:[]);ctx.lineWidth=2.8;ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();
+        for(let i=0;i<=Math.max(20,stint.laps*5);i++){let z=i/Math.max(20,stint.laps*5),lap=start+z*stint.laps,wear=rate*(z*stint.laps)*(1+.0025*z*stint.laps);i===0?ctx.moveTo(x(lap),y(wear)):ctx.lineTo(x(lap),y(wear));}
+        ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=ctx.strokeStyle;ctx.beginPath();ctx.arc(x(finish),y(stint.wear),3.4,0,Math.PI*2);ctx.fill();
+      }
+    }
+    function addStop(){
+      const p=ps();if(p.stops.length>=4||p.totalLaps<=p.stops.length+1)return;
+      let lap=Math.round(p.totalLaps*(p.stops.length+1)/(p.stops.length+2));
+      while(p.stops.some(s=>s.lap===lap)&&lap<p.totalLaps-1)lap++;
+      p.stops.push({lap,compound:p.stops.length%2?'Hard':'Medium',fuelAfter:65});tidyStops();changed=true;render();
+    }
+    function updateStopCount(count){
+      count=bound(Math.round(count),0,4);
+      while(ps().stops.length<count)addStopSilent();
+      while(ps().stops.length>count)ps().stops.pop();
+      tidyStops();changed=true;render();
+    }
+    function addStopSilent(){
+      const p=ps(),used=p.stops.map(s=>s.lap),count=p.stops.length,base=Math.max(1,Math.round(p.totalLaps*(count+1)/(count+2)));
+      let lap=base;while(used.includes(lap)&&lap<p.totalLaps-1)lap++;
+      p.stops.push({lap,compound:count%2?'Hard':'Medium',fuelAfter:65});
+    }
+    function render(){
+      document.querySelector('#nav').innerHTML=categories.map(c=>`<button type="button" class="tab ${current===c.id?'active':''}" data-tab="${c.id}" aria-current="${current===c.id?'page':'false'}"><span>${icon[c.icon]}</span><span>${c.label}</span></button>`).join('');
+      const utility=document.querySelector('#symmetry-row');utility.style.display=current==='suspension'||current==='aeroWheels'?'flex':'none';
+      document.querySelector('#symmetry').checked=symmetry;
+      const workspace=document.querySelector('#workspace');
+      if(current==='strategy'){
+        workspace.className='strategy-workspace';workspace.innerHTML=renderStrategy();requestAnimationFrame(drawWearChart);
+      }else{
+        workspace.className='workspace';
+        const make=(slot)=>current==='power'?powerCard(slot):wheelCard(slot);
+        const centerTitle=current==='suspension'?'BARRAS / CHASIS':current==='aeroWheels'?'BALANCE / REGLAJES':'POWERTRAIN';
+        workspace.innerHTML=`${make('FL')}${make('FR')}${make('RL')}${make('RR')}<section class="center"><div class="center-top">${centerTitle}</div><div class="center-adjust">${getCenterAdjust()}</div></section>`;
+      }
+      document.querySelector('#save-state').textContent=changed?'Cambios sin guardar':'Configuración guardada';
+    }
+    function mirror(path){
+      const match=path.match(/^(suspension|wheels)\.(FL|FR|RL|RR)\.(.+)$/);
+      if(!match)return null;
+      return `${match[1]}.${({FL:'FR',FR:'FL',RL:'RR',RR:'RL'})[match[2]]}.${match[3]}`;
+    }
+    function updateDisplayed(path,key){
+      const s=spec[key],v=get(path);document.querySelectorAll('.range[data-path]').forEach(el=>{if(el.dataset.path===path){el.value=v;el.style.setProperty('--pct',`${(v-s.min)/(s.max-s.min)*100}%`);}});
+      document.querySelectorAll('output[data-output]').forEach(el=>{if(el.dataset.output===path)el.textContent=fmt(v,s);});
+    }
+    function apply(path,key,v){
+      const s=spec[key];if(!s||!Number.isFinite(v))return;
+      const steps=Math.round((v-s.min)/s.step);
+      v=Math.min(s.max,Math.max(s.min,Number((s.min+steps*s.step).toFixed(4))));
+      set(path,v);updateDisplayed(path,key);
+      if(symmetry){const p=mirror(path);if(p){set(p,v);updateDisplayed(p,key);}}
+      changed=true;
+      if(path.includes('rideHeight')||['aero.frontWing','aero.rearWing','power.rpm','power.fuel','brakes.bias'].includes(path)){
+        // Redibujar etiquetas/indicadores relacionados después de soltar un deslizador.
+        let target=document.querySelector(`.range[data-path="${path}"]`);
+        if(target)target.dataset.refresh='1';
+      }
+      document.querySelector('#save-state').textContent='Cambios sin guardar';
+    }
+    function syncReadouts(){
+      const src=document.querySelector('#workspace');if(!src)return;
+      if(current==='aeroWheels'){
+        const el=src.querySelector('#rear-bias');if(el)el.textContent=`Trasero: ${100-data.brakes.bias}%`;
+      }
+      if(current==='power'){
+        const metrics=src.querySelectorAll('.engine-metrics strong');
+        if(metrics[0])metrics[0].textContent=Number(data.power.rpm).toLocaleString('en-US');
+        if(metrics[2])metrics[2].textContent=`${data.power.radiator}%`;
+      }
+    }
+    document.addEventListener('click',event=>{
+      const t=event.target.closest('[data-tab], [data-op], [data-initial-compound], [data-stop-compound], [data-remove-stop], #add-stop');if(!t)return;
+      if(t.dataset.tab){current=t.dataset.tab;render();window.scrollTo({top:0,behavior:'smooth'});return;}
+      if(t.dataset.initialCompound){ps().initialCompound=t.dataset.initialCompound;data.tires.compound=t.dataset.initialCompound;changed=true;render();return;}
+      if(t.dataset.stopCompound){ps().stops[Number(t.dataset.stopIndex)].compound=t.dataset.stopCompound;changed=true;render();return;}
+      if(t.hasAttribute('data-remove-stop')){ps().stops.splice(Number(t.dataset.removeStop),1);changed=true;render();return;}
+      if(t.id==='add-stop'){addStop();return;}
+      if(t.dataset.op){const {path,key,op}=t.dataset;apply(path,key,get(path)+(op==='plus'?1:-1)*spec[key].step);syncReadouts();}
+    });
+    document.querySelector('#workspace').addEventListener('keydown',event=>{
+      const target=event.target.closest('svg [data-tab][role="button"]');
+      if(target&&(event.key==='Enter'||event.key===' ')){
+        event.preventDefault();current=target.dataset.tab;render();window.scrollTo({top:0,behavior:'smooth'});
+      }
+    });
+    document.querySelector('#workspace').addEventListener('input',event=>{
+      const el=event.target;
+      if(el.classList.contains('range')){apply(el.dataset.path,el.dataset.key,Number(el.value));syncReadouts();}
+    });
+    document.querySelector('#workspace').addEventListener('change',event=>{
+      const el=event.target;
+      if(el.hasAttribute('data-strategy-count')){updateStopCount(Number(el.value));return;}
+      if(el.hasAttribute('data-strategy-field')){
+        const key=el.dataset.strategyField,mins={totalLaps:2,initialFuel:0,fuelPerLap:.1,refuelRate:1,tireChangeTime:1},maxs={totalLaps:200,initialFuel:120,fuelPerLap:10,refuelRate:20,tireChangeTime:30};
+        ps()[key]=bound(Number(el.value)||mins[key],mins[key],maxs[key]);tidyStops();changed=true;render();return;
+      }
+      if(el.hasAttribute('data-stop-field')){
+        const stop=ps().stops[Number(el.dataset.stopIndex)],field=el.dataset.stopField;
+        if(field==='lap')stop.lap=Math.round(bound(Number(el.value)||1,1,ps().totalLaps-1));
+        if(field==='fuelAfter')stop.fuelAfter=bound(Number(el.value)||0,0,120);
+        tidyStops();changed=true;render();return;
+      }
+    });
+    document.querySelector('#symmetry').addEventListener('change',e=>{symmetry=e.target.checked;showToast(symmetry?'Edición izquierda/derecha vinculada':'Edición de cada rueda independiente');});
+    window.addEventListener('resize',()=>{if(current==='strategy')drawWearChart();});
+    const toastEl=document.querySelector('#toast');let toastTimer;
+    function showToast(message){toastEl.textContent=message;toastEl.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toastEl.classList.remove('show'),2600);}
+    document.querySelector('#reset').addEventListener('click',()=>{
+      if(current==='suspension'){data.suspension=deepCopy(defaults.suspension);data.antiRoll=deepCopy(defaults.antiRoll);}
+      if(current==='aeroWheels'){data.aero=deepCopy(defaults.aero);data.wheels=deepCopy(defaults.wheels);data.brakes=deepCopy(defaults.brakes);}
+      if(current==='power')data.power=deepCopy(defaults.power);
+      if(current==='strategy'){data.pitStrategy=deepCopy(defaults.pitStrategy);data.tires.compound=data.pitStrategy.initialCompound;}
+      changed=true;render();showToast('Valores de esta pestaña restaurados');
+    });
+    document.querySelector('#save').addEventListener('click',()=>{
+      saved=deepCopy(data);changed=false;
+      try{localStorage.setItem('open-formula-garage-demo-v1',JSON.stringify(saved));}catch(e){}
+      render();showToast('Configuración guardada localmente');
+    });
+    document.querySelector('#export').addEventListener('click',()=>{
+      const contents={format:'open-formula-setup-demo',version:2,track:'Australia',units:{spring:'lb/in',antiRoll:'lb/in',fuel:'L',rideHeight:'mm',pressure:'psi',pitTime:'s',refueling:'L/s'},setup:data};
+      const blob=new Blob([JSON.stringify(contents,null,2)],{type:'application/json'});
+      const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='open-formula-australia-setup.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);showToast('Archivo JSON exportado');
+    });
+    document.querySelector('#import').addEventListener('click',()=>document.querySelector('#import-file').click());
+    document.querySelector('#import-file').addEventListener('change',async e=>{
+      const file=e.target.files?.[0];if(!file)return;
+      try{
+        const raw=JSON.parse(await file.text()),original=raw.setup??raw,candidate=normalizeSetup(original);
+        if(!candidate.suspension||!candidate.antiRoll||!candidate.wheels||!candidate.brakes||!candidate.power||!candidate.aero||!candidate.tires)throw Error('Secciones incompletas');
+        for(const [group,keys] of Object.entries(defaults))if(!Object.prototype.hasOwnProperty.call(candidate,group)||typeof candidate[group]!=='object')throw Error('Falta '+group);
+        for(const cat of ['suspension','wheels'])for(const corner of ['FL','FR','RL','RR']){
+          if(!candidate[cat][corner])throw Error('Falta '+cat+'.'+corner);
+          for(const [key,d] of Object.entries(defaults[cat][corner])){
+            let v=candidate[cat][corner][key],s=spec[key];if(typeof v!=='number'||!Number.isFinite(v)||v<s.min||v>s.max)throw Error('Valor no válido: '+cat+'.'+corner+'.'+key);
+          }
+        }
+        for(const [group,def] of Object.entries({antiRoll:defaults.antiRoll,aero:defaults.aero,brakes:defaults.brakes,power:defaults.power}))for(const [key] of Object.entries(def)){
+          const type=key.startsWith('ratio')?'ratio':key,s=spec[type],v=candidate[group][key];
+          if(typeof v!=='number'||!s||!Number.isFinite(v)||v<s.min||v>s.max)throw Error('Valor no válido: '+group+'.'+key);
+        }
+        if(!['Hard','Soft','Medium','Rain'].includes(candidate.tires.compound))throw Error('Compuesto no válido');
+        if(!Array.isArray(candidate.pitStrategy.stops)||candidate.pitStrategy.stops.length>4)throw Error('Paradas inválidas');
+        const limits={totalLaps:[2,200],initialFuel:[0,120],fuelPerLap:[.1,10],refuelRate:[1,20],tireChangeTime:[1,30]};
+        for(const [k,[min,max]] of Object.entries(limits)){const v=candidate.pitStrategy[k];if(typeof v!=='number'||!Number.isFinite(v)||v<min||v>max)throw Error('Valor de estrategia inválido: '+k);}
+        if(!COMPOUNDS[candidate.pitStrategy.initialCompound])throw Error('Compuesto inicial inválido');
+        for(const stop of candidate.pitStrategy.stops){
+          if(!Number.isInteger(stop.lap)||stop.lap<1||stop.lap>=candidate.pitStrategy.totalLaps||!Number.isFinite(stop.fuelAfter)||stop.fuelAfter<0||stop.fuelAfter>120||!COMPOUNDS[stop.compound])throw Error('Parada inválida');
+        }
+        data=deepCopy(candidate);tidyStops();changed=true;render();showToast('Setup JSON importado');
+      }catch(error){showToast('No se pudo importar: '+error.message);}finally{e.target.value='';}
+    });
+    document.querySelector('#exit').addEventListener('click',()=>{if(window.history.length>1)window.history.back();else showToast('No hay una página anterior a la que volver');});
+    render();
+  </script>
+</body>
+</html>

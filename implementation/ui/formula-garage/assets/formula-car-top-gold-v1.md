@@ -1,0 +1,9 @@
+# Monoplaza cenital dorado, v1
+
+Generado el 21 de octubre de 2026 con la herramienta integrada image_gen y la habilidad imagegen. PNG con transparencia alfa, preparado como recurso del garaje; todavía no conectado al dibujo nativo ni al HTML.
+
+Referencia visual del usuario: codex-clipboard-45ce3958-206a-4379-9f65-aebf579189dd.png. El fondo magenta no forma parte del recurso nuevo. Ilustración generada, no render del modelo real del Williams ni plano dimensional.
+
+Prompt final:
+
+Use case: stylized-concept. Asset type: transparent PNG car illustration for a racing simulator garage UI, replacing simple SVG diagrams. Input image is a composition and vehicle-style reference, not a background to retain. Generate a high-resolution polished illustration of ONE complete late-1990s open-wheel Formula 1 racing car, directly overhead, true orthographic plan view, nose at TOP, rear wing at BOTTOM, exactly centered vertically and horizontally. Match the reference's elongated narrow nose, broad rear body, four exposed black slick tires, thin wishbone suspension links, front and rear wings, open cockpit and visible small helmet. Similar gold/yellow central body with restrained red side accents and metallic shaded surfaces, sharp engineering details, realistic miniature rendered-game-sprite aesthetic. Keep the long slim proportions of a 1990s F1 car, symmetric wheel placement, parallel axles, no perspective tilt. Entire vehicle fully visible, no cropping, small even transparent padding; portrait canvas. Actual transparent alpha background including between suspension components; remove the reference magenta backdrop completely, no magenta anywhere. Clean antialiased edges suitable for compositing over dark graphite UI. No ground, no scenery, no floor plane, no cast shadow outside vehicle, no text, no labels, no logos, no watermark, no diagram annotations. One car only.
