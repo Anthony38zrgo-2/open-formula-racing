@@ -1,0 +1,553 @@
+use serde::{Deserialize, Serialize};
+
+/// Canonical Rust telemetry snapshot. The CSV form appends per-wheel brake
+/// energy diagnostics after the existing vehicle/setup fields.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TelemetryFrame {
+    pub time_ms: i64,
+    pub speed_kmh: f64,
+    pub rpm: f64,
+    pub gear: i8,
+    pub throttle: f64,
+    pub brake: f64,
+    pub steering: f64,
+    pub lat_g: f64,
+    pub long_g: f64,
+    pub vert_g: f64,
+    pub fl_comp_mm: f64,
+    pub fr_comp_mm: f64,
+    pub rl_comp_mm: f64,
+    pub rr_comp_mm: f64,
+    pub front_slip: f64,
+    pub rear_slip: f64,
+    pub tc_enabled: bool,
+    pub tc_eligible: bool,
+    pub tc_active: bool,
+    pub tc_gear_authority: f64,
+    pub tc_slip_target: f64,
+    pub tc_raw_cut_ratio: f64,
+    pub tc_cut_ratio: f64,
+    pub tc_slip_ratio: [f64; 4],
+    pub wheel_drive_torque_pre_tc_nm: [f64; 4],
+    pub wheel_drive_torque_nm: [f64; 4],
+    pub drive_torque: f64,
+    pub pre_tc_drive_power_w: f64,
+    pub net_drive_power_w: f64,
+    pub session_id: String,
+    pub session_timestamp_utc: String,
+    pub physics_hz: i32,
+    pub test_id: String,
+    pub track_scene: String,
+    pub vehicle_node_path: String,
+    pub vehicle_scene: String,
+    pub vehicle_script: String,
+    pub setup_schema_version: i32,
+    pub setup_json: String,
+    pub brake_torque_nm: [f64; 4],
+    pub brake_spin_pre_rad_s: [f64; 4],
+    pub brake_spin_post_rad_s: [f64; 4],
+    pub brake_power_w: [f64; 4],
+    pub brake_energy_j: [f64; 4],
+    // --- BASE-000 calibration/baseline metrics (FL/FR/RL/RR order) ---
+    pub yaw_rate_rad_s: f64,
+    pub wheel_normal_force_n: [f64; 4],
+    pub wheel_slip_angle_rad: [f64; 4],
+    pub wheel_slip_ratio: [f64; 4],
+    pub wheel_effective_slip_angle_rad: [f64; 4],
+    pub wheel_effective_slip_ratio: [f64; 4],
+    pub wheel_longitudinal_force_n: [f64; 4],
+    pub wheel_lateral_force_n: [f64; 4],
+    pub wheel_aligning_torque_nm: [f64; 4],
+    pub wheel_spin_rad_s: [f64; 4],
+    pub wheel_dynamic_camber_rad: [f64; 4],
+    pub tire_pressure_kpa: [f64; 4],
+    pub tread_temperature_c: [f64; 4],
+    pub carcass_temperature_c: [f64; 4],
+    pub wheel_tread_wear_inner_fraction: [f64; 4],
+    pub wheel_tread_wear_center_fraction: [f64; 4],
+    pub wheel_tread_wear_outer_fraction: [f64; 4],
+    pub wheel_tread_wear_remaining_fraction: [f64; 4],
+    pub wheel_tread_wear_grip_scale: [f64; 4],
+    pub brake_efficiency: [f64; 4],
+    pub aero_front_downforce_n: f64,
+    pub aero_floor_downforce_n: f64,
+    pub aero_rear_downforce_n: f64,
+    pub aero_drag_n: f64,
+    pub aerodynamic_body_drag_newtons: f64,
+    pub aerodynamic_wing_and_floor_drag_newtons: f64,
+    pub aerodynamic_wheel_drag_newtons: [f64; 4],
+    // --- TIRE-100/103 combined-slip diagnostics ---
+    /// Raw combined-slip demand before the budget scale (may exceed 1).
+    pub wheel_combined_demand: [f64; 4],
+    /// Effective traction utilization after the budget scale (always <= 1).
+    pub wheel_combined_utilization: [f64; 4],
+    pub wheel_tire_regime: [i32; 4],
+    /// GRIP-02 sliding-memory state per wheel and axis (0 gripping .. 1 sliding).
+    pub wheel_post_peak_decay_lat: [f64; 4],
+    pub wheel_post_peak_decay_lon: [f64; 4],
+    // --- SUSP-300 camber kinematics (FL/FR/RL/RR order) ---
+    pub wheel_kinematic_camber_rad: [f64; 4],
+    pub wheel_effective_camber_rad: [f64; 4],
+    // --- SUSP-400 toe / steer kinematics (FL/FR/RL/RR order) ---
+    pub wheel_effective_toe_rad: [f64; 4],
+    pub wheel_effective_steer_angle_rad: [f64; 4],
+    pub engine_block_temperature_celsius: f64,
+    pub water_temperature_celsius: f64,
+    pub oil_temperature_celsius: f64,
+    pub engine_output_torque_newton_meters: f64,
+    pub engine_mechanical_power_watts: f64,
+    pub water_cooling_duct_opening: f64,
+    pub oil_cooling_duct_opening: f64,
+    pub water_cooling_mass_flow_kilograms_per_second: f64,
+    pub oil_cooling_mass_flow_kilograms_per_second: f64,
+    pub water_cooling_drag_force_newtons: f64,
+    pub oil_cooling_drag_force_newtons: f64,
+    pub total_powertrain_cooling_drag_force_newtons: f64,
+    pub generated_engine_heat_watts: f64,
+    pub engine_to_water_heat_transfer_watts: f64,
+    pub engine_to_oil_heat_transfer_watts: f64,
+    pub water_rejected_heat_watts: f64,
+    pub oil_rejected_heat_watts: f64,
+    pub available_engine_torque_fraction: f64,
+    pub water_optimal_minimum_temperature_celsius: f64,
+    pub water_optimal_maximum_temperature_celsius: f64,
+    pub water_hot_derating_temperature_celsius: f64,
+    pub water_critical_temperature_celsius: f64,
+    pub oil_optimal_minimum_temperature_celsius: f64,
+    pub oil_optimal_maximum_temperature_celsius: f64,
+    pub oil_hot_derating_temperature_celsius: f64,
+    pub oil_critical_temperature_celsius: f64,
+    // --- FUEL-100 onboard fuel state ---
+    pub fuel_remaining_kg: f64,
+    pub fuel_capacity_kg: f64,
+    pub total_vehicle_mass_kg: f64,
+    pub effective_front_weight_distribution: f64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TelemetryFrame;
+
+    #[test]
+    fn csv_header_matches_serialized_field_count() {
+        let line = TelemetryFrame::default().to_csv_line();
+        assert_eq!(line.split(',').count(), TelemetryFrame::CSV_HEADER.len());
+    }
+}
+
+impl TelemetryFrame {
+    pub const CSV_HEADER: &'static [&'static str] = &[
+        "Time_ms",
+        "Speed_kmh",
+        "RPM",
+        "Gear",
+        "Throttle",
+        "Brake",
+        "Steering",
+        "Lat_G",
+        "Long_G",
+        "Vert_G",
+        "FL_Comp",
+        "FR_Comp",
+        "RL_Comp",
+        "RR_Comp",
+        "Front_Slip",
+        "Rear_Slip",
+        "TC_Enabled",
+        "TC_Eligible",
+        "TC_Active",
+        "TC_GearAuthority",
+        "TC_SlipTarget",
+        "TC_RawCutRatio",
+        "TC_CutRatio",
+        "TC_AppliedCutRatio",
+        "RL_TCSlip",
+        "RR_TCSlip",
+        "FL_DriveTorquePreTC_Nm",
+        "FR_DriveTorquePreTC_Nm",
+        "RL_DriveTorquePreTC_Nm",
+        "RR_DriveTorquePreTC_Nm",
+        "FL_DriveTorque_Nm",
+        "FR_DriveTorque_Nm",
+        "RL_DriveTorque_Nm",
+        "RR_DriveTorque_Nm",
+        "DriveTorque",
+        "PreTCDrivePower_W",
+        "NetDrivePower_W",
+        "Session_Id",
+        "Session_Timestamp_UTC",
+        "Physics_Hz",
+        "Test_Id",
+        "Track_Scene",
+        "Vehicle_Node_Path",
+        "Vehicle_Scene",
+        "Vehicle_Script",
+        "Setup_Schema_Version",
+        "Setup_JSON",
+        "FL_BrakeTorque_Nm",
+        "FL_SpinPre_RadS",
+        "FL_SpinPost_RadS",
+        "FL_BrakePower_W",
+        "FL_BrakeEnergy_J",
+        "FR_BrakeTorque_Nm",
+        "FR_SpinPre_RadS",
+        "FR_SpinPost_RadS",
+        "FR_BrakePower_W",
+        "FR_BrakeEnergy_J",
+        "RL_BrakeTorque_Nm",
+        "RL_SpinPre_RadS",
+        "RL_SpinPost_RadS",
+        "RL_BrakePower_W",
+        "RL_BrakeEnergy_J",
+        "RR_BrakeTorque_Nm",
+        "RR_SpinPre_RadS",
+        "RR_SpinPost_RadS",
+        "RR_BrakePower_W",
+        "RR_BrakeEnergy_J",
+        "YawRate_RadS",
+        "FL_NormalForce_N",
+        "FR_NormalForce_N",
+        "RL_NormalForce_N",
+        "RR_NormalForce_N",
+        "FL_SlipAngle_Rad",
+        "FR_SlipAngle_Rad",
+        "RL_SlipAngle_Rad",
+        "RR_SlipAngle_Rad",
+        "FL_SlipRatio",
+        "FR_SlipRatio",
+        "RL_SlipRatio",
+        "RR_SlipRatio",
+        "FL_EffSlipAngle_Rad",
+        "FR_EffSlipAngle_Rad",
+        "RL_EffSlipAngle_Rad",
+        "RR_EffSlipAngle_Rad",
+        "FL_EffSlipRatio",
+        "FR_EffSlipRatio",
+        "RL_EffSlipRatio",
+        "RR_EffSlipRatio",
+        "FL_LongForce_N",
+        "FR_LongForce_N",
+        "RL_LongForce_N",
+        "RR_LongForce_N",
+        "FL_LatForce_N",
+        "FR_LatForce_N",
+        "RL_LatForce_N",
+        "RR_LatForce_N",
+        "FL_AlignTorque_Nm",
+        "FR_AlignTorque_Nm",
+        "RL_AlignTorque_Nm",
+        "RR_AlignTorque_Nm",
+        "FL_Spin_RadS",
+        "FR_Spin_RadS",
+        "RL_Spin_RadS",
+        "RR_Spin_RadS",
+        "FL_Camber_Rad",
+        "FR_Camber_Rad",
+        "RL_Camber_Rad",
+        "RR_Camber_Rad",
+        "FL_TirePressure_KPa",
+        "FR_TirePressure_KPa",
+        "RL_TirePressure_KPa",
+        "RR_TirePressure_KPa",
+        "FL_TreadTemp_C",
+        "FR_TreadTemp_C",
+        "RL_TreadTemp_C",
+        "RR_TreadTemp_C",
+        "FL_CarcassTemp_C",
+        "FR_CarcassTemp_C",
+        "RL_CarcassTemp_C",
+        "RR_CarcassTemp_C",
+        "FL_TreadWearInner",
+        "FR_TreadWearInner",
+        "RL_TreadWearInner",
+        "RR_TreadWearInner",
+        "FL_TreadWearCenter",
+        "FR_TreadWearCenter",
+        "RL_TreadWearCenter",
+        "RR_TreadWearCenter",
+        "FL_TreadWearOuter",
+        "FR_TreadWearOuter",
+        "RL_TreadWearOuter",
+        "RR_TreadWearOuter",
+        "FL_TreadWearRemaining",
+        "FR_TreadWearRemaining",
+        "RL_TreadWearRemaining",
+        "RR_TreadWearRemaining",
+        "FL_TreadWearGrip",
+        "FR_TreadWearGrip",
+        "RL_TreadWearGrip",
+        "RR_TreadWearGrip",
+        "FL_BrakeEff",
+        "FR_BrakeEff",
+        "RL_BrakeEff",
+        "RR_BrakeEff",
+        "AeroFront_N",
+        "AeroFloor_N",
+        "AeroRear_N",
+        "AeroDrag_N",
+        "FL_CombinedDemand",
+        "FR_CombinedDemand",
+        "RL_CombinedDemand",
+        "RR_CombinedDemand",
+        "FL_CombinedUtil",
+        "FR_CombinedUtil",
+        "RL_CombinedUtil",
+        "RR_CombinedUtil",
+        "FL_TireRegime",
+        "FR_TireRegime",
+        "RL_TireRegime",
+        "RR_TireRegime",
+        "FL_SlideMemLat",
+        "FR_SlideMemLat",
+        "RL_SlideMemLat",
+        "RR_SlideMemLat",
+        "FL_SlideMemLon",
+        "FR_SlideMemLon",
+        "RL_SlideMemLon",
+        "RR_SlideMemLon",
+        "FL_KinCamber_Rad",
+        "FR_KinCamber_Rad",
+        "RL_KinCamber_Rad",
+        "RR_KinCamber_Rad",
+        "FL_EffCamber_Rad",
+        "FR_EffCamber_Rad",
+        "RL_EffCamber_Rad",
+        "RR_EffCamber_Rad",
+        "FL_EffToe_Rad",
+        "FR_EffToe_Rad",
+        "RL_EffToe_Rad",
+        "RR_EffToe_Rad",
+        "FL_EffSteerAngle_Rad",
+        "FR_EffSteerAngle_Rad",
+        "RL_EffSteerAngle_Rad",
+        "RR_EffSteerAngle_Rad",
+        "EngineBlockTemperatureCelsius",
+        "WaterTemperatureCelsius",
+        "OilTemperatureCelsius",
+        "EngineOutputTorqueNewtonMeters",
+        "EngineMechanicalPowerWatts",
+        "WaterCoolingDuctOpening",
+        "OilCoolingDuctOpening",
+        "WaterCoolingMassFlowKilogramsPerSecond",
+        "OilCoolingMassFlowKilogramsPerSecond",
+        "WaterCoolingDragForceNewtons",
+        "OilCoolingDragForceNewtons",
+        "TotalPowertrainCoolingDragForceNewtons",
+        "GeneratedEngineHeatWatts",
+        "EngineToWaterHeatTransferWatts",
+        "EngineToOilHeatTransferWatts",
+        "WaterRejectedHeatWatts",
+        "OilRejectedHeatWatts",
+        "AvailableEngineTorqueFraction",
+        "WaterOptimalMinimumTemperatureCelsius",
+        "WaterOptimalMaximumTemperatureCelsius",
+        "WaterHotDeratingTemperatureCelsius",
+        "WaterCriticalTemperatureCelsius",
+        "OilOptimalMinimumTemperatureCelsius",
+        "OilOptimalMaximumTemperatureCelsius",
+        "OilHotDeratingTemperatureCelsius",
+        "OilCriticalTemperatureCelsius",
+        "FuelRemainingKg",
+        "FuelCapacityKg",
+        "TotalVehicleMassKg",
+        "EffectiveFrontWeightDistribution",
+        "AerodynamicBodyDragNewtons",
+        "AerodynamicWingAndFloorDragNewtons",
+        "FrontLeftWheelAerodynamicDragNewtons",
+        "FrontRightWheelAerodynamicDragNewtons",
+        "RearLeftWheelAerodynamicDragNewtons",
+        "RearRightWheelAerodynamicDragNewtons",
+    ];
+
+    /// Formats the telemetry frame into a single comma-separated CSV line.
+    pub fn to_csv_line(&self) -> String {
+        fn quoted(value: &str) -> String {
+            format!("\"{}\"", value.replace('"', "\"\""))
+        }
+        let mut fields = vec![
+            self.time_ms.to_string(),
+            format!("{:.2}", self.speed_kmh),
+            format!("{:.1}", self.rpm),
+            self.gear.to_string(),
+            format!("{:.3}", self.throttle),
+            format!("{:.3}", self.brake),
+            format!("{:.3}", self.steering),
+            format!("{:.3}", self.lat_g),
+            format!("{:.3}", self.long_g),
+            format!("{:.3}", self.vert_g),
+            format!("{:.2}", self.fl_comp_mm),
+            format!("{:.2}", self.fr_comp_mm),
+            format!("{:.2}", self.rl_comp_mm),
+            format!("{:.2}", self.rr_comp_mm),
+            format!("{:.4}", self.front_slip),
+            format!("{:.4}", self.rear_slip),
+            self.tc_enabled.to_string(),
+            self.tc_eligible.to_string(),
+            self.tc_active.to_string(),
+            format!("{:.4}", self.tc_gear_authority),
+            format!("{:.4}", self.tc_slip_target),
+            format!("{:.4}", self.tc_raw_cut_ratio),
+            format!("{:.4}", self.tc_cut_ratio),
+            format!("{:.4}", self.tc_cut_ratio),
+            format!("{:.4}", self.tc_slip_ratio[2]),
+            format!("{:.4}", self.tc_slip_ratio[3]),
+        ];
+        fields.extend(self.wheel_drive_torque_pre_tc_nm.iter().map(|v| format!("{v:.3}")));
+        fields.extend(self.wheel_drive_torque_nm.iter().map(|v| format!("{v:.3}")));
+        fields.extend([
+            format!("{:.3}", self.drive_torque),
+            format!("{:.3}", self.pre_tc_drive_power_w),
+            format!("{:.3}", self.net_drive_power_w),
+            quoted(&self.session_id),
+            quoted(&self.session_timestamp_utc),
+            self.physics_hz.to_string(),
+            quoted(&self.test_id),
+            quoted(&self.track_scene),
+            quoted(&self.vehicle_node_path),
+            quoted(&self.vehicle_scene),
+            quoted(&self.vehicle_script),
+            self.setup_schema_version.to_string(),
+            quoted(&self.setup_json),
+        ]);
+        for i in 0..4 {
+            fields.extend([
+                format!("{:.3}", self.brake_torque_nm[i]),
+                format!("{:.3}", self.brake_spin_pre_rad_s[i]),
+                format!("{:.3}", self.brake_spin_post_rad_s[i]),
+                format!("{:.3}", self.brake_power_w[i]),
+                format!("{:.3}", self.brake_energy_j[i]),
+            ]);
+        }
+        fields.push(format!("{:.5}", self.yaw_rate_rad_s));
+        fields.extend(self.wheel_normal_force_n.iter().map(|v| format!("{v:.3}")));
+        fields.extend(self.wheel_slip_angle_rad.iter().map(|v| format!("{v:.5}")));
+        fields.extend(self.wheel_slip_ratio.iter().map(|v| format!("{v:.5}")));
+        fields.extend(
+            self.wheel_effective_slip_angle_rad
+                .iter()
+                .map(|v| format!("{v:.5}")),
+        );
+        fields.extend(
+            self.wheel_effective_slip_ratio
+                .iter()
+                .map(|v| format!("{v:.5}")),
+        );
+        fields.extend(self.wheel_longitudinal_force_n.iter().map(|v| format!("{v:.3}")));
+        fields.extend(self.wheel_lateral_force_n.iter().map(|v| format!("{v:.3}")));
+        fields.extend(self.wheel_aligning_torque_nm.iter().map(|v| format!("{v:.3}")));
+        fields.extend(self.wheel_spin_rad_s.iter().map(|v| format!("{v:.3}")));
+        fields.extend(self.wheel_dynamic_camber_rad.iter().map(|v| format!("{v:.5}")));
+        fields.extend(self.tire_pressure_kpa.iter().map(|v| format!("{v:.2}")));
+        fields.extend(self.tread_temperature_c.iter().map(|v| format!("{v:.2}")));
+        fields.extend(self.carcass_temperature_c.iter().map(|v| format!("{v:.2}")));
+        fields.extend(
+            self.wheel_tread_wear_inner_fraction
+                .iter()
+                .map(|v| format!("{v:.5}")),
+        );
+        fields.extend(
+            self.wheel_tread_wear_center_fraction
+                .iter()
+                .map(|v| format!("{v:.5}")),
+        );
+        fields.extend(
+            self.wheel_tread_wear_outer_fraction
+                .iter()
+                .map(|v| format!("{v:.5}")),
+        );
+        fields.extend(
+            self.wheel_tread_wear_remaining_fraction
+                .iter()
+                .map(|v| format!("{v:.5}")),
+        );
+        fields.extend(
+            self.wheel_tread_wear_grip_scale
+                .iter()
+                .map(|v| format!("{v:.5}")),
+        );
+        fields.extend(self.brake_efficiency.iter().map(|v| format!("{v:.4}")));
+        fields.extend([
+            format!("{:.3}", self.aero_front_downforce_n),
+            format!("{:.3}", self.aero_floor_downforce_n),
+            format!("{:.3}", self.aero_rear_downforce_n),
+            format!("{:.3}", self.aero_drag_n),
+        ]);
+        fields.extend(
+            self.wheel_combined_demand
+                .iter()
+                .map(|v| format!("{v:.5}")),
+        );
+        fields.extend(
+            self.wheel_combined_utilization
+                .iter()
+                .map(|v| format!("{v:.5}")),
+        );
+        fields.extend(self.wheel_tire_regime.iter().map(|v| v.to_string()));
+        fields.extend(
+            self.wheel_post_peak_decay_lat
+                .iter()
+                .map(|v| format!("{v:.5}")),
+        );
+        fields.extend(
+            self.wheel_post_peak_decay_lon
+                .iter()
+                .map(|v| format!("{v:.5}")),
+        );
+        fields.extend(
+            self.wheel_kinematic_camber_rad
+                .iter()
+                .map(|v| format!("{v:.5}")),
+        );
+        fields.extend(
+            self.wheel_effective_camber_rad
+                .iter()
+                .map(|v| format!("{v:.5}")),
+        );
+        fields.extend(
+            self.wheel_effective_toe_rad
+                .iter()
+                .map(|v| format!("{v:.5}")),
+        );
+        fields.extend(
+            self.wheel_effective_steer_angle_rad
+                .iter()
+                .map(|v| format!("{v:.5}")),
+        );
+        fields.extend([
+            format!("{:.3}", self.engine_block_temperature_celsius),
+            format!("{:.3}", self.water_temperature_celsius),
+            format!("{:.3}", self.oil_temperature_celsius),
+            format!("{:.3}", self.engine_output_torque_newton_meters),
+            format!("{:.3}", self.engine_mechanical_power_watts),
+            format!("{:.4}", self.water_cooling_duct_opening),
+            format!("{:.4}", self.oil_cooling_duct_opening),
+            format!("{:.6}", self.water_cooling_mass_flow_kilograms_per_second),
+            format!("{:.6}", self.oil_cooling_mass_flow_kilograms_per_second),
+            format!("{:.3}", self.water_cooling_drag_force_newtons),
+            format!("{:.3}", self.oil_cooling_drag_force_newtons),
+            format!("{:.3}", self.total_powertrain_cooling_drag_force_newtons),
+            format!("{:.3}", self.generated_engine_heat_watts),
+            format!("{:.3}", self.engine_to_water_heat_transfer_watts),
+            format!("{:.3}", self.engine_to_oil_heat_transfer_watts),
+            format!("{:.3}", self.water_rejected_heat_watts),
+            format!("{:.3}", self.oil_rejected_heat_watts),
+            format!("{:.5}", self.available_engine_torque_fraction),
+            format!("{:.3}", self.water_optimal_minimum_temperature_celsius),
+            format!("{:.3}", self.water_optimal_maximum_temperature_celsius),
+            format!("{:.3}", self.water_hot_derating_temperature_celsius),
+            format!("{:.3}", self.water_critical_temperature_celsius),
+            format!("{:.3}", self.oil_optimal_minimum_temperature_celsius),
+            format!("{:.3}", self.oil_optimal_maximum_temperature_celsius),
+            format!("{:.3}", self.oil_hot_derating_temperature_celsius),
+            format!("{:.3}", self.oil_critical_temperature_celsius),
+            format!("{:.4}", self.fuel_remaining_kg),
+            format!("{:.4}", self.fuel_capacity_kg),
+            format!("{:.4}", self.total_vehicle_mass_kg),
+            format!("{:.5}", self.effective_front_weight_distribution),
+        ]);
+        fields.push(format!("{:.3}", self.aerodynamic_body_drag_newtons));
+        fields.push(format!("{:.3}", self.aerodynamic_wing_and_floor_drag_newtons));
+        fields.extend(self.aerodynamic_wheel_drag_newtons.iter().map(|value| format!("{value:.3}")));
+        fields.join(",")
+    }
+}

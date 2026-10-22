@@ -1,0 +1,8 @@
+[build]
+# The destination host is a MinGW/UCRT64 C++ executable that loads this library
+# through the versioned C ABI with LoadLibrary/GetProcAddress. A statically linked
+# MSVC CRT keeps the DLL self-contained and removes any C++ runtime coupling.
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[net]
+offline = false

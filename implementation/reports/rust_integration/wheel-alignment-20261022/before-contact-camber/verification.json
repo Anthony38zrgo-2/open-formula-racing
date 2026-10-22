@@ -1,0 +1,16 @@
+{
+  "mesh_origin_offset_z_m": 0.48865,
+  "body_pose_source": "Rust authored rigid-body origin and full solved basis, with inverse export offset",
+  "camber_convention": "right=profile camber; left=-profile camber",
+  "render_nan_messages": 0,
+  "captures_reviewed": [
+    "frame-030.png",
+    "frame-090.png",
+    "frame-180.png"
+  ],
+  "visual_alignment_review": "Front wheels no longer show the former longitudinal separation from the suspension; parked/launch captures inspected. Capture 180 also confirms the existing fall below the circuit.",
+  "gear_control_check": true,
+  "garage_readback": true,
+  "full_driving_integration_passed": false,
+  "rear_wheels_visual_review": false
+}

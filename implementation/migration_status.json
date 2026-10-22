@@ -74,7 +74,7 @@
   ],
   "fuji_ground_rolling_resistance_calibrated": false,
   "williams_front_anti_roll_bar_newtons_per_meter": 100000,
-  "williams_rear_anti_roll_bar_newtons_per_meter": 80000,
+  "williams_rear_anti_roll_bar_newtons_per_meter": 65000,
   "anti_roll_adjustment_driving_validated": false,
   "destination_initial_branch": "codex/initial-port",
   "williams_physics_candidate": {
@@ -390,6 +390,30 @@
       "report": "implementation/reports/williams_setup_2026-10-21b.md",
       "current_setup_revalidated": false
     },
+    "williams_setup_20261021c": {
+      "front_ride_height_meters": 0.05,
+      "rear_ride_height_meters": 0.05,
+      "tire_initial_temperature_celsius": 80.0,
+      "tire_cold_pressure_kpa_gauge": 100.0,
+      "front_brake_bias": 0.65,
+      "rear_brake_mu": 0.42,
+      "engine_brake_linear_coefficient": 0.015,
+      "engine_brake_constant_coefficient": 0.026,
+      "rear_differential_power_slip_bias": 0.1,
+      "rear_differential_coast_slip_bias": 0.15,
+      "rear_toe_degrees_per_wheel": 0.3,
+      "rear_toe_total_degrees": 0.6,
+      "steering_speed_response": 0.02,
+      "rear_anti_roll_bar_newtons_per_meter": 65000,
+      "diagnostic_telemetry": 1,
+      "candidate_xml_sha256": "D8CB7FD41863F0045251B963745944B2892BA296CDC0BA0BFC0027822A91E7A6",
+      "distribution_xml_sha256": "D8CB7FD41863F0045251B963745944B2892BA296CDC0BA0BFC0027822A91E7A6",
+      "distribution_generation_report_sha256": "AE738B8DEA629933889C9431990E161E0D11B02095353939E8DB4C7E001AFD4E",
+      "distribution_manifest_sha256": "8322CB453B3B7A9A63D355717F6B6CCEE0F25F762904D087616753ED14B65FB8",
+      "report": "implementation/reports/williams_setup_2026-10-21c.md",
+      "current_setup_revalidated": false,
+      "validation_note": "Data-only setup change from 2026-10-21b. Native XML, chassis, aero, tire and differential benches pass. Braking/stability driving validation pending. Diagnostic telemetry is enabled in this candidate for the next measurement session."
+    },
     "coupled_tire_model_high_speed_human_acceptance_passed": true,
     "coupled_tire_model_high_speed_human_acceptance_date": "2026-10-21",
     "coupled_tire_model_high_speed_human_acceptance_source": "Explicit user approval in the conversation; no new instrumented high-speed run performed by the agent",
@@ -614,9 +638,12 @@
       "status": "reproduced, repaired, natively validated and installed; graphical driving validation pending",
       "observed_failure": "reason 4, 24 iterations, residual 3.2155492e-10 at elapsed session time 00:01:29.197",
       "root_cause": "inactive-contact feasibility used the negative historical gap rather than the same roundoff-offset affine gap as the solved constraint; separating contacts were repeatedly reactivated",
-      "applies_to": ["tire contact", "chassis floor contact"],
-      "initial_overlap_tolerance_meters": 1e-7,
-      "contact_limit_tolerance_meters": 1e-9,
+      "applies_to": [
+        "tire contact",
+        "chassis floor contact"
+      ],
+      "initial_overlap_tolerance_meters": 1e-07,
+      "contact_limit_tolerance_meters": 1e-09,
       "tolerances_or_iteration_limit_changed": false,
       "failure_state_replay_logging_added": true,
       "main_bench_checks": 903,
@@ -719,5 +746,53 @@
     "distribution_manifest_sha256": "35A9A5FDB990FB089383595EB01895D8D29D6CE44147F35A218087DB90FF8F50",
     "evidence_directory": "D:/open-formula-migration-evidence/garage-tab-images-20261021",
     "report": "implementation/reports/garage_tab_images.md"
+  },
+  "garage_gray_silhouettes": {
+    "date": "2026-10-21",
+    "status": "generated with image_gen, integrated, natively validated and installed; in-game review pending",
+    "assets": [
+      "implementation/ui/formula-garage/images/engine-gray-v2.png",
+      "implementation/ui/formula-garage/images/strategy-gray-v2.png"
+    ],
+    "originals_preserved": true,
+    "alpha_background": true,
+    "authored_ui_colors_preserved_without_scene_gamma": true,
+    "player_car_preview_center_y_before": 287,
+    "player_car_preview_center_y_after": 315,
+    "car_previews_affected": [
+      "Suspension",
+      "Aero / Ruedas"
+    ],
+    "native_checks": 8470,
+    "failures": 0,
+    "legacymenu_dll_sha256": "AA41764F0ACD449A6B5E20869D21F7477005E7DF3E57E055FC01875636E9CE71",
+    "distribution_manifest_sha256": "4B7F91FFAB8D6E6DBB55EB1415D466C7628CADC1ED5B5C13FC2070EF0A45E797",
+    "backup_directory": "D:/open-formula-migration-evidence/garage-gray-silhouettes-20261021",
+    "report": "implementation/reports/garage_gray_silhouettes.md"
+  },
+  "williams_wheel_local_toe_and_rear_heave_2026_10_21": {
+    "toe_convention": "wheel local: negative toe-out, positive toe-in; equal user-facing values on both sides",
+    "front_toe_degrees_per_wheel": -0.1,
+    "rear_toe_degrees_per_wheel": 0.3,
+    "rear_heave_spring_newtons_per_meter": 285000,
+    "rear_heave_bellcrank": 1,
+    "garage_control": "Suspension / Barras-chasis / Tercer muelle (kN/m)",
+    "garage_range_kilonewtons_per_meter": [
+      0,
+      1000
+    ],
+    "garage_step_kilonewtons_per_meter": 5,
+    "native_vertical_authority_checks": 102,
+    "native_vertical_authority_failures": 0,
+    "garage_ui_checks": 8790,
+    "garage_ui_failures": 0,
+    "installed_binary_sha256": {
+      "lib/games/speed-dreams-2/modules/simu/simuv5.dll": "51d6770450e4d87d04256af7885745e16696b16b33a4bd8a87beefe46c1a8e3b",
+      "lib/games/speed-dreams-2/modules/userinterface/legacymenu.dll": "f5215a9df79eb7af147c6cc0042f8fe5d3b0645b869f96cd6b79cfb371d010af"
+    },
+    "installed_xml_sha256": "45677e97077f85116e5524c1df29b44e37e03c709cc405edc0773a49bfc2bd24",
+    "driving_acceptance": "pending: no new driving session performed",
+    "evidence_directory": "D:/open-formula-migration-evidence/toe-heave-20261021",
+    "report": "implementation/reports/williams_wheel_local_toe_and_heave_2026-10-21.md"
   }
 }

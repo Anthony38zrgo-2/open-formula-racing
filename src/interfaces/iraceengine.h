@@ -22,6 +22,7 @@
 #ifndef __IRACEENGINE__H__
 #define __IRACEENGINE__H__
 
+#include <iphysicsengine.h>
 class IUserInterface;
 struct RmInfo;
 class GfRaceManager;
@@ -84,6 +85,7 @@ public:
 	virtual void accelerateTime(double fMultFactor) = 0;
 	virtual void setPitCommand(int nCarIndex, const struct CarPitCmd* pPitCmd) = 0;
 
+    virtual IPhysicsEngine* garagePhysics() { return nullptr; }
     virtual bool applyGarageSetup(int carIndex) { return false; }
 
 };

@@ -38,6 +38,7 @@ prefix = '''
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 #include <functional>
 #include <map>
 #include <string>
@@ -126,10 +127,17 @@ int main(int argc, char** argv) {
     car.setup.fuel.value=60;
     for(int i=2;i<8;++i) car.setup.gearRatio[i].value=3.4-(i-2)*.4;
     car.setup.differentialRatio[1].value=4.65;
+    car.setup.heaveSpring[1].value=GfParmGetNum(car._carHandle,"Rear Heave Spring","spring",nullptr,0);
     tTrack track{}; track.name = const_cast<char*>("Fuji Speedway"); previewRace.track=&track;
     BuildPages(); editorOpen = garageOpen = true;
     int checks=0, failures=0;
     auto check = [&](bool pass, const char* message) { ++checks; if(!pass) { ++failures; std::printf("FAIL %s\n", message); } };
+    const int rearHeave=pages[18].fields[0];
+    check(fields[rearHeave].target==&car.setup.heaveSpring[1],"third spring targets rear native heave setup");
+    check(fields[rearHeave].value==285 && fields[rearHeave].scale==.001,"rear third spring displays 285 kN/m");
+    ChangeField(rearHeave,300);
+    check(fields[rearHeave].value/fields[rearHeave].scale==300000,"third spring editor converts kN/m to N/m");
+    ChangeField(rearHeave,fields[rearHeave].original);
     osggraph::osgLoader loader;
     osggraph::osgLoader::loadedModels loaded;
     const std::string directory=data+"cars/models/williams-nineteen-ninety-seven/";
@@ -212,8 +220,8 @@ int main(int argc, char** argv) {
     }
     for(bool found:reachable) check(found,"all original setup fields remain reachable");
     check(previewRenderer.topCalls==1 && previewRenderer.sideCalls==1,"3D car only in suspension and aero tabs");
-    check(imageTextures.count("engine.png") && imageTextures["engine.png"].identifier!=0,"engine picture loaded");
-    check(imageTextures.count("strategy.jpg") && imageTextures["strategy.jpg"].identifier!=0,"strategy picture loaded");
+    check(imageTextures.count("engine-gray-v2.png") && imageTextures["engine-gray-v2.png"].identifier!=0,"gray engine silhouette loaded");
+    check(imageTextures.count("strategy-gray-v2.png") && imageTextures["strategy-gray-v2.png"].identifier!=0,"gray pit crew silhouette loaded");
     check(root->getMatrix()==originalPlacement && body->getStateSet()==originalMaterial,"live scene transform and state preserved");
     GLint viewportBefore[4],viewportAfter[4]; glGetIntegerv(GL_VIEWPORT,viewportBefore);
     GLdouble projectionBefore[16],projectionAfter[16]; glGetDoublev(GL_PROJECTION_MATRIX,projectionBefore);

@@ -2,7 +2,7 @@
   "images": [
     {
       "file": "engine.png",
-      "source": "C:\\Users\\bill\\Downloads\\Motor de alto rendimiento con pistón independiente.png",
+      "source": "C:\\Users\\bill\\Downloads\\Motor de alto rendimiento con pistÃ³n independiente.png",
       "sha256": "7fc0ea01636056aae48005bdfefc7837f88f9426cfe16b2e2422e4bbb5432cc3",
       "provided_by": "user",
       "modifications": "none; original bytes preserved"
@@ -13,6 +13,22 @@
       "sha256": "924d7ff73b3386dd33cba37d9fb107738a2b58d702f0f2b91eb3526bfdaa8bd6",
       "provided_by": "user",
       "modifications": "none; original bytes preserved"
+    },
+    {
+      "file": "engine-gray-v2.png",
+      "reference": "engine.png",
+      "generator": "built-in image_gen edit",
+      "prompt_document": "gray-silhouettes-v2.md",
+      "sha256": "ad517508b76a18099b28c4a518f01e93e36c6d43cafa9db13fb484953a2ac393",
+      "style": "recognizable neutral gray silhouette, transparent background"
+    },
+    {
+      "file": "strategy-gray-v2.png",
+      "reference": "strategy.jpg",
+      "generator": "built-in image_gen edit",
+      "prompt_document": "gray-silhouettes-v2.md",
+      "sha256": "02cffc804a9161bd0671f9bb5bd219c706127bbcfa58898cf680b6122efb6053",
+      "style": "recognizable neutral gray silhouette, transparent background"
     }
   ]
 }

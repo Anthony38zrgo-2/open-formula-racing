@@ -7,3 +7,8 @@
 /implementation/initial-settings/
 __pycache__/
 *.pyc
+
+# Open Formula Rust physics build artifacts
+/rust/target/
+# Oversized runtime logs (evidence stays on disk, not in git)
+/implementation/reports/rust_integration/**/*.log

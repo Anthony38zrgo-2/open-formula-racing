@@ -388,6 +388,89 @@ static TireVerticalSolverState BuildCompressedState(const tCar& car,
     return state;
 }
 
+static void CheckToeConvention(void* parameters)
+{
+    tCar* car = new tCar();
+    tCarElt* vehicle = new tCarElt();
+    car->params = parameters;
+    car->carElt = vehicle;
+    for (int wheel = 0; wheel < 4; ++wheel)
+        car->wheel[wheel].susp.spring.bellcrank = 1.0;
+
+    for (double toe : {-0.001745329252, 0.005235987756})
+    {
+        for (int wheel = 0; wheel < 4; ++wheel)
+        {
+            tCarSetupItem& setup = vehicle->setup.toe[wheel];
+            setup.min = -0.05; setup.max = 0.05;
+            setup.desired_value = (tdble)toe;
+            setup.changed = true;
+            SimWheelReConfig(car, wheel);
+            CheckClose(setup.value, toe, 1.0e-8,
+                "wheel-local toe preserves configured value on both sides");
+        }
+        for (int axle = 0; axle < 2; ++axle)
+        {
+            CheckClose(car->wheel[2 * axle].staticPos.az,
+                -car->wheel[2 * axle + 1].staticPos.az, 1.0e-8,
+                "equal local toe produces symmetric physical wheel headings");
+            CheckClose(car->wheel[2 * axle].staticPos.az, toe, 1.0e-8,
+                "positive local toe-in points right wheel toward centerline");
+        }
+    }
+    GfParmSetStr(parameters, "Formula Controls", "toe convention", "signed yaw");
+    for (int wheel = 0; wheel < 4; ++wheel)
+    {
+        vehicle->setup.toe[wheel].changed = true;
+        SimWheelReConfig(car, wheel);
+        CheckClose(car->wheel[wheel].staticPos.az,
+            vehicle->setup.toe[wheel].desired_value, 1.0e-8,
+            "signed-yaw convention retains existing vehicle behavior");
+    }
+    GfParmSetStr(parameters, "Formula Controls", "toe convention", "wheel local");
+    delete vehicle;
+    delete car;
+}
+
+static void CheckRearHeave(tCar& car, tCarElt& vehicle)
+{
+    TireVerticalSolverConfiguration configuration;
+    SimCarBuildVerticalConfiguration(&car, configuration);
+    Check(configuration.axle[REAR].heave_enabled, "rear heave enabled in physical solver");
+    CheckClose(-configuration.axle[REAR].heave_spring.spring_constant_newtons_per_meter,
+        285000.0, 0.1, "rear heave loaded at 285 kN/m");
+    double extension[4];
+    double velocity[4] = {};
+    double with_heave[4], without_heave[4];
+    for (int wheel = 0; wheel < 4; ++wheel)
+        extension[wheel] = car.wheel[wheel].susp.spring.x0;
+    extension[REAR_RGT] -= 0.001;
+    extension[REAR_LFT] -= 0.001;
+    TireVerticalSuspensionForces(configuration, extension, velocity, with_heave);
+    configuration.axle[REAR].heave_enabled = false;
+    TireVerticalSuspensionForces(configuration, extension, velocity, without_heave);
+    for (int wheel = 0; wheel < 4; ++wheel)
+        CheckClose(with_heave[wheel] - without_heave[wheel],
+            wheel < 2 ? 0.0 : 142.5, 0.01,
+            "rear heave adds symmetric rear support under common compression");
+    extension[REAR_LFT] += 0.002;
+    TireVerticalSuspensionForces(configuration, extension, velocity, without_heave);
+    configuration.axle[REAR].heave_enabled = true;
+    TireVerticalSuspensionForces(configuration, extension, velocity, with_heave);
+    for (int wheel = 0; wheel < 4; ++wheel)
+        CheckClose(with_heave[wheel], without_heave[wheel], 0.01,
+            "rear heave does not add pure-roll stiffness");
+
+    tCarSetupItem& setup = vehicle.setup.heaveSpring[REAR];
+    setup.desired_value = 300000.0; setup.changed = true;
+    SimAxleReConfig(&car, REAR, 0.0);
+    SimCarBuildVerticalConfiguration(&car, configuration);
+    CheckClose(-configuration.axle[REAR].heave_spring.spring_constant_newtons_per_meter,
+        300000.0, 0.1, "garage-style heave change reaches physical solver");
+    setup.desired_value = 285000.0; setup.changed = true;
+    SimAxleReConfig(&car, REAR, 0.0);
+}
+
 int main(int argument_count, char** arguments)
 {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
@@ -411,6 +494,9 @@ int main(int argument_count, char** arguments)
     {
         return 1;
     }
+
+    CheckToeConvention(parameters);
+    CheckRearHeave(car, vehicle);
 
     TireVerticalSolverConfiguration configuration;
     SimCarBuildVerticalConfiguration(&car, configuration);

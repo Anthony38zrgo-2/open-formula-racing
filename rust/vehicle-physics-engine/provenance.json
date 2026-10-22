@@ -1,0 +1,17 @@
+{
+  "document": "open-formula-rust-physics-port-provenance",
+  "schema_version": 1,
+  "source_repository": "D:/Formula90s",
+  "source_branch": "main-clean",
+  "source_commit": "f3efcf246c2a2abf62477037ed0243f2f9a93a9b",
+  "source_crate": "game/crates/vehicle-physics-engine",
+  "source_profile": "game/data/vehicles/f1_1997/williams/profiles/hockenheim",
+  "extracted_at_utc": "2026-10-22",
+  "adaptations": [
+    "production constructor restricted to the simplified suspension, simplified aerodynamics and SimplifiedWithRelaxation tire backends",
+    "build script provenance reads this document instead of the source Git checkout",
+    "embedded profile is the adapted Williams FW19 Hockenheim profile shipped under rust/data/vehicles/williams-fw19-hockenheim",
+    "rigid unilateral wheel-ground contact replaces the elastic radial tire carcass",
+    "third spring (heave element) removed from the active configuration"
+  ]
+}

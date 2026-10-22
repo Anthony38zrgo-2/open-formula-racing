@@ -1,0 +1,23 @@
+[package]
+name = "vehicle_physics_engine"
+version = "0.1.0"
+edition = "2021"
+description = "Open Formula simplified Rust vehicle physics (Williams FW19 Hockenheim port of the Formula90s simplified backend)."
+license = "LicenseRef-Proprietary"
+publish = false
+
+[lib]
+name = "vehicle_physics_engine"
+path = "src/lib.rs"
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+parry3d-f64 = "=0.23.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+sha2 = "0.10"
+thiserror = "2"
+
+[build-dependencies]
+serde_json = { version = "1", features = ["float_roundtrip"] }
+sha2 = "0.10"

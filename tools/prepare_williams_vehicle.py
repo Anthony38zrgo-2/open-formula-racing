@@ -232,30 +232,36 @@ def main():
     parser.add_argument('--destination', required=True)
     parser.add_argument('--report', required=True)
     parser.add_argument('--front-anti-roll-stiffness', type=float, default=100000.0)
-    parser.add_argument('--rear-anti-roll-stiffness', type=float, default=80000.0)
+    parser.add_argument('--rear-anti-roll-stiffness', type=float, default=65000.0)
+    parser.add_argument('--rear-heave-stiffness', type=float, default=285000.0)
     parser.add_argument('--tire-speed-cooling-factor', type=float, default=0.25)
     parser.add_argument('--tire-hysteresis-factor', type=float, default=1.25)
-    parser.add_argument('--rear-ride-height', type=float, default=0.045)
+    parser.add_argument('--rear-ride-height', type=float, default=0.050)
     parser.add_argument('--tire-initial-temperature', type=float, default=80.0)
     parser.add_argument('--tire-pressure-kpa-gauge', type=float, default=100.0)
-    parser.add_argument('--rear-toe-degrees', type=float, default=0.2)
+    parser.add_argument('--rear-toe-degrees', type=float, default=0.3)
     parser.add_argument('--front-camber-degrees', type=float, default=-3.0)
     parser.add_argument('--rear-camber-degrees', type=float, default=-1.0)
     parser.add_argument('--brake-max-pressure', type=float, default=20000000.0)
-    parser.add_argument('--front-brake-bias', type=float, default=0.64)
+    parser.add_argument('--front-brake-bias', type=float, default=0.65)
+    parser.add_argument('--rear-brake-mu', type=float, default=0.42)
     parser.add_argument('--power-slip-bias', type=float, default=0.10)
-    parser.add_argument('--coast-slip-bias', type=float, default=0.30)
-    parser.add_argument('--engine-brake-linear-coefficient', type=float, default=0.03)
-    parser.add_argument('--engine-brake-constant-coefficient', type=float, default=0.0525)
-    parser.add_argument('--steering-speed-response', type=float, default=0.012)
+    parser.add_argument('--coast-slip-bias', type=float, default=0.15)
+    parser.add_argument('--engine-brake-linear-coefficient', type=float, default=0.015)
+    parser.add_argument('--engine-brake-constant-coefficient', type=float, default=0.026)
+    parser.add_argument('--steering-speed-response', type=float, default=0.020)
+    parser.add_argument('--diagnostic-telemetry', type=int, default=0)
     arguments = parser.parse_args()
     if not all(math.isfinite(value) and value >= 0.0 for value in
-               [arguments.front_anti_roll_stiffness, arguments.rear_anti_roll_stiffness, arguments.tire_speed_cooling_factor,
+               [arguments.front_anti_roll_stiffness, arguments.rear_anti_roll_stiffness, arguments.rear_heave_stiffness, arguments.tire_speed_cooling_factor,
                 arguments.tire_hysteresis_factor, arguments.rear_ride_height, arguments.tire_pressure_kpa_gauge,
-                arguments.brake_max_pressure, arguments.front_brake_bias, arguments.power_slip_bias,
+                arguments.brake_max_pressure, arguments.front_brake_bias, arguments.rear_brake_mu,
+                arguments.power_slip_bias,
                 arguments.coast_slip_bias, arguments.engine_brake_linear_coefficient,
                 arguments.engine_brake_constant_coefficient, arguments.steering_speed_response]):
         parser.error('Calibration candidate parameters must be finite and nonnegative')
+    if arguments.diagnostic_telemetry not in (0, 1):
+        parser.error('Diagnostic telemetry must be 0 or 1')
     if not all(math.isfinite(value) for value in
                [arguments.tire_initial_temperature, arguments.rear_toe_degrees,
                 arguments.front_camber_degrees, arguments.rear_camber_degrees]):
@@ -318,6 +324,7 @@ def main():
         if existing is not None:
             document.remove(existing)
     graphics = find_section(document, 'Graphic Objects')
+    set_number(graphics, 'source mesh origin offset z', vertical_offset, 'm')
     set_text(graphics, 'material appearance shader', 'car_material_appearance.frag')
     ranges = find_section(graphics, 'Ranges')
     first_range = find_section(ranges, '1')
@@ -343,7 +350,8 @@ def main():
                                              ('steering centering rate', 3.0), ('steering speed sensitivity', 0.018),
                                              ('steering response time', 0.16),
                                              ('steering speed response', arguments.steering_speed_response),
-                                             ('diagnostic telemetry', 0.0), ('correct thermal camber units', 1.0)]:
+                                             ('diagnostic telemetry', arguments.diagnostic_telemetry),
+                                             ('correct thermal camber units', 1.0)]:
         set_number(find_section(document, 'Formula Controls'), parameter_name, parameter_value)
     for feature in ['enable abs', 'enable tcl', 'enable esp']:
         set_text(features, feature, 'no')
@@ -402,6 +410,10 @@ def main():
     set_number(brake_system, 'front-rear brake repartition', arguments.front_brake_bias, None, 0.55, 0.70)
     set_number(brake_system, 'max pressure', arguments.brake_max_pressure, 'Pa')
     set_number(brake_system, 'emergency brake pressure', 0, 'Pa')
+    set_text(find_section(document, 'Formula Controls'), 'toe convention', 'wheel local')
+    rear_heave = find_section(document, 'Rear Heave Spring')
+    set_number(rear_heave, 'spring', arguments.rear_heave_stiffness, 'N/m', 0, 1000000)
+    set_number(rear_heave, 'bellcrank', 1)
     for axle_name, hub in [('front', front_hub), ('rear', rear_hub)]:
         axle = find_section(document, axle_name.title() + ' Axle')
         set_number(axle, 'xpos', -hub[2], 'm')
@@ -417,7 +429,7 @@ def main():
             tire = tires[axle_name]
             toe = suspension[axle_name]['toe']
             if axle_name == 'rear':
-                toe = math.radians(arguments.rear_toe_degrees) * (-1.0 if side_name == 'Left' else 1.0)
+                toe = math.radians(arguments.rear_toe_degrees)
             set_number(wheel, 'tire speed cooling factor', arguments.tire_speed_cooling_factor)
             set_number(wheel, 'hysteresis', arguments.tire_hysteresis_factor)
             set_number(wheel, 'initial temperature', arguments.tire_initial_temperature, 'C')
@@ -444,7 +456,7 @@ def main():
             rotor_diameter = profile['brakes']['brakes']['thermal'][axle_name]['rotor_outer_diameter_m']
             set_number(brake, 'disk diameter', rotor_diameter, 'm')
             set_number(brake, 'piston area', profile['brakes']['brakes']['max_brake_torque'] / 25000000 / (rotor_diameter / 2 * 0.45), 'm2')
-            set_number(brake, 'mu', 0.45)
+            set_number(brake, 'mu', 0.45 if axle_name == 'front' else arguments.rear_brake_mu)
     aero = profile['aerodynamics']['aero']
     aerodynamics = find_section(document, 'Aerodynamics')
     set_number(aerodynamics, 'Cx', aero['drag_coefficient'])
@@ -526,15 +538,19 @@ def main():
                   'front_camber_degrees': arguments.front_camber_degrees,
                   'rear_camber_degrees': arguments.rear_camber_degrees,
                   'rear_toe_degrees_per_wheel': arguments.rear_toe_degrees,
+                  'toe_convention': 'wheel local: positive toe-in, negative toe-out on both sides',
+                  'rear_heave_stiffness_newtons_per_meter': arguments.rear_heave_stiffness,
                   'tire_initial_temperature_celsius': arguments.tire_initial_temperature,
                   'tire_cold_pressure_kpa_gauge': arguments.tire_pressure_kpa_gauge,
                   'brake_max_pressure_pascals': arguments.brake_max_pressure,
                   'front_brake_bias': arguments.front_brake_bias,
+                  'rear_brake_mu': arguments.rear_brake_mu,
                   'engine_brake_linear_coefficient': arguments.engine_brake_linear_coefficient,
                   'engine_brake_constant_coefficient': arguments.engine_brake_constant_coefficient,
                   'rear_differential_power_slip_bias': arguments.power_slip_bias,
                   'rear_differential_coast_slip_bias': arguments.coast_slip_bias,
                   'steering_speed_response': arguments.steering_speed_response,
+                  'diagnostic_telemetry': arguments.diagnostic_telemetry,
                   'validated': False},
               'coupled_tire_model': {
                   'selector': 'transient coupled',

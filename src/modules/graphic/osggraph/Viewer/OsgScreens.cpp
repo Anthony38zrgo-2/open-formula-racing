@@ -25,6 +25,10 @@
 #include <osgViewer/ViewerEventHandlers>
 #include <osg/GraphicsContext>
 #include <osg/ValueObject>
+#include <osg/Image>
+#include <osgDB/WriteFile>
+#include <cstdlib>
+#include <cstdio>
 #include <osg/FrontFace>
 #include <osgGA/EventQueue>
 
@@ -215,8 +219,29 @@ void SDScreens::update(tSituation * s, SDFrameInfo* fi,osg::Vec4f(colorfog))
 
     this->debugHUD->setTexture(cars->getCar(c)->getReflectionMap()->getReflectionMap());
 
-    if (!viewer->done())
+    if (!viewer->done()) {
         viewer->frame();
+        // Optional evidence capture for integrated visual validation; normal play
+        // does no framebuffer readback or file I/O.
+        static const char* capture_directory = std::getenv("OPEN_FORMULA_CAPTURE_DIR");
+        static unsigned frame_number = 0;
+        ++frame_number;
+        if (capture_directory && *capture_directory &&
+            (frame_number == 30 || frame_number == 90 || frame_number == 180)) {
+            const osg::Viewport* viewport = viewer->getCamera()->getViewport();
+            if (viewport) {
+                osg::ref_ptr<osg::Image> image = new osg::Image;
+                GLint previous_buffer; glGetIntegerv(GL_READ_BUFFER, &previous_buffer);
+                glReadBuffer(GL_BACK);
+                image->readPixels((int)viewport->x(), (int)viewport->y(),
+                    (int)viewport->width(), (int)viewport->height(), GL_RGB, GL_UNSIGNED_BYTE);
+                glReadBuffer(previous_buffer);
+                char path[1024]; std::snprintf(path, sizeof(path), "%s/frame-%03u.png", capture_directory, frame_number);
+                if (osgDB::writeImageFile(*image, path)) GfLogInfo("Visual capture: %s\n", path);
+                else GfLogWarning("Cannot write visual capture: %s\n", path);
+            }
+        }
+    }
 }
 
 void SDScreens::changeCamera(long p)

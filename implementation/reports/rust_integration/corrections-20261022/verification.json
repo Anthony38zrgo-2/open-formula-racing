@@ -1,0 +1,15 @@
+{
+  "scope": "Presentation, live garage API, packaging, fuel units and aero probe mask",
+  "render_nan_messages": 0,
+  "rust_create_errors": 0,
+  "rejected_physics_steps": 0,
+  "garage_fields": 38,
+  "garage_apply_readback": true,
+  "setup_restore": true,
+  "setup_reset_return_code_zero": true,
+  "installed_dll_matches_build": true,
+  "rust_dll_sha256": "8fc322a8c76c1cbdcf91310a608de9b2d2627e319b2330a28e1ff0c11b746a2d",
+  "full_driving_integration_passed": false,
+  "remaining_failure": "During the driving manoeuvre the vehicle loses ground-mesh contact and falls. Cause not diagnosed in this change.",
+  "manual_garage_visual_acceptance": false
+}

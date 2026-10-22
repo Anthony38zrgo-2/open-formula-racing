@@ -401,8 +401,13 @@ void SimWheelReConfig(tCar *car, int index)
 
     if (setupToe->changed)
     {
-        wheel->staticPos.az = MIN(setupToe->max, MAX(setupToe->min, setupToe->desired_value));
-        setupToe->value = wheel->staticPos.az;
+        // Keep setup values in wheel-local terms: positive toe-in, negative
+        // toe-out on either side. Only the chassis yaw basis is mirrored.
+        const tdble toe = MIN(setupToe->max, MAX(setupToe->min, setupToe->desired_value));
+        setupToe->value = toe;
+        const bool wheelLocalToe = !std::strcmp(GfParmGetStr(car->params,
+            "Formula Controls", "toe convention", "signed yaw"), "wheel local");
+        wheel->staticPos.az = wheelLocalToe && index % 2 ? -toe : toe;
         setupToe->changed = false;
     }
 

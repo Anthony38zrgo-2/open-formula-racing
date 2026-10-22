@@ -17,6 +17,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 #include <functional>
 #include <map>
 #include <string>
@@ -47,6 +48,7 @@ bool editorOpen = false;
 bool symmetricFront = true;
 bool symmetricRear = true;
 bool replaceTires = false;
+bool rustGarage = false;
 int selectedPage = 0;
 int selectedControl = 0;
 int draggedControl = -1;
@@ -87,6 +89,9 @@ struct GarageField
     double scale = 1.0;
     int wheel = -1;
     int kind = 0;
+    std::string path;
+    bool editable = true;
+    int group = 0;
 };
 struct GaragePage
 {
@@ -205,8 +210,20 @@ void TabImage(const std::string& name, double x, double y, double width, double 
     {
         GarageTexture texture;
         const std::string path = std::string(GfDataDir()) + "data/img/formula-garage/" + name;
-        texture.identifier = GfTexReadTexture(path.c_str(), &texture.width, &texture.height,
-            &texture.paddedWidth, &texture.paddedHeight);
+        // UI silhouettes use authored display colors, not scene/photograph
+        // gamma correction. Keep their gray consistent with the clay model.
+        unsigned char* pixels = GfTexReadImageFromPNG(path.c_str(), 1.0f,
+            &texture.width, &texture.height, &texture.paddedWidth, &texture.paddedHeight, false);
+        if (pixels)
+        {
+            glGenTextures(1, &texture.identifier);
+            glBindTexture(GL_TEXTURE_2D, texture.identifier);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texture.paddedWidth,
+                texture.paddedHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+            std::free(pixels);
+        }
         imageTextures[name] = texture;
     }
     const GarageTexture& texture = imageTextures[name];
@@ -254,6 +271,31 @@ void AddField(GaragePage& page, const std::string& name, const std::string& unit
 void BuildPages()
 {
     fields.clear(); pages.clear();
+    rustGarage = false;
+    std::vector<PhysicsSetupField> live;
+    IPhysicsEngine* physics = LmRaceEngine().garagePhysics();
+    if (physics && physics->ownsGarageSetup())
+    {
+        rustGarage = true;
+        if (!physics->garageFields(garageCar->index, live)) {
+            statusMessage = "Rust setup unavailable; vehicle configuration failed";
+            return;
+        }
+        for (const PhysicsSetupField& source : live) {
+            GarageField field;
+            field.name = source.label; field.unit = source.unit; field.path = source.path;
+            field.scale = source.unit == "rad" ? 1.0 / radiansPerDegree : 1.0;
+            if (source.unit == "rad") field.unit = "deg";
+            field.value = field.original = source.value * field.scale;
+            field.minimum = source.minimum * field.scale; field.maximum = source.maximum * field.scale;
+            field.step = source.step * field.scale; field.editable = source.editable;
+            field.group = source.path.find("suspension.") == 0 ? 0 :
+                ((source.path.find("aero.") == 0 || source.path.find("tires.") == 0) ? 1 :
+                ((source.path.find("powertrain.") == 0 || source.path.find("steering.") == 0) ? 2 : 3));
+            fields.push_back(field);
+        }
+        return;
+    }
     tCarSetup& setup = garageCar->setup;
     const char* cornerNames[4] = {"Front right", "Front left", "Rear right", "Rear left"};
     GaragePage page;
@@ -320,10 +362,15 @@ void BuildPages()
     AddField(page, "Preload", "N.m", nullptr, 0, 200, 1, 1, -1, 2,
         GfParmGetNum(garageCar->_carHandle, SECT_REARDIFFERENTIAL, "preload torque", nullptr, 10));
     pages.push_back(page);
+    // Append to preserve the existing family indexes used by the four tabs.
+    page = {"Third spring", "SimuFondSprings.png", "Springs", {}, false, "Rear heave spring stiffness"};
+    AddField(page, "Rear third spring", "kN/m", &setup.heaveSpring[1], 0, 1000, 5, 0.001);
+    pages.push_back(page);
 }
 void ChangeField(int fieldIndex, double value)
 {
     GarageField& field = fields[fieldIndex];
+    if (!field.editable) return;
     field.value = std::max(field.minimum, std::min(field.maximum,
         std::round(value / field.step) * field.step));
     if (field.wheel >= 0 && (field.wheel < 2 ? symmetricFront : symmetricRear))
@@ -359,6 +406,12 @@ void Panel(double x, double y, double width, double height, const std::string& t
 void Parameter(int index, const std::string& label, double x, double y, double width)
 {
     GarageField& field = fields[index];
+    if (!field.editable) {
+        Text(label, x, y + 5, GFUI_FONT_SMALL_C, white, GFUI_ALIGN_HL);
+        Text(Number(field.value, field.unit) + " [solo lectura]", x + width, y + 5,
+            GFUI_FONT_SMALL_C, muted, GFUI_ALIGN_HR);
+        return;
+    }
     const double ratio = (field.value - field.minimum) / std::max(field.maximum - field.minimum, 1e-9);
     const double minus = x + width * .32;
     const double slider = minus + 26;
@@ -369,7 +422,12 @@ void Parameter(int index, const std::string& label, double x, double y, double w
     Rectangle(slider, y + 9, length * ratio, 6, gold);
     Rectangle(slider + length * ratio - 3, y + 4, 6, 16, white);
     controls.push_back({slider - 6, y, length + 12, 24, label, index, false, {}});
-    Text(Number(field.value, field.unit), x + width - 29, y + 5, GFUI_FONT_SMALL_C, muted, GFUI_ALIGN_HR);
+    std::string displayed = Number(field.value, field.unit);
+    if (rustGarage && field.step < 0.01) {
+        char precise[96]; std::snprintf(precise, sizeof(precise), "%.4f %s", field.value, field.unit.c_str());
+        displayed = precise;
+    }
+    Text(displayed, x + width - 29, y + 5, GFUI_FONT_SMALL_C, muted, GFUI_ALIGN_HR);
     StyledButton(x + width - 20, y + 2, 18, 20, "+", [index]() { ChangeField(index, fields[index].value + fields[index].step); });
 }
 void PageParameter(int page, int item, const std::string& label, double x, double y, double width)
@@ -379,7 +437,7 @@ void PageParameter(int page, int item, const std::string& label, double x, doubl
 void CarDiagram(double x, double y)
 {
     auto* preview = dynamic_cast<ICarPreviewRenderer*>(LegacyMenu::self().graphicsEngine());
-    const double width = 324, height = 270;
+    const double width = 324, height = selectedPage == 0 ? 220 : 270;
     const int left = viewportLeft + (int)((x - width / 2) * viewportWidth / editorWidth);
     const int bottom = viewportBottom + (int)((y - height / 2) * viewportHeight / editorHeight);
     if (!preview || !preview->drawGarageCarPreview(garageCar, left, bottom,
@@ -418,6 +476,25 @@ void BuildEditorControls()
             selectedPage = tab; selectedControl = 0; draggedControl = -1;
         });
     }
+    if (rustGarage) {
+        Panel(20, 108, 1240, 510, "CONFIGURACION RUST", "Valores y limites del motor activo");
+        int row = 0;
+        for (int i = 0; i < (int)fields.size(); ++i) {
+            if (fields[i].group != selectedPage) continue;
+            const int column = row / 10;
+            Parameter(i, fields[i].name, 38 + column * 616, 542 - (row % 10) * 41, 580);
+            ++row;
+        }
+        Text(statusMessage.empty() ? "Cambios atomicos sobre el perfil Rust; sin tercer muelle" : statusMessage,
+            24, 83, GFUI_FONT_SMALL_C, gold, GFUI_ALIGN_HL);
+        StyledButton(711, 37, 150, 42, "RESTABLECER", []() {
+            for (GarageField& field : fields) field.value = field.original;
+            replaceTires = false;
+        });
+        StyledButton(875, 37, 154, 42, "CANCELAR", CancelEditor);
+        StyledButton(1043, 37, 217, 42, "APLICAR Y VOLVER", ApplyEditor, true);
+        return;
+    }
     Rectangle(20, 598, 1240, 32, panelColor);
     Rectangle(20, 598, 3, 32, gold);
     Text("REGLAJES DEL VEHICULO", 35, 608, GFUI_FONT_SMALL_C, gold, GFUI_ALIGN_HL);
@@ -453,11 +530,12 @@ void BuildEditorControls()
             }
         }
         Panel(458, 108, 360, 476, selectedPage == 0 ? "BARRAS / CHASIS" : "BALANCE / REGLAJES", "");
-        CarDiagram(638, 287);
+        CarDiagram(638, 315);
         if (selectedPage == 0)
         {
             PageParameter(10, 0, "Barra del.", 472, 492, 332);
             PageParameter(10, 1, "Barra tras.", 472, 459, 332);
+            PageParameter(18, 0, "Tercer muelle", 472, 426, 332);
             PageParameter(12, 0, "Direccion", 472, 145, 332);
             Text("Vista superior / modelo 3D", 638, 119, GFUI_FONT_SMALL_C, muted);
         }
@@ -482,7 +560,7 @@ void BuildEditorControls()
         Panel(458, 108, 360, 476, "DIFERENCIAL", "TRASERO");
         for (int i = 0; i < 3; ++i)
             PageParameter(17, i, i == 0 ? "Aceleracion" : i == 1 ? "Retencion" : "Precarga", 472, 492 - i * 35, 332);
-        TabImage("engine.png", 472, 124, 332, 274);
+        TabImage("engine-gray-v2.png", 472, 124, 332, 274);
         for (int half = 0; half < 2; ++half)
         {
             const double y = half == 0 ? 353 : 108;
@@ -507,7 +585,7 @@ void BuildEditorControls()
             []() { replaceTires = !replaceTires; }, replaceTires);
         Text("Presiones: pestana Aero / Ruedas.", 852, 448, GFUI_FONT_SMALL_C, muted, GFUI_ALIGN_HL);
         Panel(458, 108, 360, 476, "ESTRATEGIA / BOXES", "");
-        TabImage("strategy.jpg", 472, 129, 332, 401);
+        TabImage("strategy-gray-v2.png", 472, 129, 332, 401);
         Panel(20, 108, 422, 231, "TEMPERATURAS", "DELANTERAS");
         Panel(838, 108, 422, 231, "TEMPERATURAS", "TRASERAS");
         const char* corners[] = {"DEL. IZQ.", "DEL. DER.", "TRAS. IZQ.", "TRAS. DER."};
@@ -760,6 +838,23 @@ void OpenEditor()
 }
 void ApplyEditor()
 {
+    if (rustGarage) {
+        IPhysicsEngine* physics = LmRaceEngine().garagePhysics();
+        std::vector<std::pair<std::string, double> > values;
+        for (const GarageField& field : fields)
+            if (field.editable && field.value != field.original) values.push_back({field.path, field.value / field.scale});
+        std::string error;
+        if (!physics || !physics->applyGarageFields(garageCar->index, values, error)) {
+            statusMessage = error.empty() ? "Rust setup unavailable" : error;
+            GfLogWarning("Rust garage rejected: %s\n", statusMessage.c_str());
+            return;
+        }
+        ResetPhysics(false);
+        BuildPages();
+        statusMessage = "Rust setup applied";
+        ShowPit();
+        return;
+    }
     const char* pressureNames[4] = {"front right", "front left", "rear right", "rear left"};
     for (GarageField& field : fields)
     {
@@ -818,7 +913,18 @@ bool FormulaGarageAvailable()
 void FormulaGarageSessionStart()
 {
     FormulaGarageShutdown();
-    initialArrivalPending = FormulaGarageAvailable();
+    // Scripted sessions can start directly on the track: the pit garage is then only
+    // opened on demand, not on the initial arrival check.
+    bool openOnStart = true;
+    const std::string path = std::string(GfLocalDir()) + "config/rust_physics.xml";
+    void* configuration = GfParmReadFile(path.c_str(), GFPARM_RMODE_STD);
+    if (configuration)
+    {
+        openOnStart = GfParmGetNum(configuration, "RustPhysics", "open garage at session start",
+                                   nullptr, 1.0) > 0.0;
+        GfParmReleaseHandle(configuration);
+    }
+    initialArrivalPending = openOnStart && FormulaGarageAvailable();
     arrivalArmed = false;
 }
 bool FormulaGarageCheckArrival()

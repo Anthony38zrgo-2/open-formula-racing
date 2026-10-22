@@ -47,4 +47,4 @@ ELSE(WIN32)
 	SD_INSTALL_FILES(LIB lib TARGETS robottools)
 ENDIF(WIN32)
 
-SD_INSTALL_FILES(INCLUDE FILES robottools.h teammanager.h)
+SD_INSTALL_FILES(INCLUDE FILES robottools.h teammanager.h formula_gear_controls.h)

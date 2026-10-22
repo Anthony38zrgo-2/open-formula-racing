@@ -162,6 +162,7 @@ target_include_directories(inspect_native_track PRIVATE src/interfaces src/libs/
 target_link_libraries(inspect_native_track PRIVATE tgf)
 
 add_executable(validate_formula_pedal_controls tools/validate_formula_pedal_controls.cpp src/libs/robottools/formula_gear_controls.cpp)
+target_compile_definitions(validate_formula_pedal_controls PRIVATE FORMULA_GEAR_CONTROLS_STATIC)
 ADD_PLIB_INCLUDEDIR()
 target_include_directories(validate_formula_pedal_controls PRIVATE src/interfaces src/libs/tgf src/libs/portability src/libs/robottools)
 target_link_libraries(validate_formula_pedal_controls tgf)

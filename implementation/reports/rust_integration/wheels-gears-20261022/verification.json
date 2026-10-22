@@ -1,0 +1,22 @@
+{
+  "abi": 4,
+  "human_control_sequence_passed": true,
+  "observed_rust_gears": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "wheel_radius_front_m": 0.311949,
+  "wheel_radius_rear_m": 0.322016,
+  "wheel_width_front_m": 0.307541,
+  "wheel_width_rear_m": 0.389105,
+  "render_nan_messages": 0,
+  "dll_matches_installed": true,
+  "rust_dll_sha256": "2c817d4c321c930b0a6bc6ab91c6b6c3f35c81d60b015ed9812bd21888d4ce02",
+  "full_driving_integration_passed": false,
+  "manual_visual_review": false
+}

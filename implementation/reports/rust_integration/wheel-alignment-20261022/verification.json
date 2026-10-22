@@ -1,0 +1,17 @@
+{
+  "mesh_origin_offset_z_m": 0.48865,
+  "body_pose_source": "Authored Rust origin and full body basis; inverse baked export offset",
+  "visual_camber_source": "suspension.kinematic_camber_rad",
+  "camber_sign": "right=profile; left=-profile",
+  "visual_steering_sign": "same as Rust steer angle; Rust +Y yaw maps to Speed Dreams +Z yaw",
+  "render_nan_messages": 0,
+  "captures_front_reviewed": [
+    "frame-030.png",
+    "frame-090.png"
+  ],
+  "rear_view_reviewed": "wheel-alignment-rear-20261022/frame-030.png (body-frame/sign correction; before final contact-camber separation)",
+  "human_gear_control_pass": true,
+  "garage_readback": true,
+  "rust_dll_matches_installed": true,
+  "full_driving_integration_passed": false
+}

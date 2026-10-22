@@ -22,12 +22,25 @@
 #ifndef __IPHYSICSENGINE__H__
 #define __IPHYSICSENGINE__H__
 
+#include <string>
+#include <vector>
+#include <utility>
+struct PhysicsSetupField {
+    std::string path, label, unit;
+    double value, minimum, maximum, step;
+    bool editable;
+};
 struct DynPt;
 
 
 class IPhysicsEngine
 {
 public:
+
+    virtual bool ownsGarageSetup() const { return false; }
+    virtual bool garageFields(int, std::vector<PhysicsSetupField>&) { return false; }
+    virtual bool applyGarageFields(int, const std::vector<std::pair<std::string, double> >&, std::string& error)
+    { error = "This physics engine does not expose a live setup"; return false; }
 
 	//! Initial setup
 	virtual void initialize(int nCars, struct Track* pTrack) = 0;

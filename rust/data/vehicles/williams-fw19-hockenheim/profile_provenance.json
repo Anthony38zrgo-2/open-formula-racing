@@ -1,0 +1,778 @@
+{
+  "base_profile": "D:\\Formula90s\\game\\data\\vehicles\\f1_2030\\profiles\\geometric",
+  "inherited_calibrations": [
+    {
+      "classification": "inherited",
+      "domain": "aerodynamics.json",
+      "fields": "aero.model wing polars, limits and induced drag",
+      "source": "Q75: simulation model coefficients, not FW19 measurements"
+    },
+    {
+      "classification": "inherited",
+      "domain": "tires.json",
+      "fields": "force_model, thermal, wear and surface multipliers",
+      "source": "Q59-Q61 and Q82-Q84"
+    },
+    {
+      "classification": "inherited",
+      "domain": "suspension.json",
+      "fields": "resting_ratio, spring_length, toe_gain, camber_gain, damper knee and fast factor",
+      "source": "Tuning parameters of the base model; Q43 gives roll stiffness in N*m/rad, which the schema does not expose directly"
+    },
+    {
+      "classification": "inherited",
+      "domain": "brakes.json",
+      "fields": "thermal model coefficients and cooling ducts",
+      "source": "Implementation coefficients without published FW19 data"
+    },
+    {
+      "classification": "inherited",
+      "domain": "coupled_world.json",
+      "fields": "whole file",
+      "source": "Q86"
+    },
+    {
+      "classification": "inherited",
+      "domain": "audio.json",
+      "fields": "whole file",
+      "source": "Q80-Q81: no Renault RS9 recording available"
+    }
+  ],
+  "overrides": [
+    {
+      "classification": "estimated",
+      "domain": "suspension.json",
+      "path": "suspension.front.arb_ratio and suspension.rear.arb_ratio",
+      "source": "Human-requested roll stiffness increase over the inherited base ratios: front 0.15 to 1.00 and rear 0.09 to 0.80"
+    },
+    {
+      "classification": "estimated",
+      "domain": "suspension.json",
+      "path": "suspension.virtual_unsprung_mass_multiplier",
+      "source": "Virtual unsprung mass scaled by 1.25 over the resolved corner mass to settle the contact load after the simplified contact work correction"
+    },
+    {
+      "classification": "estimated",
+      "domain": "suspension.json",
+      "path": "suspension.geometry_physical.rear.damper_bump_Ns_per_m and suspension.geometry_physical.rear.damper_rebound_Ns_per_m",
+      "source": "Rear damper coefficients increased from 7395/11305 to 14000/22000 to match the front damping ratio at the local rear motion ratio after the travel-dependent transmission correction"
+    },
+    {
+      "classification": "estimated",
+      "domain": "tires.json",
+      "path": "tires.radial_damping_ratio",
+      "source": "Radial carcass damping ratio raised from the inherited 0.28 to 0.45 to settle the contact load after the simplified contact work correction"
+    },
+    {
+      "classification": "derived",
+      "domain": "chassis.json",
+      "path": "physical_mass_inventory.components[wheel_rotor].center_of_mass_in_attachment_metres",
+      "source": "Wheel rotor and upright attachment centers are relative to the corner hub; the previous absolute axle coordinates added the hub offset twice (physics correction 2026-10-17)"
+    },
+    {
+      "classification": "derived",
+      "domain": "chassis.json",
+      "path": "physical_mass_inventory",
+      "source": "Component masses rescaled to close the 547 kg dry budget and 13/16 kg wheel assemblies (Q4, Q5, Q9)"
+    },
+    {
+      "classification": "published",
+      "domain": "chassis.json",
+      "path": "chassis.vehicle_name",
+      "source": "Q1"
+    },
+    {
+      "classification": "estimated",
+      "domain": "chassis.json",
+      "path": "chassis.vehicle_mass",
+      "source": "Q4"
+    },
+    {
+      "classification": "estimated",
+      "domain": "chassis.json",
+      "path": "chassis.front_weight_distribution",
+      "source": "Q6"
+    },
+    {
+      "classification": "estimated",
+      "domain": "chassis.json",
+      "path": "chassis.center_of_gravity_height_offset",
+      "source": "Q7 minus ground plane 0.53865"
+    },
+    {
+      "classification": "inherited",
+      "domain": "chassis.json",
+      "path": "chassis.inertia_multipliers.x",
+      "source": "Q8"
+    },
+    {
+      "classification": "inherited",
+      "domain": "chassis.json",
+      "path": "chassis.inertia_multipliers.y",
+      "source": "Q8"
+    },
+    {
+      "classification": "inherited",
+      "domain": "chassis.json",
+      "path": "chassis.inertia_multipliers.z",
+      "source": "Q8"
+    },
+    {
+      "classification": "estimated",
+      "domain": "chassis.json",
+      "path": "physical_mass_inventory.base_budget_kilograms",
+      "source": "Q4 mass excluding wheel assemblies"
+    },
+    {
+      "classification": "measured",
+      "domain": "chassis.json",
+      "path": "geometry.front_track",
+      "source": "corrected mesh"
+    },
+    {
+      "classification": "measured",
+      "domain": "chassis.json",
+      "path": "geometry.rear_track",
+      "source": "corrected mesh"
+    },
+    {
+      "classification": "measured",
+      "domain": "chassis.json",
+      "path": "geometry.wheelbase",
+      "source": "corrected mesh"
+    },
+    {
+      "classification": "estimated",
+      "domain": "powertrain.json",
+      "path": "powertrain.idle_rpm",
+      "source": "Q11"
+    },
+    {
+      "classification": "estimated",
+      "domain": "powertrain.json",
+      "path": "powertrain.max_rpm",
+      "source": "User requested estimated Renault RS9 limiter at 17500 revolutions per minute"
+    },
+    {
+      "classification": "estimated",
+      "domain": "powertrain.json",
+      "path": "powertrain.max_torque",
+      "source": "Q13"
+    },
+    {
+      "classification": "estimated",
+      "domain": "powertrain.json",
+      "path": "powertrain.torque_curve",
+      "source": "Estimated setup revision: net full-throttle power peak moved to 17000 revolutions per minute, preserving the previous peak net power and 390 Nm torque normalization; includes variable engine drag"
+    },
+    {
+      "classification": "estimated",
+      "domain": "powertrain.json",
+      "path": "powertrain.gear_ratios",
+      "source": "Q18; user requested all six forward ratios increased by 10 percent for shorter gearing"
+    },
+    {
+      "classification": "estimated",
+      "domain": "powertrain.json",
+      "path": "powertrain.final_drive",
+      "source": "Q19"
+    },
+    {
+      "classification": "estimated",
+      "domain": "powertrain.json",
+      "path": "powertrain.reverse_ratio",
+      "source": "Q20"
+    },
+    {
+      "classification": "estimated",
+      "domain": "powertrain.json",
+      "path": "powertrain.shift_time",
+      "source": "Q21"
+    },
+    {
+      "classification": "estimated",
+      "domain": "powertrain.json",
+      "path": "powertrain.differential.preload_nm",
+      "source": "Q24"
+    },
+    {
+      "classification": "published",
+      "domain": "powertrain.json",
+      "path": "powertrain.front_torque_split",
+      "source": "Q25"
+    },
+    {
+      "classification": "estimated",
+      "domain": "fuel.json",
+      "path": "fuel.capacity_kg",
+      "source": "Q28"
+    },
+    {
+      "classification": "estimated",
+      "domain": "fuel.json",
+      "path": "fuel.brake_specific_consumption_kg_per_kwh",
+      "source": "Q29"
+    },
+    {
+      "classification": "estimated",
+      "domain": "fuel.json",
+      "path": "fuel.estimated_lap_consumption_kg",
+      "source": "Q30"
+    },
+    {
+      "classification": "estimated",
+      "domain": "fuel.json",
+      "path": "fuel.idle_consumption_kg_per_hour",
+      "source": "Q31"
+    },
+    {
+      "classification": "published",
+      "domain": "fuel.json",
+      "path": "fuel.reference_lap_time_s",
+      "source": "Q30"
+    },
+    {
+      "classification": "estimated",
+      "domain": "fuel.json",
+      "path": "fuel.tank_position_local_m.x",
+      "source": "Q32"
+    },
+    {
+      "classification": "estimated",
+      "domain": "fuel.json",
+      "path": "fuel.tank_position_local_m.y",
+      "source": "Q32"
+    },
+    {
+      "classification": "estimated",
+      "domain": "fuel.json",
+      "path": "fuel.tank_position_local_m.z",
+      "source": "Q32"
+    },
+    {
+      "classification": "estimated",
+      "domain": "steering.json",
+      "path": "steering.max_steering_angle",
+      "source": "Q33"
+    },
+    {
+      "classification": "estimated",
+      "domain": "steering.json",
+      "path": "steering.front_steering_ratio",
+      "source": "Q34 mechanical ratio 12:1; normalized axle input gain is 1.0 in the runtime steering contract"
+    },
+    {
+      "classification": "estimated",
+      "domain": "steering.json",
+      "path": "steering.ackermann",
+      "source": "Q35"
+    },
+    {
+      "classification": "estimated",
+      "domain": "steering.json",
+      "path": "steering.steering_exponent",
+      "source": "Q35"
+    },
+    {
+      "classification": "estimated",
+      "domain": "steering.json",
+      "path": "steering.steering_speed",
+      "source": "Q36"
+    },
+    {
+      "classification": "estimated",
+      "domain": "steering.json",
+      "path": "steering.steering_speed_decay",
+      "source": "Q36"
+    },
+    {
+      "classification": "published",
+      "domain": "steering.json",
+      "path": "steering.rear_steering_ratio",
+      "source": "Q37"
+    },
+    {
+      "classification": "estimated",
+      "domain": "steering.json",
+      "path": "steering.countersteer_assist",
+      "source": "Q79"
+    },
+    {
+      "classification": "estimated",
+      "domain": "steering.json",
+      "path": "steering.steering_slip_assist",
+      "source": "Q79"
+    },
+    {
+      "classification": "derived",
+      "domain": "suspension.json",
+      "path": "suspension.geometry_physical.corners.FL/RL",
+      "source": "Base linkage transformed to the measured hubs after the 1.670/1.600 m track correction"
+    },
+    {
+      "classification": "estimated",
+      "domain": "suspension.json",
+      "path": "suspension.front.camber",
+      "source": "Q44; setup adjustment requested by user to -4.0 degrees per wheel"
+    },
+    {
+      "classification": "estimated",
+      "domain": "suspension.json",
+      "path": "suspension.rear.camber",
+      "source": "Q44; setup adjustment requested by user to -1.5 degrees per wheel"
+    },
+    {
+      "classification": "estimated",
+      "domain": "suspension.json",
+      "path": "suspension.front.toe",
+      "source": "Q45; setup adjustment requested by user to -0.1 degrees per wheel"
+    },
+    {
+      "classification": "estimated",
+      "domain": "suspension.json",
+      "path": "suspension.rear.toe",
+      "source": "Q45; setup adjustment requested by user to 0.0 degrees per wheel"
+    },
+    {
+      "classification": "estimated",
+      "domain": "suspension.json",
+      "path": "suspension.front/rear.spring_length and resting_ratio",
+      "source": "Virtual ray coordinate range extended by 50 mm while keeping the ray origins fixed; physical ride height is set by geometric spring preload, not these virtual lengths"
+    },
+    {
+      "classification": "estimated",
+      "domain": "aerodynamics.json",
+      "path": "aero.model.front_wing.incidence_deg",
+      "source": "User setup adjustment to 18 degrees"
+    },
+    {
+      "classification": "estimated",
+      "domain": "aerodynamics.json",
+      "path": "aero.model.rear_wing.incidence_deg",
+      "source": "User setup adjustment to 16 degrees"
+    },
+    {
+      "classification": "estimated",
+      "domain": "suspension.json",
+      "path": "suspension.geometry_physical.front.spring_rate_N_per_m",
+      "source": "Q39 actuator rate reduced by 15 percent at user request"
+    },
+    {
+      "classification": "estimated",
+      "domain": "suspension.json",
+      "path": "suspension.geometry_physical.rear.spring_rate_N_per_m",
+      "source": "Q39 actuator rate reduced by 15 percent at user request"
+    },
+    {
+      "classification": "estimated",
+      "domain": "suspension.json",
+      "path": "suspension.geometry_physical.front.damper_bump_Ns_per_m",
+      "source": "Q41 damper coefficient reduced by 15 percent at user request"
+    },
+    {
+      "classification": "estimated",
+      "domain": "suspension.json",
+      "path": "suspension.geometry_physical.front.damper_rebound_Ns_per_m",
+      "source": "Q41 damper coefficient reduced by 15 percent at user request"
+    },
+    {
+      "classification": "estimated",
+      "domain": "suspension.json",
+      "path": "suspension.geometry_physical.rear.damper_bump_Ns_per_m",
+      "source": "Q41 damper coefficient reduced by 15 percent at user request"
+    },
+    {
+      "classification": "estimated",
+      "domain": "suspension.json",
+      "path": "suspension.geometry_physical.rear.damper_rebound_Ns_per_m",
+      "source": "Q41 damper coefficient reduced by 15 percent at user request"
+    },
+    {
+      "classification": "estimated",
+      "domain": "suspension.json",
+      "path": "suspension.geometry_physical.front.wheel_bump_m",
+      "source": "Q42"
+    },
+    {
+      "classification": "estimated",
+      "domain": "suspension.json",
+      "path": "suspension.geometry_physical.front.wheel_droop_m",
+      "source": "Original extension range enlarged by 50 mm to support the user requested ride-height increase; reachable linkage poses verified numerically"
+    },
+    {
+      "classification": "estimated",
+      "domain": "suspension.json",
+      "path": "suspension.geometry_physical.rear.wheel_bump_m",
+      "source": "Q42"
+    },
+    {
+      "classification": "estimated",
+      "domain": "suspension.json",
+      "path": "suspension.geometry_physical.rear.wheel_droop_m",
+      "source": "Original extension range enlarged by 50 mm to support the user requested ride-height increase; reachable linkage poses verified numerically"
+    },
+    {
+      "classification": "derived",
+      "domain": "tires.json",
+      "path": "tires.front.wheel_mass / tires.rear.wheel_mass",
+      "source": "Rim and tire share of the 13 kg and 16 kg wheel assemblies (Q5) after mass inventory closure"
+    },
+    {
+      "classification": "measured",
+      "domain": "tires.json",
+      "path": "tires.front.radius",
+      "source": "corrected mesh"
+    },
+    {
+      "classification": "measured",
+      "domain": "tires.json",
+      "path": "tires.front.width",
+      "source": "corrected mesh"
+    },
+    {
+      "classification": "estimated",
+      "domain": "tires.json",
+      "path": "tires.front.wheel_mass",
+      "source": "Q55"
+    },
+    {
+      "classification": "measured",
+      "domain": "tires.json",
+      "path": "tires.rear.radius",
+      "source": "corrected mesh"
+    },
+    {
+      "classification": "measured",
+      "domain": "tires.json",
+      "path": "tires.rear.width",
+      "source": "corrected mesh"
+    },
+    {
+      "classification": "estimated",
+      "domain": "tires.json",
+      "path": "tires.rear.wheel_mass",
+      "source": "Q55"
+    },
+    {
+      "classification": "estimated",
+      "domain": "tires.json",
+      "path": "tires.pressure.cold_kpa_gauge.FL",
+      "source": "Q50"
+    },
+    {
+      "classification": "estimated",
+      "domain": "tires.json",
+      "path": "tires.pressure.cold_kpa_gauge.FR",
+      "source": "Q50"
+    },
+    {
+      "classification": "estimated",
+      "domain": "tires.json",
+      "path": "tires.pressure.cold_kpa_gauge.RL",
+      "source": "Q50"
+    },
+    {
+      "classification": "estimated",
+      "domain": "tires.json",
+      "path": "tires.pressure.cold_kpa_gauge.RR",
+      "source": "Q50"
+    },
+    {
+      "classification": "estimated",
+      "domain": "tires.json",
+      "path": "tires.pressure.reference_hot_kpa_gauge.FL",
+      "source": "Q51"
+    },
+    {
+      "classification": "estimated",
+      "domain": "tires.json",
+      "path": "tires.pressure.reference_hot_kpa_gauge.FR",
+      "source": "Q51"
+    },
+    {
+      "classification": "estimated",
+      "domain": "tires.json",
+      "path": "tires.pressure.reference_hot_kpa_gauge.RL",
+      "source": "Q51"
+    },
+    {
+      "classification": "estimated",
+      "domain": "tires.json",
+      "path": "tires.pressure.reference_hot_kpa_gauge.RR",
+      "source": "Q51"
+    },
+    {
+      "classification": "estimated",
+      "domain": "brakes.json",
+      "path": "brakes.front_brake_bias",
+      "source": "Q66"
+    },
+    {
+      "classification": "estimated",
+      "domain": "brakes.json",
+      "path": "brakes.max_brake_torque",
+      "source": "Q65 front axle"
+    },
+    {
+      "classification": "published",
+      "domain": "brakes.json",
+      "path": "brakes.enable_abs",
+      "source": "Q78"
+    },
+    {
+      "classification": "estimated",
+      "domain": "brakes.json",
+      "path": "brakes.thermal.front.rotor_outer_diameter_m",
+      "source": "Q62"
+    },
+    {
+      "classification": "estimated",
+      "domain": "brakes.json",
+      "path": "brakes.thermal.rear.rotor_outer_diameter_m",
+      "source": "Q62"
+    },
+    {
+      "classification": "estimated",
+      "domain": "brakes.json",
+      "path": "brakes.thermal.front.rotor_inner_diameter_m",
+      "source": "Q62 disc face"
+    },
+    {
+      "classification": "estimated",
+      "domain": "brakes.json",
+      "path": "brakes.thermal.rear.rotor_inner_diameter_m",
+      "source": "Q62 disc face"
+    },
+    {
+      "classification": "estimated",
+      "domain": "brakes.json",
+      "path": "brakes.thermal.front.rotor_mass_kg",
+      "source": "Q62 diameter, thickness 0.032 and vented carbon density"
+    },
+    {
+      "classification": "estimated",
+      "domain": "brakes.json",
+      "path": "brakes.thermal.rear.rotor_mass_kg",
+      "source": "Q62 diameter, thickness 0.032 and vented carbon density"
+    },
+    {
+      "classification": "estimated",
+      "domain": "underfloor_contact.json",
+      "path": "underfloor_contact.activation_clearance_m",
+      "source": "Q76"
+    },
+    {
+      "classification": "estimated",
+      "domain": "underfloor_contact.json",
+      "path": "underfloor_contact.approach_clearance_m",
+      "source": "Q76"
+    },
+    {
+      "classification": "estimated",
+      "domain": "underfloor_contact.json",
+      "path": "underfloor_contact.linear_rate_n_m",
+      "source": "Q76"
+    },
+    {
+      "classification": "estimated",
+      "domain": "underfloor_contact.json",
+      "path": "underfloor_contact.damping_n_s_m",
+      "source": "Q76"
+    },
+    {
+      "classification": "estimated",
+      "domain": "aerodynamics.json",
+      "path": "aero.frontal_area",
+      "source": "Q69"
+    },
+    {
+      "classification": "estimated",
+      "domain": "aerodynamics.json",
+      "path": "aero.drag_coefficient",
+      "source": "Q70"
+    },
+    {
+      "classification": "published",
+      "domain": "driving_assistance.json",
+      "path": "aids.abs_available",
+      "source": "Q78"
+    },
+    {
+      "classification": "published",
+      "domain": "driving_assistance.json",
+      "path": "aids.abs_default_enabled",
+      "source": "Q78"
+    },
+    {
+      "classification": "published",
+      "domain": "driving_assistance.json",
+      "path": "aids.abs_player_selectable",
+      "source": "Q78"
+    },
+    {
+      "classification": "published",
+      "domain": "driving_assistance.json",
+      "path": "aids.stability_available",
+      "source": "Q78"
+    },
+    {
+      "classification": "published",
+      "domain": "driving_assistance.json",
+      "path": "aids.stability_default_enabled",
+      "source": "Q78"
+    },
+    {
+      "classification": "published",
+      "domain": "driving_assistance.json",
+      "path": "aids.stability_player_selectable",
+      "source": "Q78"
+    },
+    {
+      "classification": "published",
+      "domain": "driving_assistance.json",
+      "path": "aids.traction_control_available",
+      "source": "Q78"
+    },
+    {
+      "classification": "published",
+      "domain": "driving_assistance.json",
+      "path": "aids.traction_control_default_enabled",
+      "source": "Q78"
+    },
+    {
+      "classification": "published",
+      "domain": "driving_assistance.json",
+      "path": "aids.traction_control_player_selectable",
+      "source": "Q78"
+    },
+    {
+      "classification": "published",
+      "domain": "driving_assistance.json",
+      "path": "aids.traction_control_gear_authority",
+      "source": "Q78 no traction control"
+    },
+    {
+      "classification": "published",
+      "domain": "driving_assistance.json",
+      "path": "aids.traction_control_gear_max_cut",
+      "source": "Q78 no traction control"
+    },
+    {
+      "classification": "published",
+      "domain": "driving_assistance.json",
+      "path": "aids.traction_control_gear_slip_target",
+      "source": "Q78 no traction control"
+    },
+    {
+      "classification": "estimated",
+      "domain": "driving_assistance.json",
+      "path": "aids.steering_assist_player_selectable",
+      "source": "Q79 no steering aids"
+    },
+    {
+      "classification": "estimated",
+      "domain": "driving_assistance.json",
+      "path": "aids.steering_slip_assist_default_enabled",
+      "source": "Q79"
+    },
+    {
+      "classification": "estimated",
+      "domain": "driving_assistance.json",
+      "path": "aids.countersteer_default_enabled",
+      "source": "Q79"
+    },
+    {
+      "classification": "inherited",
+      "domain": "coupled_world.json",
+      "path": "*",
+      "source": "Q27, Q59-Q61, Q75, Q80-Q86: model coefficients inherited from the project base profile"
+    },
+    {
+      "classification": "inherited",
+      "domain": "audio.json",
+      "path": "*",
+      "source": "Q27, Q59-Q61, Q75, Q80-Q86: model coefficients inherited from the project base profile"
+    },
+    {
+      "classification": "inherited",
+      "domain": "suspension_presentation.json",
+      "path": "*",
+      "source": "Q27, Q59-Q61, Q75, Q80-Q86: model coefficients inherited from the project base profile"
+    },
+    {
+      "classification": "inherited",
+      "domain": "powertrain.json",
+      "path": "powertrain.automatic_shift",
+      "source": "Existing resolved shift calibration made explicit; full-throttle upshift target is overridden separately"
+    },
+    {
+      "classification": "estimated",
+      "domain": "powertrain.json",
+      "path": "powertrain.automatic_shift.upshift_normalized_rpm_full_throttle",
+      "source": "User requested estimated optimal shift window 16800-17200 revolutions per minute; full-throttle target set to midpoint 17000. Manual transmission selection remains as configured"
+    },
+    {
+      "classification": "derived",
+      "domain": "suspension.json",
+      "path": "suspension.geometry_physical.front.spring_free_length_m",
+      "source": "Preload calculated for 50 mm additional ride height relative to the measured Godot baseline, with spring and damper coefficients reduced by 15 percent; evidence scratch/williams_ride_and_acceleration_20261018"
+    },
+    {
+      "classification": "derived",
+      "domain": "suspension.json",
+      "path": "suspension.geometry_physical.rear.spring_free_length_m",
+      "source": "Preload calculated for 50 mm additional ride height relative to the measured Godot baseline, with spring and damper coefficients reduced by 15 percent; evidence scratch/williams_ride_and_acceleration_20261018"
+    },
+    {
+      "classification": "derived",
+      "domain": "aerodynamics.json",
+      "path": "aero.model.front_wing.area_m2 and aero.model.rear_wing.area_m2",
+      "source": "ClA target 2.070 (Q71) and 47/53 split (Q72) solved against the model equations including the height, rake and floor pressure-shift terms at the nominal 0.030/0.045 m floor clearances; front 0.5347 and rear 0.7122 square metres, verified by the native golden test"
+    },
+    {
+      "classification": "measured",
+      "domain": "aerodynamics.json",
+      "path": "aero.model.front_wing.position_m and aero.model.rear_wing.position_m",
+      "source": "Mean AABB centre of the measured runtime wing elements in the corrected chassis mesh: front wing main elements (0.0, -0.375, -1.749) and rear wing beam plus upper element (0.0, 0.085, 2.192)"
+    },
+    {
+      "classification": "derived",
+      "domain": "aerodynamics.json",
+      "path": "aero.model.underfloor.lift_area_m2 and aero.model.underfloor.position_m",
+      "source": "Underfloor keeps the inherited load share at 1.5949 square metres; pressure centre at the wheelbase midpoint (0.0, -0.501, 0.298008)"
+    },
+    {
+      "classification": "measured",
+      "domain": "aerodynamics.json",
+      "path": "aero.model.underfloor.floor_clearance_front_m, floor_clearance_rear_m and throat_probe_offset_m",
+      "source": "Q38 static floor clearance 0.030 m front and 0.045 m rear above the design contact plane; probes sit on the floor plane so the diffuser-throat mounting offset is zero (Q36 mesh measurement 0.031852 m)"
+    },
+    {
+      "classification": "derived",
+      "domain": "aerodynamics.json",
+      "path": "aero.model.body.drag_coefficient_scope",
+      "source": "Q70 documents Cd 0.83 with A 1.15 square metres as a whole-vehicle reference, so element drag is subtracted from the body reference area"
+    }
+  ],
+  "questionnaire": "docs/f1_1997_williams_physical_profile_questionnaire.md",
+  "resolution": {
+    "domain_digests": {
+      "aerodynamics": "b63892829c61142a4a449efa8d91c8fbba38f76d87bc4eb3d349e4bbe9530953",
+      "brakes": "42fc0593846d009dc8bf1f03f703b6ebebea5c3e5a0572060e4521eed5e8e100",
+      "chassis": "504b41b070156bffc27360b57623bdcc5c1fbe96a614d3079723e59eab0004b5",
+      "coupled_world": "079546b5cc16578ea90615ce6fd3a5a560739331c1ee0e9cd7cf30aed236f175",
+      "driving_assistance": "fbf2e5298355e4e6da4727a29ee75d6bf4317c9c57401e0213bf1be7f5e394a1",
+      "fuel": "788169efbcafcfd722283e6c21da608a5dc1c27a2ede6caccb88a70feaa8acad",
+      "powertrain": "cdecb4cfac3feca3fbc9c4e9c734f65722caab2bf8af144d89e4d6e05f79e54e",
+      "steering": "16a83857b2159b22c4e73510e3afdd7a2ab322dd34b5246a43b044b1c228097d",
+      "suspension": "324c4c167053a4f548ac439f4de2f1aadd4439ce65f7783018364cc9ccfcbf1e",
+      "tires": "783aa938f874cfc791dbc02b688c273869935b8d76d7fc9858d09465f0acb281",
+      "underfloor_contact": "6b6f9c4bb82f0e1067e3213f82def931e648bdcd5350ddeab3b204c697c5b557"
+    },
+    "global_digest_sha256": "e8c4141d722d4e9853f3739d7ecfd2bfee89aab3a5b170739a679347078c49ab",
+    "manifest_digest_sha256": "33af96f7e95c02ef2d95a13f3288d00eb7772ae87e77b1cd6c311395a019638f",
+    "resolved_domains": 18
+  },
+  "unresolved": [],
+  "vehicle": "f1_1997_williams_hockenheim_villenueve"
+}

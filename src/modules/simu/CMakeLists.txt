@@ -1,5 +1,6 @@
 INCLUDE(../../../cmake/macros.cmake)
 
+ADD_SUBDIRECTORY(rustphysics)
 ADD_SUBDIRECTORY(simuv5)
 
 IF(OPTION_3RDPARTY_SQLITE3)
