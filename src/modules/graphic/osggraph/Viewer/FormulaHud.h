@@ -166,9 +166,7 @@ private:
         osgText::Text* header;
         osgText::Text* pressure;
         osgText::Text* zones;
-        osgText::Text* carcass;
-        osgText::Text* gas;
-        osgText::Text* rim;
+        osgText::Text* wear;
         osgText::Text* brake;
     };
     TireCellText _tireCells[WHEEL_COUNT];

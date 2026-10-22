@@ -86,32 +86,32 @@ namespace
     const Palette& palette()
     {
         static const Palette colors = {
-            colorFromHex("#06152566"),          // background (alpha 0x66)
-            colorFromHex("#f4f5f6"),            // dial
-            colorFromHex("#f4f5f6"),            // digital
-            colorFromHex("#183149"),            // inactive
+            colorFromHex("#1e2429f2"),          // garage graphite, 95% opacity
+            colorFromHex("#e9ece8"),            // dial
+            colorFromHex("#e9ece8"),            // digital
+            colorFromHex("#607e91"),            // inactive
             colorFromHex("#f0182d"),            // redline
             colorFromHex("#67202b"),            // inactive redline
             colorFromHex("#f0182d"),            // alert
-            colorFromHex("#ffffff"),            // divider
-            colorFromHex("#9aa5ae"),            // fuel container
-            colorFromHex("#4a555e"),            // inactive fuel segment
-            colorFromHex("#f2f3f1"),            // active fuel segment
+            colorFromHex("#607e91"),            // divider
+            colorFromHex("#607e91"),            // fuel container
+            colorFromHex("#343e46"),            // inactive fuel segment
+            colorFromHex("#e3b23c"),            // active fuel segment
             colorFromHex("#73b8ff"),            // cold
-            colorFromHex("#a6ff9e"),            // optimal
-            colorFromHex("#ffd16b"),            // warm
+            colorFromHex("#8fd36b"),            // optimal: brighter lime green
+            colorFromHex("#e3b23c"),            // warm
             colorFromHex("#ff6b61"),            // hot
             colorFromHex("#d91f1f"),            // critical
-            colorFromHex("#cfd6e4"),            // pending (timing)
+            colorFromHex("#a8b5ba"),            // pending (timing)
             colorFromHex("#ffffff"),            // last lap
             colorFromHex("#a6ff9e"),            // best lap
-            osg::Vec4(0.025f, 0.035f, 0.05f, 0.90f),
-            osg::Vec4(0.45f, 0.52f, 0.62f, 0.45f),
-            colorFromHex("#48df94"),            // throttle
+            colorFromHex("#1e2429f2"),          // controls background, 95% opacity
+            colorFromHex("#607e91"),            // controls border
+            colorFromHex("#8fd36b"),            // throttle: same green as optimal temperatures
             colorFromHex("#ff665c"),            // brake
-            colorFromHex("#ffd477"),            // steering
-            osg::Vec4(0.78f, 0.83f, 0.90f, 1.0f),
-            osg::Vec4(0.88f, 0.92f, 0.98f, 1.0f),
+            colorFromHex("#e3b23c"),            // steering
+            colorFromHex("#a8b5ba"),            // label
+            colorFromHex("#e9ece8"),            // pedal label
             osg::Vec4(0.16f, 0.20f, 0.26f, 1.0f),
             osg::Vec4(0.92f, 0.95f, 1.00f, 1.0f),
             osg::Vec4(0.70f, 0.76f, 0.85f, 1.0f),
@@ -128,8 +128,8 @@ namespace
     //! Design canvases of the migrated panels, in the units of the original scripts.
     const float kRightDesignWidth = 1448.0f;
     const float kRightDesignHeight = 1086.0f;
-    const float kTireDesignWidth = 402.0f;
-    const float kTireDesignHeight = 297.0f;
+    const float kTireDesignWidth = 330.0f;
+    const float kTireDesignHeight = 230.0f;
     const float kTimingDesignWidth = 220.0f;
     const float kTimingDesignHeight = 167.0f;
     const float kControlsDesignWidth = 396.0f;
@@ -263,9 +263,7 @@ FormulaHud::FormulaHud()
         _tireCells[corner].header = nullptr;
         _tireCells[corner].pressure = nullptr;
         _tireCells[corner].zones = nullptr;
-        _tireCells[corner].carcass = nullptr;
-        _tireCells[corner].gas = nullptr;
-        _tireCells[corner].rim = nullptr;
+        _tireCells[corner].wear = nullptr;
         _tireCells[corner].brake = nullptr;
     }
 }
@@ -557,8 +555,11 @@ void FormulaHud::updateMinimapPanel(const CarReadout& readout, const tCarElt* ca
     const Palette& colors = palette();
     const float uiScale = _layout.uiScale;
     const Rect& background = _layout.minimapBackground;
-    _minimap.shapes.addRect(background.x, background.y, background.width, background.height,
-                            colors.background);
+    const float cornerRadius = 12.0f * _layout.controlsPanel.width / kControlsDesignWidth;
+    _minimap.shapes.addRoundedRect(background.x, background.y, background.width, background.height,
+                                   cornerRadius, colors.background);
+    _minimap.shapes.addRoundedOutline(background.x, background.y, background.width, background.height,
+                                      cornerRadius, uiScale, colors.divider);
     const float left = background.x + 16.0f * uiScale;
     const float right = background.right() - 16.0f * uiScale;
     const float airY = background.y + 45.0f * uiScale;
@@ -755,10 +756,12 @@ void FormulaHud::updateRightPanel(const CarReadout& readout)
     const Palette& colors = palette();
     _right.shapes.begin();
 
-    const float panelLeft = xform.point(0.0f, 0.0f).x();
-    const float panelBottom = xform.point(0.0f, kRightDesignHeight).y();
-    _right.shapes.addRect(panelLeft, panelBottom, kRightDesignWidth * xform.scale,
-                          kRightDesignHeight * xform.scale, colors.background);
+    const Rect& panel = _layout.rightPanel;
+    const float cornerRadius = 12.0f * _layout.controlsPanel.width / kControlsDesignWidth;
+    _right.shapes.addRoundedRect(panel.x, panel.y, panel.width, panel.height,
+                                 cornerRadius, colors.background);
+    _right.shapes.addRoundedOutline(panel.x, panel.y, panel.width, panel.height,
+                                    cornerRadius, _layout.uiScale, colors.divider);
     const Rect& engine = _layout.enginePanel;
 
     // --- tachometer dial: 180 deg -> 328 deg (Godot angles), same geometry as the
@@ -873,7 +876,7 @@ void FormulaHud::updateRightPanel(const CarReadout& readout)
     _right.shapes.end();
 
     // --- text ---
-    static const float kScaleLabelRadius = 540.0f;
+    static const float kScaleLabelRadius = 566.0f;
     const int segmentCount = rpmMaximum > 0.0
         ? (int)std::min(32.0, std::max(5.0, std::floor(rpmMaximum / 1000.0 + 0.5)))
         : 0;
@@ -989,21 +992,25 @@ void FormulaHud::updateRightPanel(const CarReadout& readout)
         if (_waterUnit->getCharacterHeight() != labelSize)
             _waterUnit->setCharacterSize(labelSize);
 
-        const osg::Vec2 oilLabelPoint(engine.centerX(), engine.y + engine.height * 0.87f);
-        const osg::Vec2 oilValuePoint(engine.x + engine.width * 0.40f, engine.y + engine.height * 0.65f);
-        const osg::Vec2 oilUnitPoint(engine.x + engine.width * 0.77f, oilValuePoint.y());
-        const osg::Vec2 waterLabelPoint(engine.centerX(), engine.y + engine.height * 0.38f);
-        const osg::Vec2 waterValuePoint(engine.x + engine.width * 0.40f, engine.y + engine.height * 0.16f);
-        const osg::Vec2 waterUnitPoint(engine.x + engine.width * 0.77f, waterValuePoint.y());
-        updateHudText(_oilLabel, "OIL TEMP", colors.dial, oilLabelPoint.x(), oilLabelPoint.y());
-        updateHudText(_oilValue, readout.engineValid ? formatTemperature(readout.oilC) : "--",
+        _oilLabel->setAlignment(osgText::Text::LEFT_CENTER);
+        _waterLabel->setAlignment(osgText::Text::LEFT_CENTER);
+        _oilValue->setAlignment(osgText::Text::RIGHT_CENTER);
+        _waterValue->setAlignment(osgText::Text::RIGHT_CENTER);
+        const osg::Vec2 oilLabelPoint(engine.x, engine.y + engine.height * 0.72f);
+        const osg::Vec2 oilValuePoint(engine.right(), oilLabelPoint.y());
+        const osg::Vec2 oilUnitPoint = oilValuePoint;
+        const osg::Vec2 waterLabelPoint(engine.x, engine.y + engine.height * 0.25f);
+        const osg::Vec2 waterValuePoint(engine.right(), waterLabelPoint.y());
+        const osg::Vec2 waterUnitPoint = waterValuePoint;
+        updateHudText(_oilLabel, "OIL", colors.label, oilLabelPoint.x(), oilLabelPoint.y());
+        updateHudText(_oilValue, readout.engineValid ? formatTemperatureWithUnit(readout.oilC) + "C" : "--",
                       oilColor, oilValuePoint.x(), oilValuePoint.y());
-        updateHudText(_oilUnit, "\u00b0C", colors.dial, oilUnitPoint.x(), oilUnitPoint.y());
-        updateHudText(_waterLabel, "WATER TEMP", colors.dial, waterLabelPoint.x(),
+        updateHudText(_oilUnit, "", colors.dial, oilUnitPoint.x(), oilUnitPoint.y());
+        updateHudText(_waterLabel, "WATER", colors.label, waterLabelPoint.x(),
                       waterLabelPoint.y());
-        updateHudText(_waterValue, readout.engineValid ? formatTemperature(readout.waterC) : "--",
+        updateHudText(_waterValue, readout.engineValid ? formatTemperatureWithUnit(readout.waterC) + "C" : "--",
                       waterColor, waterValuePoint.x(), waterValuePoint.y());
-        updateHudText(_waterUnit, "\u00b0C", colors.dial, waterUnitPoint.x(), waterUnitPoint.y());
+        updateHudText(_waterUnit, "", colors.dial, waterUnitPoint.x(), waterUnitPoint.y());
     }
     {
         const float labelSize = std::max(_layout.labelFontPx, 52.0f * xform.scale);
@@ -1069,147 +1076,81 @@ void FormulaHud::createTirePanel()
     _tires.textGeode = createTextGeode("formulaTireText");
     _root->addChild(_tires.shapeGeode.get());
     _root->addChild(_tires.textGeode.get());
-
-    const Palette& colors = palette();
-    _tireTitle = createHudText(_fonts.bold(), 18.0f, colors.dial, "TYRES",
-                               HUD_TEXT_CENTER);
-    attachText(_tires.textGeode.get(), _tireTitle);
-
     static const char* headers[WHEEL_COUNT] = { "FR", "FL", "RR", "RL" };
     for (int corner = 0; corner < WHEEL_COUNT; ++corner)
     {
         TireCellText& cell = _tireCells[corner];
-        cell.header = createHudText(_fonts.bold(), 20.0f, colors.dial, headers[corner],
-                                    HUD_TEXT_CENTER);
-        cell.pressure = createHudText(_fonts.regular(), 15.0f, colors.dial, "-- kPa",
-                                      HUD_TEXT_CENTER);
-        cell.zones = createHudText(_fonts.bold(), 18.0f, colors.dial, "-- -- --\u00b0",
-                                   HUD_TEXT_CENTER);
-        cell.carcass = createHudText(_fonts.regular(), 13.0f, colors.dial, "CAR --\u00b0",
-                                     HUD_TEXT_CENTER);
-        cell.gas = createHudText(_fonts.regular(), 13.0f, colors.dial, "GAS --\u00b0",
-                                 HUD_TEXT_CENTER);
-        cell.rim = createHudText(_fonts.regular(), 13.0f, colors.dial, "RIM --\u00b0",
-                                 HUD_TEXT_CENTER);
-        cell.brake = createHudText(_fonts.regular(), 13.0f, colors.dial, "BRK --\u00b0",
-                                   HUD_TEXT_CENTER);
-        osgText::Text* all[] = { cell.header, cell.pressure, cell.zones, cell.carcass,
-                                 cell.gas, cell.rim, cell.brake };
-        for (size_t index = 0; index < sizeof(all) / sizeof(all[0]); ++index)
-            attachText(_tires.textGeode.get(), all[index]);
+        cell.header = createHudText(_fonts.bold(), 18, palette().dial, headers[corner], HUD_TEXT_LEFT);
+        cell.pressure = createHudText(_fonts.regular(), 13, palette().label, "-- kPa", HUD_TEXT_RIGHT_CENTER);
+        cell.zones = createHudText(_fonts.bold(), 19, palette().dial, "--", HUD_TEXT_RIGHT_CENTER);
+        cell.wear = createHudText(_fonts.bold(), 15, palette().dial, "--%", HUD_TEXT_RIGHT_CENTER);
+        cell.brake = createHudText(_fonts.regular(), 14, palette().dial, "BRK --", HUD_TEXT_CENTER);
+        for (osgText::Text* text : {cell.header, cell.pressure, cell.zones, cell.wear, cell.brake})
+            attachText(_tires.textGeode.get(), text);
     }
 }
 
 void FormulaHud::updateTirePanel(const CarReadout& readout)
 {
-    const PanelXform xform(_layout.tirePanel, kTireDesignWidth, kTireDesignHeight);
+    const PanelXform xf(_layout.tirePanel, kTireDesignWidth, kTireDesignHeight);
     const Palette& colors = palette();
-
-    _tires.shapes.begin();
-    const osg::Vec2 panelBottomLeft = xform.point(0.0f, kTireDesignHeight);
-    _tires.shapes.addRect(panelBottomLeft.x(), panelBottomLeft.y(),
-                          kTireDesignWidth * xform.scale, kTireDesignHeight * xform.scale,
-                          colors.background);
-    _tires.shapes.end();
-
-    const float titleSize = std::max(_layout.valueFontPx, 18.0f * xform.scale);
-    if (_tireTitle->getCharacterHeight() != titleSize)
-        _tireTitle->setCharacterSize(titleSize);
-    const osg::Vec2 titlePoint = xform.point(kTireDesignWidth * 0.5f, 20.0f);
-    updateHudText(_tireTitle, "TYRES", colors.dial, titlePoint.x(), titlePoint.y());
-
-    const float headerSize = std::max(_layout.valueFontPx, 20.0f * xform.scale);
-    const float pressureSize = std::max(_layout.labelFontPx, 15.0f * xform.scale);
-    const float zonesSize = std::max(_layout.valueFontPx, 18.0f * xform.scale);
-    const float detailSize = std::max(_layout.labelFontPx, 13.0f * xform.scale);
-
-    const float margin = 16.0f;
-    const float gridGap = 10.0f;
-    const float cellWidth = (kTireDesignWidth - margin * 2.0f - gridGap) * 0.5f;
-    const float cellHeight = (kTireDesignHeight - 24.0f - 28.0f - 6.0f) * 0.5f;
-    const float firstRowTop = 12.0f + 28.0f;
-
+    ShapeMesh& mesh = _tires.shapes;
+    mesh.begin();
+    const osg::Vec2 bottom = xf.point(0, kTireDesignHeight);
+    const float cornerRadius = 12.0f * _layout.controlsPanel.width / kControlsDesignWidth;
+    mesh.addRoundedRect(bottom.x(), bottom.y(), kTireDesignWidth * xf.scale,
+                        kTireDesignHeight * xf.scale, cornerRadius, colors.background);
+    mesh.addRoundedOutline(bottom.x(), bottom.y(), kTireDesignWidth * xf.scale,
+                           kTireDesignHeight * xf.scale, cornerRadius, xf.scale, colors.divider);
     for (int corner = 0; corner < WHEEL_COUNT; ++corner)
     {
         const WheelReadout& wheel = readout.wheel[corner];
         TireCellText& cell = _tireCells[corner];
-        // The original grid reads FL, FR on the first row and RL, RR on the second; the
-        // corner index keeps Speed Dreams' order (FR, FL, RR, RL), so each corner is
-        // placed in the cell that matches its side of the car.
-        const int column = (corner == WHEEL_FR || corner == WHEEL_RR) ? 1 : 0;
-        const int row = (corner == WHEEL_RR || corner == WHEEL_RL) ? 1 : 0;
-        const float cellLeft = margin + (cellWidth + gridGap) * (float)column;
-        const float cellTop = firstRowTop + (cellHeight + 6.0f) * (float)row;
-        const float centerX = cellLeft + cellWidth * 0.5f;
-
-        if (cell.header->getCharacterHeight() != headerSize)
-            cell.header->setCharacterSize(headerSize);
-        if (cell.pressure->getCharacterHeight() != pressureSize)
-            cell.pressure->setCharacterSize(pressureSize);
-        if (cell.zones->getCharacterHeight() != zonesSize)
-            cell.zones->setCharacterSize(zonesSize);
-        osgText::Text* details[] = { cell.carcass, cell.gas, cell.rim, cell.brake };
-        for (size_t index = 0; index < sizeof(details) / sizeof(details[0]); ++index)
+        const bool left = corner == WHEEL_FL || corner == WHEEL_RL;
+        const int row = corner >= WHEEL_RR ? 1 : 0;
+        const float x = left ? 12.0f : 177.0f;
+        const float y = 12.0f + row * 110.0f;
+        const float right = x + 141.0f;
+        auto text = [&](osgText::Text* target, const std::string& value, const osg::Vec4& color,
+                        float px, float py, float size) {
+            target->setCharacterSize(std::max(10.0f, size * xf.scale));
+            const osg::Vec2 point = xf.point(px, py);
+            updateHudText(target, value, color, point.x(), point.y());
+        };
+        text(cell.header, cell.header->getText().createUTF8EncodedString(), colors.dial, x, y+6, 18);
+        text(cell.pressure, wheel.valid && wheel.pressureValid ? formatPressure(wheel.pressureKPaGauge)+" kPa" : "-- kPa",
+             colors.label, right, y+6, 13);
+        // Each tread shoulder is coloured independently. Outer is on the outside of
+        // the car on both axles; no thermal average hides a hot shoulder.
+        const double temperatures[3] = {left ? wheel.treadOuterC : wheel.treadInnerC,
+                                        wheel.treadCenterC,
+                                        left ? wheel.treadInnerC : wheel.treadOuterC};
+        const osg::Vec2 tire = xf.point(x+2, y+59);
+        mesh.addRoundedRect(tire.x()-2*xf.scale, tire.y()-2*xf.scale, 53*xf.scale,
+                            38*xf.scale, 5*xf.scale, colors.barBackground);
+        for (int zone=0; zone<3; ++zone)
         {
-            if (details[index]->getCharacterHeight() != detailSize)
-                details[index]->setCharacterSize(detailSize);
+            const osg::Vec4 color = wheel.valid ? thermalColor(classifyTread(wheel, temperatures[zone])) : colors.pending;
+            mesh.addRoundedRect(tire.x()+zone*17*xf.scale, tire.y(), 15*xf.scale,
+                                34*xf.scale, 3*xf.scale, color);
         }
-
-        const osg::Vec2 headerPoint = xform.point(centerX, cellTop + 12.0f);
-        updateHudText(cell.header, cell.header->getText().createUTF8EncodedString(), colors.dial,
-                      headerPoint.x(), headerPoint.y());
-
-        const std::string pressure = wheel.valid && wheel.pressureValid
-            ? formatPressure(wheel.pressureKPaGauge) + " kPa" : std::string("-- kPa");
-        const osg::Vec2 pressurePoint = xform.point(centerX, cellTop + 30.0f);
-        updateHudText(cell.pressure, pressure, colors.dial, pressurePoint.x(), pressurePoint.y());
-
-        std::string zones;
-        if (wheel.valid)
-        {
-            zones = formatTemperature(wheel.treadInnerC) + " "
-                + formatTemperature(wheel.treadCenterC) + " "
-                + formatTemperature(wheel.treadOuterC) + "\u00b0";
-        }
-        else
-        {
-            zones = "-- -- --\u00b0";
-        }
-        const double hottest = hottestOfThree(wheel.treadInnerC, wheel.treadCenterC,
-                                               wheel.treadOuterC);
-        const osg::Vec4 zonesColor = wheel.valid ? thermalColor(classifyTread(wheel, hottest))
-                                                 : colors.pending;
-        const osg::Vec2 zonesPoint = xform.point(centerX, cellTop + 50.0f);
-        updateHudText(cell.zones, zones, zonesColor, zonesPoint.x(), zonesPoint.y());
-
-        // No profile publishes an optimal window for the carcass, the inflation gas or
-        // the rim, so those three are shown with the neutral digital colour rather than
-        // with an invented threshold.
-        // Seven rows inside one cell; the offsets are the compact vertical rhythm of the
-        // original grid, adapted so the last row never touches the next cell.
-        const osg::Vec2 carcassPoint = xform.point(centerX, cellTop + 68.0f);
-        const osg::Vec2 gasPoint = xform.point(centerX, cellTop + 82.0f);
-        const osg::Vec2 rimPoint = xform.point(centerX, cellTop + 96.0f);
-        const osg::Vec2 brakePoint = xform.point(centerX, cellTop + 110.0f);
-        updateHudText(cell.carcass,
-                      wheel.valid ? "CAR " + formatTemperatureWithUnit(wheel.carcassC)
-                                  : std::string("CAR --"),
-                      colors.dial, carcassPoint.x(), carcassPoint.y());
-        updateHudText(cell.gas,
-                      wheel.valid ? "GAS " + formatTemperatureWithUnit(wheel.gasC)
-                                  : std::string("GAS --"),
-                      colors.dial, gasPoint.x(), gasPoint.y());
-        updateHudText(cell.rim,
-                      wheel.valid ? "RIM " + formatTemperatureWithUnit(wheel.rimC)
-                                  : std::string("RIM --"),
-                      colors.dial, rimPoint.x(), rimPoint.y());
-        const osg::Vec4 brakeColor = wheel.valid && wheel.brakeValid
-            ? thermalColor(classifyBrake(readout, wheel.brakeDiscC)) : colors.pending;
-        updateHudText(cell.brake,
-                      wheel.valid ? "BRK " + formatTemperatureWithUnit(wheel.brakeDiscC)
-                                  : std::string("BRK --"),
-                      brakeColor, brakePoint.x(), brakePoint.y());
+        const double hottest = hottestOfThree(wheel.treadInnerC, wheel.treadCenterC, wheel.treadOuterC);
+        text(cell.zones, wheel.valid ? formatTemperatureWithUnit(hottest)+"C" : "--",
+             wheel.valid ? thermalColor(classifyTread(wheel,hottest)) : colors.pending, right, y+42, 19);
+        // Wear is a separate quantity: bar length means rubber remaining, never heat.
+        const osg::Vec2 bar = xf.point(x+2, y+80);
+        mesh.addRect(bar.x(), bar.y(), 82*xf.scale, 8*xf.scale, colors.barBackground);
+        const osg::Vec4 wearColor = wheel.wearRemaining <= .25 ? colors.hot
+            : wheel.wearRemaining <= .50 ? colors.warm : colors.dial;
+        if (wheel.wearValid)
+            mesh.addRect(bar.x(), bar.y(), (float)wheel.wearRemaining*82*xf.scale, 8*xf.scale, wearColor);
+        text(cell.wear, wheel.wearValid ? formatPercent(wheel.wearRemaining) : "--%",
+             wheel.wearValid ? wearColor : colors.pending, right, y+76, 15);
+        text(cell.brake, wheel.brakeValid ? "BRK "+formatTemperatureWithUnit(wheel.brakeDiscC) : "BRK --",
+             wheel.brakeValid ? thermalColor(classifyBrake(readout,wheel.brakeDiscC)) : colors.pending,
+             x+70, y+97, 14);
     }
+    mesh.end();
 }
 
 // ---------------------------------------------------------------------------

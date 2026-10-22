@@ -35,20 +35,20 @@ namespace
     const float kDesignHeight = 1080.0f;
 
     //! Formula90s geometry, converted from its 1080p composition.
-    const float kRightPanelWidth = 429.0f;     // 390 * 1.1
-    const float kRightPanelHeight = 321.75f;   // 292.5 * 1.1
+    const float kRightPanelWidth = 541.35f; // preserve content scale with 24 px side padding
+    const float kRightPanelHeight = 370.0125f;
     // The wheel panel expands with its content in the original; these are the measured
     // laid-out sizes (402x297 design pixels at scale 1.188), not the nominal minimum.
-    const float kTirePanelWidth = 477.576f;
-    const float kTirePanelHeight = 352.836f;
+    const float kTirePanelWidth = 330.0f;
+    const float kTirePanelHeight = 230.0f;
     const float kTimingPanelWidth = 261.36f;   // 220 * 1.188
     // The original panel is 132 design pixels tall for the title plus LAP/LAST/BEST.
     // The migration adds the requested current-lap row, so the block is 167.
     const float kTimingPanelHeight = 198.4f;   // 167 * 1.188
     const float kMinimapWidth = 243.0f;        // 108 * 2.25
     const float kMinimapHeight = 288.0f;       // 128 * 2.25
-    const float kControlsWidth = 396.0f;
-    const float kControlsHeight = 116.0f;
+    const float kControlsWidth = 435.6f;
+    const float kControlsHeight = 127.6f;
 
     float readNumber(void* handle, const char* section, const char* name, float fallback)
     {
@@ -85,7 +85,7 @@ LayoutConfig::LayoutConfig()
     , leftMargin(14.0f)
     , topMargin(10.0f)
     , rightMargin(16.0f)
-    , bottomMargin(16.0f)
+    , bottomMargin(48.0f)
     , blockPadding(12.0f)
     , panelGap(10.0f)
     , mapGap(12.0f)
@@ -160,9 +160,9 @@ void Layout::compute(const LayoutConfig& config, int viewportWidth, int viewport
             uiScale = std::max(0.20f, scaleThatFits);
     }
 
-    const float marginLeft = config.leftMargin * uiScale;
-    const float marginRight = config.rightMargin * uiScale;
-    const float marginBottom = config.bottomMargin * uiScale;
+    const float marginLeft = std::max(24.0f, config.leftMargin * uiScale);
+    const float marginRight = std::max(24.0f, config.rightMargin * uiScale);
+    const float marginBottom = std::max(24.0f, config.bottomMargin * uiScale);
     const float panelGap = config.panelGap * uiScale;
 
     // --- right block: tachometer/speed/fuel/engine temperatures at the bottom-right ---
@@ -176,8 +176,8 @@ void Layout::compute(const LayoutConfig& config, int viewportWidth, int viewport
     // corner of the tachometer. Engine is a subrectangle of rightPanel.
     tirePanel = Rect(marginLeft, marginBottom, kTirePanelWidth * uiScale,
                      kTirePanelHeight * uiScale);
-    enginePanel = Rect(right.right() - 120.0f * uiScale, right.top() - 110.0f * uiScale,
-                       112.0f * uiScale, 94.0f * uiScale);
+    enginePanel = Rect(right.right() - 158.0f * uiScale, right.top() - 90.0f * uiScale,
+                       130.0f * uiScale, 74.0f * uiScale);
 
     // One panel combines the map and Air/Time at the upper-right, inset from both edges.
     timingPanel = Rect();
@@ -187,15 +187,15 @@ void Layout::compute(const LayoutConfig& config, int viewportWidth, int viewport
     const float mapBlockLeft = screenWidth - mapMargin - 300.0f * uiScale;
     const float mapBlockBottom = screenHeight - mapMargin - mapBlockHeight;
     minimapBackground = Rect(mapBlockLeft, mapBlockBottom, 300.0f * uiScale, mapBlockHeight);
-    minimapPanel = Rect(mapBlockLeft + 12.0f * uiScale, mapBlockBottom + 68.0f * uiScale,
-                        276.0f * uiScale, 160.0f * uiScale);
+    minimapPanel = Rect(mapBlockLeft + 12.0f * uiScale, mapBlockBottom + 56.0f * uiScale,
+                        276.0f * uiScale, 180.0f * uiScale);
 
     // --- bottom centre: steering wheel and pedal indicators ---
     const float controlsScale = std::min(1.0f, std::max(config.controlsMinimumScale,
                                                         screenWidth / 1280.0f)) * uiScale;
-    // The original anchors the controls panel 18 design pixels above the bottom edge.
+    // Every bottom panel shares the same raised baseline.
     Rect controls((screenWidth - kControlsWidth * controlsScale) * 0.5f,
-                  config.controlsBottomMargin * uiScale,
+                  marginBottom,
                   kControlsWidth * controlsScale,
                   kControlsHeight * controlsScale);
     // Never let the controls crawl into the tachometer: keep a gap to the right block.

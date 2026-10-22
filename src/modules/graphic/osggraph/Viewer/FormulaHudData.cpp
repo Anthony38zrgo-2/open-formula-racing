@@ -99,6 +99,8 @@ WheelReadout::WheelReadout()
     , brakeDiscC(0.0)
     , pressureKPaGauge(0.0)
     , pressureValid(false)
+    , wearValid(false)
+    , wearRemaining(0.0)
     , brakeEfficiency(0.0)
     , treadOptimalC(0.0)
     , treadWindowC(0.0)
@@ -217,6 +219,9 @@ CarReadout readCar(const tCarElt* car, const tSituation* situation)
         target.brakeDiscC = source.brakeDiscC;
         target.pressureKPaGauge = source.pressureKPaGauge;
         target.pressureValid = std::isfinite((double)source.pressureKPaGauge);
+        target.wearRemaining = car->_tyreTreadDepth(corner);
+        target.wearValid = readout.connected && std::isfinite(target.wearRemaining)
+            && target.wearRemaining >= 0.0 && target.wearRemaining <= 1.0;
         target.brakeEfficiency = source.brakeEfficiency;
         target.treadOptimalC = published.treadOptimalC[corner];
         target.treadWindowC = published.treadWindowC[corner];

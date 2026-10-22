@@ -23,6 +23,9 @@
 #include <osg/Camera>
 #include <osg/RenderInfo>
 #include <osg/Projection>
+#include <osg/Program>
+#include <osg/Shader>
+#include <osg/Uniform>
 
 #include <osgDB/WriteFile>
 
@@ -1222,6 +1225,38 @@ void SDHUD::hideReplacedLegacyElements()
 {
     if (!_formulaHud.group())
         return;
+    // Preserve the original card's alpha/angled edges and white position tab while
+    // replacing its coloured name area with the HUD green. No image assets are edited.
+    static osg::ref_ptr<osg::Program> pilotPalette;
+    if (!pilotPalette.valid())
+    {
+        pilotPalette = new osg::Program;
+        pilotPalette->addShader(new osg::Shader(osg::Shader::VERTEX,
+            "#version 120\nvoid main(){gl_Position=ftransform();gl_TexCoord[0]=gl_TextureMatrix[0]*gl_MultiTexCoord0;}"));
+        pilotPalette->addShader(new osg::Shader(osg::Shader::FRAGMENT,
+            "#version 120\n#extension GL_ARB_texture_rectangle : enable\n"
+            "uniform sampler2DRect card; void main(){vec4 c=texture2DRect(card,gl_TexCoord[0].xy);"
+            "if(min(c.r,min(c.g,c.b))<0.9){c.rgb=vec3(143.0,211.0,107.0)/255.0;"
+            "c.a=min(1.0,c.a*2.0);}gl_FragColor=c;}"));
+    }
+    for (int slot = 1; slot <= 7; ++slot)
+    {
+        const std::string prefix = "board-player" + std::to_string(slot);
+        for (const char* suffix : {"-background", "-background-current", "-background-first"})
+        {
+            const auto found = hudImgElements.find(prefix + suffix);
+            if (found == hudImgElements.end()) continue;
+            osg::StateSet* state = found->second->getOrCreateStateSet();
+            if (state->getAttribute(osg::StateAttribute::PROGRAM) != pilotPalette.get())
+            {
+                state->setAttributeAndModes(pilotPalette.get(), osg::StateAttribute::ON);
+                state->addUniform(new osg::Uniform("card", 0));
+            }
+        }
+        const auto name = hudTextElements.find(prefix + "-name");
+        if (name != hudTextElements.end())
+            name->second->setColor(osg::Vec4(30.0f/255,36.0f/255,41.0f/255,1));
+    }
     const char* groups[] = { "carinfoWidget", "laptimeWidget", "racelapsWidget",
                              "tiresWidget", "rpmWidget", "shiftlightsWidget", "driverinputWidget",
                              "carstatusWidget", "dashitemsWidget", "trackdataWidget" };

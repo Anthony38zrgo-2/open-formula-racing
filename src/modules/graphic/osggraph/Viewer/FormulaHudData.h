@@ -71,6 +71,8 @@ struct WheelReadout
     double brakeDiscC;
     double pressureKPaGauge;
     bool pressureValid;      //!< Gauge pressure was measured, not defaulted.
+    bool wearValid;
+    double wearRemaining;    //!< Remaining tread fraction from the physics wheel view.
     double brakeEfficiency;
     double treadOptimalC;
     double treadWindowC;

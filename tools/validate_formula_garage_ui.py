@@ -85,6 +85,7 @@ static int applied = 0, cancelled = 0;
 void ApplyEditor() { ++applied; }
 void CancelEditor() { ++cancelled; }
 void OpenEditor() {}
+void BeginDriving() {}
 static int previewScreenWidth=1280, previewScreenHeight=800;
 void PreviewScreenSize(int* sw,int* sh,int* vw,int* vh) {
     *sw=*vw=previewScreenWidth; *sh=*vh=previewScreenHeight;
@@ -290,6 +291,16 @@ int main(int argc, char** argv) {
     for(const auto& f:garageFonts) check(f.second!=nullptr,"HTML reference font loaded without fallback");
     for(int i=0;i<520;++i) Text("Cache regression "+std::to_string(i),0,0);
     check(textures.size()<=512,"dynamic text cache remains bounded");
+    controls.clear(); editorOpen=false;
+    glViewport(0,0,1280,800); glMatrixMode(GL_PROJECTION); glLoadIdentity(); gluOrtho2D(0,640,0,480);
+    glMatrixMode(GL_MODELVIEW); glLoadIdentity(); glClear(GL_COLOR_BUFFER_BIT);
+    BuildPitControls();
+    check(controls.size()==2,"pit window retains two actions");
+    for(const auto& c:controls) check(c.left>=120 && c.bottom>=168 && c.left+c.width<=520 && c.bottom+c.height<=383,"pit actions fit styled panel");
+    glFinish(); std::vector<unsigned char> pitPixels(1280*800*3);
+    glReadPixels(0,0,1280,800,GL_RGB,GL_UNSIGNED_BYTE,pitPixels.data());
+    SDL_Surface* pitShot=SDL_CreateRGBSurfaceFrom(pitPixels.data(),1280,800,24,1280*3,0xff,0xff00,0xff0000,0);
+    SDL_SaveBMP(pitShot,(std::string(argv[2])+"/tab-pit.bmp").c_str()); SDL_FreeSurface(pitShot);
     ClearGarageText(); check(textures.empty(),"cached OpenGL resources released");
     check(glGetError()==GL_NO_ERROR,"OpenGL rendering has no error");
     std::printf("checks=%d failures=%d\n",checks,failures);
@@ -336,7 +347,7 @@ rust_test.append(r'''
         if(tab==3) check(imageTextures["strategy-gray-v2.png"].identifier!=0,"original strategy drawing restored");
     }
 ''')
-main = main.replace('    ClearGarageText();', '\n'.join(rust_test) + '\n    ClearGarageText();')
+main = main.replace('    controls.clear(); editorOpen=false;', '\n'.join(rust_test) + '\n    controls.clear(); editorOpen=false;')
 cpp.write_text(prefix + font_code + draw_string + globals_code + fake + primitives + widgets + mouse + mouse_events + keyboard + main)
 env = os.environ.copy()
 env['PATH'] = os.pathsep.join([str(args.toolchain / 'bin'), str(args.build / 'bin'), env.get('PATH', '')])

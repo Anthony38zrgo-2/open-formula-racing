@@ -147,16 +147,16 @@ void ClearGarageText()
     textures.clear();
 }
 void Text(const std::string& text, double horizontal, double vertical, int font = GFUI_FONT_SMALL,
-    float* color = turquoise, int alignment = GFUI_ALIGN_HC)
+    float* color = turquoise, int alignment = GFUI_ALIGN_HC, double maximumWidth = 0)
 {
     if (editorOpen && !text.empty())
     {
         if (!garageFonts.count(font))
         {
             const char* file = font == GFUI_FONT_BIG || font == GFUI_FONT_MEDIUM
-                ? "ChakraPetch-Bold.ttf" : "Rajdhani-SemiBold.ttf";
+                ? "Libron-Bold.ttf" : "Libron-Regular.ttf";
             const int size = font == GFUI_FONT_BIG ? 36 : font == GFUI_FONT_MEDIUM ? 19 : 15;
-            const std::string path = std::string(GfDataDir()) + "data/fonts/formula-garage/" + file;
+            const std::string path = std::string(GfDataDir()) + "data/fonts/Libron/" + file;
             garageFonts[font] = TTF_OpenFont(path.c_str(), size * 2);
             if (!garageFonts[font]) GfLogWarning("Garage font unavailable: %s; using menu font\n", path.c_str());
         }
@@ -184,7 +184,8 @@ void Text(const std::string& text, double horizontal, double vertical, int font 
                 textures[key] = texture;
             }
             const GarageTexture& texture = textures[key];
-            const double width = texture.width * .5, height = texture.height * .5;
+            const double fit = maximumWidth > 0 ? std::min(1.0, maximumWidth / (texture.width * .5)) : 1.0;
+            const double width = texture.width * .5 * fit, height = texture.height * .5 * fit;
             double x = horizontal;
             if (alignment == GFUI_ALIGN_HC) x -= width * .5;
             else if (alignment == GFUI_ALIGN_HR) x -= width;
@@ -399,8 +400,9 @@ void Panel(double x, double y, double width, double height, const std::string& t
 {
     Rectangle(x, y, width, height, panelColor);
     Outline(x, y, width, height, turquoise);
-    Text(title, x + 14, y + height - 28, GFUI_FONT_MEDIUM, gold, GFUI_ALIGN_HL);
-    Text(tag, x + width - 14, y + height - 26, GFUI_FONT_SMALL_C, muted, GFUI_ALIGN_HR);
+    const double titleWidth = tag.empty() ? width - 28 : (width - 28) * .60;
+    Text(title, x + 14, y + height - 28, GFUI_FONT_MEDIUM, gold, GFUI_ALIGN_HL, titleWidth);
+    Text(tag, x + width - 14, y + height - 26, GFUI_FONT_SMALL_C, muted, GFUI_ALIGN_HR, (width - 28) * .40 - 10);
     Rectangle(x + 14, y + height - 40, width - 28, 1, turquoise);
 }
 void Parameter(int index, const std::string& label, double x, double y, double width)
@@ -486,7 +488,7 @@ void BuildRustPanels()
             }
         }
         Panel(458, 108, 360, 476, selectedPage == 0 ? "BARRAS / CHASIS" : "BALANCE / REGLAJES", "");
-        CarDiagram(638, selectedPage == 0 ? 287 : 315);
+        CarDiagram(638, selectedPage == 0 ? 317 : 315);
         if (selectedPage == 0)
         {
             RustParameter("suspension.geometry_physical.front_arb.ratio", "Barra del.", 472, 492, 332);
@@ -717,6 +719,16 @@ void BuildEditorControls()
     StyledButton(875, 37, 154, 42, "CANCELAR", CancelEditor);
     StyledButton(1043, 37, 217, 42, "APLICAR Y VOLVER", ApplyEditor, true);
 }
+void BuildPitControls()
+{
+    float background[4] = {panelColor[0], panelColor[1], panelColor[2], .92f};
+    Rectangle(120, 168, 400, 215, background);
+    Outline(120, 168, 400, 215, turquoise);
+    Rectangle(120, 377, 400, 6, gold);
+    Text("PIT", 320, 342, GFUI_FONT_BIG, gold);
+    StyledButton(154, 262, 332, 48, "EMPEZAR", BeginDriving, true);
+    StyledButton(154, 200, 332, 48, "IR AL GARAJE", OpenEditor);
+}
 void DrawGarage()
 {
     if (!garageOpen) return;
@@ -744,20 +756,7 @@ void DrawGarage()
     if (editorOpen) BuildEditorControls();
     else
     {
-        float panel[4] = {0, 0, 0, 0.72f};
-        Rectangle(105, 210, 430, 170, panel);
-        Text("PIT", 320, 350, GFUI_FONT_BIG, white);
-        for (int side = 0; side < 2; ++side)
-            for (int segment = 0; segment < 6; ++segment)
-            {
-                const int widths[6] = {40, 24, 16, 11, 7, 3};
-                int offset = 0; for (int previous = 0; previous < segment; ++previous) offset += widths[previous] + 4;
-                Rectangle(side == 0 ? 126 + offset : 514 - offset - widths[segment], 354, widths[segment], 13, gold);
-            }
-        Text("BEGIN", 320, 312, GFUI_FONT_MEDIUM, turquoise);
-        Text("GARAGE", 320, 280, GFUI_FONT_MEDIUM, turquoise);
-        AddButton(265, 306, 110, 27, "Begin", BeginDriving);
-        AddButton(265, 273, 110, 27, "Garage", OpenEditor);
+        BuildPitControls();
     }
     selectedControl = std::max(0, std::min(selectedControl, (int)controls.size() - 1));
     if (!controls.empty())
