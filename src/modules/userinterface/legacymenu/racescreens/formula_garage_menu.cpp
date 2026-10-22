@@ -437,12 +437,126 @@ void PageParameter(int page, int item, const std::string& label, double x, doubl
 void CarDiagram(double x, double y)
 {
     auto* preview = dynamic_cast<ICarPreviewRenderer*>(LegacyMenu::self().graphicsEngine());
-    const double width = 324, height = selectedPage == 0 ? 220 : 270;
+    const double width = 324, height = 270;
     const int left = viewportLeft + (int)((x - width / 2) * viewportWidth / editorWidth);
     const int bottom = viewportBottom + (int)((y - height / 2) * viewportHeight / editorHeight);
     if (!preview || !preview->drawGarageCarPreview(garageCar, left, bottom,
         (int)(width * viewportWidth / editorWidth), (int)(height * viewportHeight / editorHeight), selectedPage == 1))
         Text("Vista 3D no disponible", x, y, GFUI_FONT_SMALL_C, muted);
+}
+void RustParameter(const std::string& path, const std::string& label, double x, double y, double width)
+{
+    for (int i = 0; i < (int)fields.size(); ++i)
+        if (fields[i].path == path) { Parameter(i, label, x, y, width); return; }
+    Text(label + "  --", x, y + 5, GFUI_FONT_SMALL_C, muted, GFUI_ALIGN_HL);
+}
+void BuildRustPanels()
+{
+    // Reuse the original four-tab composition and artwork. Only the data bindings
+    // differ: every editable widget still addresses the authoritative Rust setup.
+    const char* cornerNames[] = {"DELANTERA IZQUIERDA", "DELANTERA DERECHA", "TRASERA IZQUIERDA", "TRASERA DERECHA"};
+    const char* pressureCorners[] = {"FL", "FR", "RL", "RR"};
+    const int wheels[] = {1, 0, 3, 2};
+    Rectangle(20, 598, 1240, 32, panelColor);
+    Rectangle(20, 598, 3, 32, gold);
+    Text("REGLAJES DEL VEHICULO", 35, 608, GFUI_FONT_SMALL_C, gold, GFUI_ALIGN_HL);
+    Text("Arrastra o usa - / +", 1242, 608, GFUI_FONT_SMALL_C, muted, GFUI_ALIGN_HR);
+    if (selectedPage < 2)
+    {
+        Text("Suspension y geometria compartidas por eje", 550, 608, GFUI_FONT_SMALL_C, muted);
+        for (int corner = 0; corner < 4; ++corner)
+        {
+            const double x = corner % 2 ? 838 : 20;
+            const double y = corner < 2 ? 353 : 108;
+            const std::string axle = corner < 2 ? "suspension.front." : "suspension.rear.";
+            Panel(x, y, 422, 231, cornerNames[corner], selectedPage == 0 ? "SUSPENSION / POR EJE" : "NEUMATICO");
+            if (selectedPage == 0)
+            {
+                const char* keys[] = {"bump_stop_multiplier", "bump_damp_multiplier", "rebound_damp_multiplier", "damping_ratio", "resting_ratio", "spring_length"};
+                const char* labels[] = {"Topes", "Compresion", "Extension", "Amortiguacion", "Altura / ratio", "Long. muelle"};
+                for (int row = 0; row < 6; ++row)
+                    RustParameter(axle + keys[row], labels[row], x + 14, y + 158 - row * 26, 394);
+            }
+            else
+            {
+                RustParameter(std::string("tires.pressure.cold_kpa_gauge.") + pressureCorners[corner], "Presion fria", x + 14, y + 151, 394);
+                RustParameter(axle + "camber", "Caida", x + 14, y + 113, 394);
+                RustParameter(axle + "toe", "Convergencia", x + 14, y + 75, 394);
+                Text(Number(garageCar->_tyreT_mid(wheels[corner]) - 273.15, "C / banda actual"), x + 14, y + 29, GFUI_FONT_SMALL_C, muted, GFUI_ALIGN_HL);
+            }
+        }
+        Panel(458, 108, 360, 476, selectedPage == 0 ? "BARRAS / CHASIS" : "BALANCE / REGLAJES", "");
+        CarDiagram(638, selectedPage == 0 ? 287 : 315);
+        if (selectedPage == 0)
+        {
+            RustParameter("suspension.geometry_physical.front_arb.ratio", "Barra del.", 472, 492, 332);
+            RustParameter("suspension.geometry_physical.rear_arb.ratio", "Barra tras.", 472, 459, 332);
+            RustParameter("steering.max_steering_angle", "Direccion", 472, 145, 332);
+            Text("Vista superior / modelo 3D", 638, 119, GFUI_FONT_SMALL_C, muted);
+        }
+        else
+        {
+            RustParameter("aero.model.front_wing.incidence_deg", "Ala del.", 472, 492, 332);
+            RustParameter("aero.model.rear_wing.incidence_deg", "Ala tras.", 472, 459, 332);
+            RustParameter("brakes.front_brake_bias", "Balance del.", 472, 145, 332);
+            RustParameter("brakes.max_brake_torque", "Par freno", 472, 115, 332);
+        }
+    }
+    else if (selectedPage == 2)
+    {
+        Panel(20, 353, 422, 231, "MOTOR", "LIMITADOR");
+        RustParameter("powertrain.max_rpm", "Regimen max.", 34, 492, 394);
+        Text("Valores reales del motor instalado", 34, 460, GFUI_FONT_SMALL_C, muted, GFUI_ALIGN_HL);
+        Panel(20, 108, 422, 231, "DIRECCION / FRENADA", "CONTROLES");
+        RustParameter("steering.max_steering_angle", "Tope direccion", 34, 260, 394);
+        RustParameter("steering.steering_speed", "Respuesta", 34, 218, 394);
+        RustParameter("brakes.max_brake_torque", "Par freno", 34, 176, 394);
+        Panel(458, 108, 360, 476, "DIFERENCIAL", "TRASERO");
+        RustParameter("powertrain.differential.power_ramp_angle_deg", "Aceleracion", 472, 492, 332);
+        RustParameter("powertrain.differential.coast_ramp_angle_deg", "Retencion", 472, 457, 332);
+        RustParameter("powertrain.differential.preload_nm", "Precarga", 472, 422, 332);
+        RustParameter("powertrain.differential.clutches", "Discos", 472, 387, 332);
+        TabImage("engine-gray-v2.png", 472, 124, 332, 240);
+        for (int half = 0; half < 2; ++half)
+        {
+            const double y = half == 0 ? 353 : 108;
+            Panel(838, y, 422, 231, half == 0 ? "CAJA / 1 - 3" : "CAJA / 4 - 6", "RELACIONES / SOLO LECTURA");
+            for (int row = 0; row < 3; ++row)
+            {
+                const int gear = half * 3 + row + 1;
+                // Native ratios include the installed final drive. Do not derive the
+                // individual gears from an unapplied final-drive edit.
+                double installedFinalDrive = 0;
+                for (const auto& field : fields) if (field.path == "powertrain.final_drive") installedFinalDrive = field.original;
+                const std::string ratio = gear < garageCar->_gearNb && installedFinalDrive > 0
+                    && garageCar->_gearRatio[gear + garageCar->_gearOffset] > 0
+                    ? Number(garageCar->_gearRatio[gear + garageCar->_gearOffset] / installedFinalDrive, "ratio") : "--";
+                Text("Marcha " + std::to_string(gear), 852, y + 150 - row * 35, GFUI_FONT_SMALL_C, white, GFUI_ALIGN_HL);
+                Text(ratio, 1246, y + 150 - row * 35, GFUI_FONT_SMALL_C, muted, GFUI_ALIGN_HR);
+            }
+            if (half == 1) RustParameter("powertrain.final_drive", "Grupo final", 852, y + 35, 394);
+        }
+    }
+    else
+    {
+        Panel(20, 353, 422, 231, "COMBUSTIBLE", "CARGA AL SALIR");
+        RustParameter("fuel.initial_kg", "Combustible", 34, 492, 394);
+        Text("Carga actual: " + Number(garageCar->_fuel, "L"), 34, 452, GFUI_FONT_SMALL_C, muted, GFUI_ALIGN_HL);
+        Panel(838, 353, 422, 231, "NEUMATICOS", "SERVICIO");
+        StyledButton(852, 485, 394, 34, replaceTires ? "[X] Montar neumaticos nuevos" : "[ ] Montar neumaticos nuevos", []() { replaceTires = !replaceTires; }, replaceTires);
+        Text("Presiones: pestana Aero / Ruedas.", 852, 448, GFUI_FONT_SMALL_C, muted, GFUI_ALIGN_HL);
+        Panel(458, 108, 360, 476, "ESTRATEGIA / BOXES", "");
+        TabImage("strategy-gray-v2.png", 472, 129, 332, 401);
+        Panel(20, 108, 422, 231, "TEMPERATURAS", "DELANTERAS");
+        Panel(838, 108, 422, 231, "TEMPERATURAS", "TRASERAS");
+        for (int corner = 0; corner < 4; ++corner)
+        {
+            const double x = corner < 2 ? 34 : 852;
+            const double y = corner % 2 == 0 ? 252 : 179;
+            Text(cornerNames[corner], x, y, GFUI_FONT_SMALL, gold, GFUI_ALIGN_HL);
+            Text(Number(garageCar->_tyreT_mid(wheels[corner]) - 273.15, "C / banda"), x, y - 27, GFUI_FONT_MEDIUM, white, GFUI_ALIGN_HL);
+        }
+    }
 }
 void BuildEditorControls()
 {
@@ -477,15 +591,8 @@ void BuildEditorControls()
         });
     }
     if (rustGarage) {
-        Panel(20, 108, 1240, 510, "CONFIGURACION RUST", "Valores y limites del motor activo");
-        int row = 0;
-        for (int i = 0; i < (int)fields.size(); ++i) {
-            if (fields[i].group != selectedPage) continue;
-            const int column = row / 10;
-            Parameter(i, fields[i].name, 38 + column * 616, 542 - (row % 10) * 41, 580);
-            ++row;
-        }
-        Text(statusMessage.empty() ? "Cambios atomicos sobre el perfil Rust; sin tercer muelle" : statusMessage,
+        BuildRustPanels();
+        Text(statusMessage.empty() ? "Configuracion actual" : statusMessage,
             24, 83, GFUI_FONT_SMALL_C, gold, GFUI_ALIGN_HL);
         StyledButton(711, 37, 150, 42, "RESTABLECER", []() {
             for (GarageField& field : fields) field.value = field.original;

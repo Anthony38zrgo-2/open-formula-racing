@@ -100,6 +100,18 @@ tdble grMaxDammage = 10000.0;
 void *grHandle = 0;
 void *grTrackHandle = 0;
 
+namespace
+{
+    //! Track model handed to the graphics module at load time. The Formula HUD builds
+    //! its minimap from it; no other owner duplicates the track geometry.
+    const tTrack* g_trackModel = 0;
+}
+
+const tTrack* getTrackModel()
+{
+    return g_trackModel;
+}
+
 int m_Winx, m_Winy, m_Winw, m_Winh;
 
 tdble grLodFactorValue = 1.0;
@@ -464,6 +476,18 @@ int refresh(tSituation *s)
     }
     adaptScreenSize();
 
+    // Keep the HUD projection and the migrated Formula layout in sync with the visible
+    // area: window resize, resolution change and screen mode all land here.
+    {
+        int winX = 0;
+        int winY = 0;
+        int winW = 0;
+        int winH = 0;
+        GfScrGetSize(&winX, &winY, &winW, &winH);
+        if (winW > 0 && winH > 0)
+            hud.SetScreenSize(winW, winH);
+    }
+
     tCarElt* curCar = screens->getActiveView()->getCurrentCar();
 
     //switch to look back camera if requested by the driver
@@ -526,6 +550,7 @@ void shutdownCars(void)
 
 int initTrack(tTrack *track)
 {
+    g_trackModel = track;
     // The inittrack does as well init the context, that is highly inconsistent, IMHO.
     // TODO: Find a solution to init the graphics first independent of objects.
 

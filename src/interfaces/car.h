@@ -670,6 +670,57 @@ typedef struct CarPitCmd
 #define _pitStopType	pitcmd.stopType
 
 
+/** Extended telemetry published by the active physics module for the Formula HUD.
+
+    This is a presentation snapshot of the same car and the same accepted physics step;
+    it is not a second simulation. Every temperature is in degrees Celsius, every
+    pressure keeps the unit named by the field, and `validMask` states which blocks were
+    actually measured. Values whose block is not valid must be displayed as unknown
+    ("--"), never as zero.
+*/
+#define FHT_VALID_WHEEL_THERMAL   0x0001u  /**< Per-wheel thermal nodes are measured. */
+#define FHT_VALID_ENGINE_THERMAL  0x0002u  /**< Water and oil temperatures are measured. */
+#define FHT_VALID_FUEL            0x0004u  /**< Fuel mass and tank capacity are known. */
+#define FHT_VALID_RPM             0x0008u  /**< Engine speed and its limits are known. */
+#define FHT_VALID_STEERING        0x0010u  /**< Derived steering-wheel angle is available. */
+#define FHT_VALID_PEDALS          0x0020u  /**< Applied throttle and brake demands. */
+#define FHT_VALID_LIMITS          0x0040u  /**< Optimal/limit thresholds came from the profile. */
+
+/** Per-corner thermal measurements, in Speed Dreams wheel order FR, FL, RR, RL. */
+typedef struct
+{
+    tdble treadInnerC;      /**< Tread shoulder towards the car (banda interior). */
+    tdble treadCenterC;     /**< Tread centre rib. */
+    tdble treadOuterC;      /**< Tread shoulder towards the outside. */
+    tdble carcassC;         /**< Carcass temperature. */
+    tdble gasC;             /**< Inflation gas temperature. */
+    tdble rimC;             /**< Wheel rim temperature, fed by the brake disc. */
+    tdble brakeDiscC;       /**< Lumped brake disc (rotor) temperature. */
+    tdble brakeEfficiency;  /**< Brake friction efficiency for that disc temperature. */
+    tdble pressureKPaGauge; /**< Tire inflation pressure, gauge (relative to atmosphere). */
+} tFormulaHudWheel;
+
+/** Extended Formula HUD telemetry, filled by the active physics module once per step. */
+typedef struct
+{
+    unsigned int validMask;  /**< FHT_VALID_* bits. */
+    tFormulaHudWheel wheel[4];
+    tdble waterC, oilC;
+    tdble waterOptimalMinC, waterOptimalMaxC, waterDeratingC, waterCriticalC;
+    tdble oilOptimalMinC, oilOptimalMaxC, oilDeratingC, oilCriticalC;
+    tdble brakeOptimalMinC, brakeOptimalMaxC, brakeFadeStartC, brakeCriticalC;
+    tdble treadOptimalC[4], treadWindowC[4], treadOverheatC[4], carcassOptimalC[4];
+    tdble fuelKg, fuelCapacityKg, fuelDensityKgPerL;
+    tdble engineRpm, engineRpmMax, engineRpmIdle;
+    /**! Derived steering-wheel angle in degrees; positive turns the wheels left.
+        The modelled vehicle publishes no steering-column angle: this value is
+        `steer_input` scaled by half the car's lock-to-lock wheel rotation. */
+    tdble steerWheelDeg;
+    tdble steerWheelFraction; /**< Effective applied steering input in -1..1 (positive left). */
+    tdble throttleApplied, brakeApplied;  /**< Demands applied to the physics, 0..1. */
+    tdble sampleTime;                     /**< Simulation time of the published step. */
+} tFormulaHudTelemetry;
+
 /** Car structure (tCarElt).
     This is the main car structure, used everywhere in the code.
 */
@@ -683,6 +734,7 @@ typedef struct CarElt
     tCarCtrl		ctrl;	/**< private */
     tCarSetup		setup;	/**< private */
     tCarPitCmd		pitcmd;	/**< private */
+    tFormulaHudTelemetry formulaHud;	/**< private: presentation telemetry */
     struct RobotItf	*robot;	/**< private */
     struct CarElt	*next;
 } tCarElt;

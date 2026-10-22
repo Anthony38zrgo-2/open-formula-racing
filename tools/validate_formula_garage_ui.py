@@ -7,6 +7,8 @@ import argparse
 import os
 from pathlib import Path
 import subprocess
+import ctypes
+import json
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--build', type=Path, default=Path('C:/Users/bill/open-formula-build/engine'))
@@ -29,6 +31,7 @@ prefix = '''
 #include <raceman.h>
 #include <icarpreview.h>
 #include <igraphicsengine.h>
+#include <iphysicsengine.h>
 #include "formula_garage_music.h"
 #include <guifont.h>
 #include <SDL_opengl.h>
@@ -76,7 +79,7 @@ public:
     ICarPreviewRenderer* graphicsEngine() { return &previewRenderer; }
 };
 static tRmInfo previewRace{};
-struct PreviewEngine { tRmInfo* inData() { return &previewRace; } };
+struct PreviewEngine { tRmInfo* inData() { return &previewRace; } IPhysicsEngine* garagePhysics() { return nullptr; } };
 PreviewEngine& LmRaceEngine() { static PreviewEngine engine; return engine; }
 static int applied = 0, cancelled = 0;
 void ApplyEditor() { ++applied; }
@@ -294,6 +297,46 @@ int main(int argc, char** argv) {
 }
 '''
 cpp = args.output / 'garage_ui_bench.cpp'
+# Exercise the restored design with the real Rust setup descriptors as well as legacy.
+class Vec3(ctypes.Structure):
+    _fields_ = [('x', ctypes.c_double), ('y', ctypes.c_double), ('z', ctypes.c_double)]
+library = ctypes.CDLL(str(root/'rust/target/release/vehicle_physics_engine.dll'))
+library.ofp_create.argtypes = [ctypes.c_char_p, Vec3, ctypes.c_double, ctypes.c_double]
+library.ofp_create.restype = ctypes.c_void_p
+library.ofp_setup_fields.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint32]
+library.ofp_destroy.argtypes = [ctypes.c_void_p]
+handle = library.ofp_create(str(root/'rust/data/vehicles/williams-fw19-hockenheim/vehicle.json').encode(), Vec3(0, 1, 0), 0, 0)
+if not handle:
+    raise RuntimeError('Cannot obtain the authoritative Rust setup for garage validation')
+try:
+    length = library.ofp_setup_fields(handle, None, 0)
+    buffer = ctypes.create_string_buffer(length + 1)
+    library.ofp_setup_fields(handle, buffer, len(buffer))
+    descriptors = buffer.value.decode().splitlines()
+finally:
+    library.ofp_destroy(handle)
+rust_test = ['fields.clear(); pages.clear(); rustGarage=true;']
+for line in descriptors:
+    path, label, unit, value, minimum, maximum, step, editable = line.split('\t')
+    scale = 180 / 3.141592653589793 if unit == 'rad' else 1
+    rust_test.append('{ GarageField f; f.path=%s; f.name=%s; f.unit=%s; f.scale=%.17g; f.value=f.original=%.17g; f.minimum=%.17g; f.maximum=%.17g; f.step=%.17g; f.editable=%s; fields.push_back(f); }' % (
+        json.dumps(path), json.dumps(label), json.dumps('deg' if unit == 'rad' else unit), scale,
+        float(value)*scale, float(minimum)*scale, float(maximum)*scale, float(step)*scale,
+        'true' if int(editable) else 'false'))
+rust_test.append(r'''
+    viewportWidth=1280; viewportHeight=800; viewportLeft=viewportBottom=0;
+    for(int tab=0;tab<4;++tab) {
+        selectedPage=tab; controls.clear(); BuildEditorControls();
+        for(const auto& c:controls) check(c.left>=0 && c.bottom>=0 && c.left+c.width<=1280 && c.bottom+c.height<=800,"Rust control inside original canvas");
+        glFinish(); std::vector<unsigned char> pixels(1280*800*3);
+        glReadPixels(0,0,1280,800,GL_RGB,GL_UNSIGNED_BYTE,pixels.data());
+        SDL_Surface* shot=SDL_CreateRGBSurfaceFrom(pixels.data(),1280,800,24,1280*3,0xff,0xff00,0xff0000,0);
+        SDL_SaveBMP(shot,(std::string(argv[2])+"/tab-rust-"+std::to_string(tab)+".bmp").c_str()); SDL_FreeSurface(shot);
+        if(tab==2) check(imageTextures["engine-gray-v2.png"].identifier!=0,"original engine drawing restored");
+        if(tab==3) check(imageTextures["strategy-gray-v2.png"].identifier!=0,"original strategy drawing restored");
+    }
+''')
+main = main.replace('    ClearGarageText();', '\n'.join(rust_test) + '\n    ClearGarageText();')
 cpp.write_text(prefix + font_code + draw_string + globals_code + fake + primitives + widgets + mouse + mouse_events + keyboard + main)
 env = os.environ.copy()
 env['PATH'] = os.pathsep.join([str(args.toolchain / 'bin'), str(args.build / 'bin'), env.get('PATH', '')])

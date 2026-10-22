@@ -46,6 +46,7 @@ extern TGFCLIENT_API ForceFeedbackManager forceFeedback;
 
 #include <sstream>
 #include <iomanip> //setprecision
+#include <cstdlib> //getenv
 
 #include <algorithm> //tolower
 #include <string> //tolower
@@ -123,6 +124,22 @@ static std::vector<std::string> split(const std::string &s, char delim)
     std::vector<std::string> elems;
     split(s, delim, elems);
     return elems;
+}
+
+//! Normalized slip of one wheel for the legacy tire widget, clamped to 0..1. A zero
+//! optimum, an infinite ratio or a NaN can never reach the blend factor.
+static float safeSlipRatio(const tCarElt *car, int wheel)
+{
+    if (!car)
+        return 0.0f;
+    const float optimum = car->_wheelSlipOpt(wheel);
+    const float normalized = car->_wheelSlipNorm(wheel);
+    if (!std::isfinite(optimum) || !std::isfinite(normalized) || optimum <= 1.0e-3f)
+        return 0.0f;
+    const float ratio = normalized / optimum;
+    if (!std::isfinite(ratio))
+        return 0.0f;
+    return std::max(0.0f, std::min(ratio, 1.0f));
 }
 
 static osg::Vec4 colorStringToVec4(const std::string & colorString)
@@ -1167,6 +1184,83 @@ void SDHUD::CreateHUD(int scrH, int scrW)
     //generate the hud from the relative xml file
     camera->addChild(generateHudFromXmlFile(scrH, scrW));
 
+    // HUD migrated from Formula90s. It is attached after the XML widgets so it draws on
+    // top of the legacy groups whose information it replaces.
+    _formulaHud.setDiagnosticsEnabled(std::getenv("OPEN_FORMULA_HUD_DIAG") != nullptr);
+    if (_formulaHud.create())
+    {
+        _formulaHud.setViewport(scrW, scrH);
+        camera->addChild(_formulaHud.group());
+        hideReplacedLegacyElements();
+        GfLogInfo("OSGHUD: Formula HUD attached (%d x %d)\n", scrW, scrH);
+    }
+    else
+    {
+        GfLogWarning("OSGHUD: Formula HUD disabled; the legacy widgets stay untouched\n");
+    }
+}
+
+void SDHUD::SetScreenSize(int scrW, int scrH)
+{
+    if (scrW <= 0 || scrH <= 0 || (scrW == hudScreenW && scrH == hudScreenH))
+        return;
+    hudScreenW = scrW;
+    hudScreenH = scrH;
+    if (camera.valid())
+    {
+        camera->setProjectionMatrix(osg::Matrix::ortho2D(0, scrW, 0, scrH));
+        camera->setViewport(0, 0, scrW, scrH);
+    }
+    const float scaleH = (float)scrH / 1024.0f;
+    const float scaleW = (float)scrW / 1280.0f;
+    hudScale = (scaleH < scaleW) ? scaleH : scaleW;
+    _formulaHud.setViewport(scrW, scrH);
+    GfLogInfo("OSGHUD: screen resized to %d x %d (hudScale %.3f)\n", scrW, scrH, hudScale);
+}
+
+void SDHUD::hideReplacedLegacyElements()
+{
+    if (!_formulaHud.group())
+        return;
+    const char* groups[] = { "carinfoWidget", "laptimeWidget", "racelapsWidget",
+                             "tiresWidget", "rpmWidget", "shiftlightsWidget", "driverinputWidget",
+                             "carstatusWidget", "dashitemsWidget", "trackdataWidget" };
+    for (const char* name : groups)
+    {
+        const auto found = hudWidgets.find(name);
+        if (found != hudWidgets.end())
+            found->second->setNodeMask(NODE_MASK_NONE);
+    }
+    // Vertex/rotating widgets are attached outside their XML parent geode.
+    // Hiding the parent alone leaves the legacy tachometer arcs on screen.
+    for (const char* name : { "newtacho-rpmon", "newtacho-rpmonred" })
+    {
+        const auto found = hudImgVertexElements.find(name);
+        if (found != hudImgVertexElements.end())
+            found->second->setNodeMask(NODE_MASK_NONE);
+    }
+    const auto wheel = hudImgRotableElements.find("driverinput-wheel");
+    if (wheel != hudImgRotableElements.end())
+        wheel->second->setNodeMask(NODE_MASK_NONE);
+    // The fuel block of carstatusWidget is the only legacy readout whose information is
+    // now provided by a migrated component: hide exactly those elements and keep the
+    // remaining status icons visible.
+    static const char* const fuelElements[] = {
+        "fuel-icon-empty", "fuel-icon-full", "fuel-info",
+        "fuel-info-quantity-description", "fuel-info-quantity-number",
+        "fuel-info-laps-description", "fuel-info-laps-number"
+    };
+    for (size_t index = 0; index < sizeof(fuelElements) / sizeof(fuelElements[0]); ++index)
+    {
+        std::map<std::string, osg::Geometry*>::iterator element =
+            hudImgElements.find(fuelElements[index]);
+        if (element != hudImgElements.end())
+            element->second->setNodeMask(NODE_MASK_NONE);
+        std::map<std::string, osgText::Text*>::iterator label =
+            hudTextElements.find(fuelElements[index]);
+        if (label != hudTextElements.end())
+            label->second->setNodeMask(NODE_MASK_NONE);
+    }
 }
 
 void SDHUD::DispDebug(const tSituation *s, const SDFrameInfo* frame)
@@ -1870,15 +1964,13 @@ void SDHUD::Refresh(tSituation *s, const SDFrameInfo* frameInfo,
     changeImageSize(hudImgElements["tire-rl-hot"], currCar->_tyreTreadDepth(3), "bottom", hudScale);
 
 //tire slip
-    float slip = 0.0f;
-    slip = currCar->_wheelSlipNorm(0)/currCar->_wheelSlipOpt(0);
-    changeImageAlpha(hudImgElements["tire-fr-slip"], slip);
-    slip = currCar->_wheelSlipNorm(1)/currCar->_wheelSlipOpt(1);
-    changeImageAlpha(hudImgElements["tire-fl-slip"], slip);
-    slip = currCar->_wheelSlipNorm(2)/currCar->_wheelSlipOpt(2);
-    changeImageAlpha(hudImgElements["tire-rr-slip"], slip);
-    slip = currCar->_wheelSlipNorm(3)/currCar->_wheelSlipOpt(3);
-    changeImageAlpha(hudImgElements["tire-rl-slip"], slip);
+    // The legacy widget expects normalized slip over the optimal slip. The active physics
+    // publishes both, but a zero optimum or a non-finite value must never reach the blend
+    // factor: the ratio is bounded and defaults to zero.
+    changeImageAlpha(hudImgElements["tire-fr-slip"], safeSlipRatio(currCar, 0));
+    changeImageAlpha(hudImgElements["tire-fl-slip"], safeSlipRatio(currCar, 1));
+    changeImageAlpha(hudImgElements["tire-rr-slip"], safeSlipRatio(currCar, 2));
+    changeImageAlpha(hudImgElements["tire-rl-slip"], safeSlipRatio(currCar, 3));
 
 //tire compound
     for (int i = 0; i < 4; i++) { //for each tires
@@ -2537,6 +2629,11 @@ void SDHUD::Refresh(tSituation *s, const SDFrameInfo* frameInfo,
             }
         }
     }
+
+    // Formula HUD: same car, same frame, values taken from the accepted physics step and
+    // the race engine's timing authority.
+    hideReplacedLegacyElements();
+    _formulaHud.update(currCar, s, SimTimeOfDay + s->currentTime);
 }
 
 void SDHUD::ToggleHUD()
@@ -2589,6 +2686,7 @@ void SDHUD::ToggleHUD()
         hudWidgets["trackdataWidget"]->setNodeMask(0);
         hudWidgets["shiftlightsWidget"]->setNodeMask(0);
         hudWidgets["driverinfoWidget"]->setNodeMask(0);
+        _formulaHud.setVisible(false);
         hudElementsVisibilityStatusEnabled = false;
     }else{
         hudWidgets["boardWidget"]->setNodeMask(hudElementsVisibilityStatus["boardWidget"]);
@@ -2614,6 +2712,7 @@ void SDHUD::ToggleHUD()
         hudWidgets["trackdataWidget"]->setNodeMask(hudElementsVisibilityStatus["trackdataWidget"]);
         hudWidgets["shiftlightsWidget"]->setNodeMask(hudElementsVisibilityStatus["shiftlightsWidget"]);
         hudWidgets["driverinfoWidget"]->setNodeMask(hudElementsVisibilityStatus["driverinfoWidget"]);
+        _formulaHud.setVisible(true);
         hudElementsVisibilityStatusEnabled = true;
     }
 }

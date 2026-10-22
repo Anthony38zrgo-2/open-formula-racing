@@ -222,12 +222,36 @@ void SDScreens::update(tSituation * s, SDFrameInfo* fi,osg::Vec4f(colorfog))
     if (!viewer->done()) {
         viewer->frame();
         // Optional evidence capture for integrated visual validation; normal play
-        // does no framebuffer readback or file I/O.
+        // does no framebuffer readback or file I/O. `OPEN_FORMULA_CAPTURE_FRAMES`
+        // overrides the default frames (30, 90, 180) with a comma separated list, which
+        // lets a validation session capture the HUD while the car is being driven.
         static const char* capture_directory = std::getenv("OPEN_FORMULA_CAPTURE_DIR");
+        static std::vector<unsigned> capture_frames = []() {
+            std::vector<unsigned> frames;
+            const char* configured = std::getenv("OPEN_FORMULA_CAPTURE_FRAMES");
+            if (configured && *configured) {
+                const char* cursor = configured;
+                while (*cursor) {
+                    char* end = nullptr;
+                    const unsigned value = (unsigned)std::strtoul(cursor, &end, 10);
+                    if (end == cursor)
+                        break;
+                    if (value > 0)
+                        frames.push_back(value);
+                    cursor = (*end == ',') ? end + 1 : end;
+                }
+            }
+            if (frames.empty()) {
+                frames.push_back(30);
+                frames.push_back(90);
+                frames.push_back(180);
+            }
+            return frames;
+        }();
         static unsigned frame_number = 0;
         ++frame_number;
         if (capture_directory && *capture_directory &&
-            (frame_number == 30 || frame_number == 90 || frame_number == 180)) {
+            std::find(capture_frames.begin(), capture_frames.end(), frame_number) != capture_frames.end()) {
             const osg::Viewport* viewport = viewer->getCamera()->getViewport();
             if (viewport) {
                 osg::ref_ptr<osg::Image> image = new osg::Image;

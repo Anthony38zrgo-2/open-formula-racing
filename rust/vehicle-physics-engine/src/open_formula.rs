@@ -18,6 +18,7 @@ use serde_json::Value;
 
 use crate::open_formula_ffi::{
     OfpBodyContact, OfpControlInput, OfpSnapshot, OfpVec3, OfpWheelState, OFP_ABI_VERSION,
+    OFP_FLAG_BRAKE_THERMAL, OFP_FLAG_POWERTRAIN_THERMAL, OFP_FLAG_WHEEL_THERMAL,
 };
 use crate::simulation::{default_spawn_height, VehicleSimulator, VehicleState};
 use crate::types::{Mat3, SurfaceType, TriRaycastSample, Vec3, VehicleInput, WheelIndex};
@@ -923,7 +924,9 @@ impl OpenFormulaSimulation {
         snapshot.basis_x = vec3(basis.x);
         snapshot.basis_y = vec3(basis.y);
         snapshot.basis_z = vec3(basis.z);
-        snapshot.engine_rpm_rad_s = state.powertrain.rpm;
+        snapshot.flags = OFP_FLAG_POWERTRAIN_THERMAL | OFP_FLAG_WHEEL_THERMAL | OFP_FLAG_BRAKE_THERMAL;
+        // The powertrain state publishes revolutions per minute; the host converts once.
+        snapshot.engine_rpm = state.powertrain.rpm;
         snapshot.engine_torque_nm = state.powertrain.engine_torque;
         snapshot.clutch_engagement = state.powertrain.clutch_engagement;
         snapshot.fuel_kg = config.fuel.current_kg;
@@ -941,6 +944,10 @@ impl OpenFormulaSimulation {
         snapshot.aero_floor_downforce_n = state.aero.diffuser_downforce;
         snapshot.aero_rear_downforce_n = state.aero.rear_downforce;
         snapshot.aero_drag_n = state.aero.drag_force;
+        // Engine thermal state is owned by the powertrain thermal system; the HUD never
+        // derives it from torque or from a fixed initial value.
+        snapshot.water_temperature_celsius = state.powertrain_thermal.water_temperature_celsius;
+        snapshot.oil_temperature_celsius = state.powertrain_thermal.oil_temperature_celsius;
         for wheel in WheelIndex::ALL {
             let index = wheel as usize;
             let suspension = &state.suspension.wheels[index];
@@ -968,9 +975,18 @@ impl OpenFormulaSimulation {
             wheel_state.dynamic_camber_rad = suspension.kinematic_camber_rad;
             wheel_state.toe_rad = suspension.geometric_toe_rad;
             wheel_state.tire_deflection_m = suspension.tire_deflection_m;
+            // Independent thermal nodes: the tread centre is never copied onto the inner
+            // and outer shoulders, and the brake disc is not the rim.
             wheel_state.tread_temperature_c = thermal.tread_center_c;
+            wheel_state.tread_inner_temperature_c = thermal.tread_inner_c;
+            wheel_state.tread_outer_temperature_c = thermal.tread_outer_c;
             wheel_state.carcass_temperature_c = thermal.carcass_c;
+            wheel_state.gas_temperature_c = thermal.gas_c;
             wheel_state.pressure_kpa_gauge = thermal.pressure_kpa_gauge;
+            let brake_thermal = &state.brake_thermal.wheels[index];
+            wheel_state.brake_disc_temperature_c = brake_thermal.disc_c;
+            wheel_state.brake_rim_temperature_c = brake_thermal.rim_c;
+            wheel_state.brake_efficiency = brake_thermal.efficiency;
             wheel_state.wear_remaining_fraction = wear.tread_center_millimeters
                 / config
                     .tires
@@ -1041,6 +1057,35 @@ impl OpenFormulaSimulation {
         }
         specs.tire_width_m = [config.tires.front_tire_width, config.tires.front_tire_width,
             config.tires.rear_tire_width, config.tires.rear_tire_width];
+        // Active-profile metadata: the presentation layer must not duplicate physics
+        // constants or fall back to the retired reference car.
+        specs.max_rpm = config.powertrain.max_rpm;
+        specs.idle_rpm = config.powertrain.idle_rpm;
+        specs.fuel_capacity_kg = config.fuel.capacity_kg;
+        specs.fuel_density_kg_per_litre = config.fuel.density_kg_per_litre;
+        specs.steering_max_angle_rad = config.steering.max_steering_angle;
+        for wheel in WheelIndex::ALL {
+            let index = wheel as usize;
+            let thermal = config.tires.tire_thermal.for_wheel(wheel);
+            specs.tread_optimal_temperature_c[index] = thermal.optimal_tread_temperature_c;
+            specs.tread_optimal_window_c[index] = thermal.optimal_tread_window_c;
+            specs.tread_overheat_temperature_c[index] = thermal.overheat_tread_temperature_c;
+            specs.carcass_optimal_temperature_c[index] = thermal.optimal_carcass_temperature_c;
+        }
+        let brakes = &config.brakes.brake_thermal;
+        specs.brake_optimal_min_temperature_c = brakes.optimal_min_temperature_c;
+        specs.brake_optimal_max_temperature_c = brakes.optimal_max_temperature_c;
+        specs.brake_fade_start_temperature_c = brakes.fade_start_temperature_c;
+        specs.brake_critical_temperature_c = brakes.critical_temperature_c;
+        let thermal = &config.powertrain.powertrain_thermal;
+        specs.water_optimal_min_temperature_c = thermal.water_optimal_minimum_temperature_celsius;
+        specs.water_optimal_max_temperature_c = thermal.water_optimal_maximum_temperature_celsius;
+        specs.water_derating_temperature_c = thermal.water_hot_derating_temperature_celsius;
+        specs.water_critical_temperature_c = thermal.water_critical_temperature_celsius;
+        specs.oil_optimal_min_temperature_c = thermal.oil_optimal_minimum_temperature_celsius;
+        specs.oil_optimal_max_temperature_c = thermal.oil_optimal_maximum_temperature_celsius;
+        specs.oil_derating_temperature_c = thermal.oil_hot_derating_temperature_celsius;
+        specs.oil_critical_temperature_c = thermal.oil_critical_temperature_celsius;
         specs
     }
 

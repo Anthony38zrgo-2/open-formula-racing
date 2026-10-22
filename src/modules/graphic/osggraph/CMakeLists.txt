@@ -35,6 +35,11 @@ SET(OSGGRAPH_HEADERS Utils/OsgVectorArrayAdapter.h
                      Viewer/OsgHUD.h
                      Viewer/OsgDebugHUD.h
                      Viewer/OsgGraphicsWindow.h
+                     Viewer/FormulaHud.h
+                     Viewer/FormulaHudData.h
+                     Viewer/FormulaHudDraw.h
+                     Viewer/FormulaHudFonts.h
+                     Viewer/FormulaHudLayout.h
 
                      Car/OsgCar.h
                      Car/OsgCarLight.h
@@ -77,6 +82,11 @@ SET(OSGGRAPH_SOURCES Utils/OsgMath.cpp
                      Viewer/OsgScreens.cpp
                      Viewer/OsgCamera.cpp
                      Viewer/OsgHUD.cpp
+                     Viewer/FormulaHud.cpp
+                     Viewer/FormulaHudData.cpp
+                     Viewer/FormulaHudDraw.cpp
+                     Viewer/FormulaHudFonts.cpp
+                     Viewer/FormulaHudLayout.cpp
                      Viewer/OsgDebugHUD.cpp
                      Viewer/OsgGraphicsWindow.cpp
 

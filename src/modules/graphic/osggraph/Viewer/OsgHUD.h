@@ -26,6 +26,8 @@
 
 #include <osg/Camera>
 
+#include "FormulaHud.h"
+
 namespace osgText
 {
     class Text;
@@ -170,6 +172,12 @@ class SDHUD
         void setWidgetsGroupsVisibilityNormal();
         void saveWidgetGroupPosition(std::string widgetGroupName);
         std::string &GetCarName(const tCarElt *currCar);
+        //! Hides only the legacy elements whose information the Formula HUD replaces.
+        void hideReplacedLegacyElements();
+
+        //! Formula90s HUD: tachometer, speed, fuel, engine and wheel temperatures,
+        //! brake discs, minimap, lap timing, steering angle and pedals.
+        formulahud::FormulaHud _formulaHud;
 
 public:
         SDHUD();
@@ -186,6 +194,8 @@ public:
         osg::ref_ptr<osg::Camera> camera;
 
         void CreateHUD( int scrH, int scrW);
+        //! Recomputes the HUD for a new visible area (window resize or screen mode).
+        void SetScreenSize( int scrW, int scrH);
         void DispDebug(const tSituation *s, const SDFrameInfo* frame);
         void Refresh(tSituation *s, const SDFrameInfo* frameInfo, const tCarElt *currCar,
                      int SimClouds, int SimRain, float SimTimeOfDay);

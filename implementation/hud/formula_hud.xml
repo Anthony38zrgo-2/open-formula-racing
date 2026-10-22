@@ -1,0 +1,25 @@
+<?xml version='1.0' encoding='utf-8'?>
+<params name="" type="template">
+  <section name="FormulaHud">
+    <!-- Layout of the HUD migrated from Formula90s.
+         Every distance is expressed in design pixels of a 1920x1080 viewport and scaled
+         uniformly to the visible area, so the composition keeps its proportions at any
+         resolution. Text never drops below the two minimum sizes below. -->
+    <attnum name="enabled" val="1" />
+    <attnum name="scale" val="1" />
+    <attnum name="minimum scale" val="0.72" />
+    <attnum name="maximum scale" val="2.5" />
+    <attnum name="left margin" val="14" />
+    <attnum name="top margin" val="10" />
+    <attnum name="right margin" val="16" />
+    <attnum name="bottom margin" val="16" />
+    <attnum name="block padding" val="12" />
+    <attnum name="panel gap" val="10" />
+    <attnum name="map gap" val="12" />
+    <attnum name="controls bottom margin" val="18" />
+    <attnum name="controls minimum scale" val="0.65" />
+    <attnum name="minimum label font" val="10" />
+    <attnum name="minimum value font" val="13" />
+    <attnum name="font size boost" val="1" />
+  </section>
+</params>

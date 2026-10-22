@@ -11,10 +11,16 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use crate::open_formula::{OpenFormulaSimulation, set_track_ground_mesh, track_ground};
 use crate::types::{Mat3, Vec3};
 
-pub const OFP_ABI_VERSION: u32 = 4;
+pub const OFP_ABI_VERSION: u32 = 5;
 pub const OFP_MAX_CONTACTS: usize = 32;
 pub const OFP_WHEELS: usize = 4;
 pub const OFP_FLOOR_PROBES: usize = 2;
+
+/// `OfpSnapshot::flags` bits describing which optional telemetry blocks are structurally
+/// present in the running backend (not whether a value is plausible).
+pub const OFP_FLAG_POWERTRAIN_THERMAL: u32 = 1 << 0;
+pub const OFP_FLAG_WHEEL_THERMAL: u32 = 1 << 1;
+pub const OFP_FLAG_BRAKE_THERMAL: u32 = 1 << 2;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -33,6 +39,28 @@ pub struct OfpVehicleSpecs {
     pub reverse_ratio: f64,
     pub gear_ratios: [f64; 8],
     pub tire_width_m: [f64; OFP_WHEELS],
+    // ABI v5: active-profile metadata the presentation layer must not duplicate.
+    pub max_rpm: f64,
+    pub idle_rpm: f64,
+    pub fuel_capacity_kg: f64,
+    pub fuel_density_kg_per_litre: f64,
+    pub steering_max_angle_rad: f64,
+    pub tread_optimal_temperature_c: [f64; OFP_WHEELS],
+    pub tread_optimal_window_c: [f64; OFP_WHEELS],
+    pub tread_overheat_temperature_c: [f64; OFP_WHEELS],
+    pub carcass_optimal_temperature_c: [f64; OFP_WHEELS],
+    pub brake_optimal_min_temperature_c: f64,
+    pub brake_optimal_max_temperature_c: f64,
+    pub brake_fade_start_temperature_c: f64,
+    pub brake_critical_temperature_c: f64,
+    pub water_optimal_min_temperature_c: f64,
+    pub water_optimal_max_temperature_c: f64,
+    pub water_derating_temperature_c: f64,
+    pub water_critical_temperature_c: f64,
+    pub oil_optimal_min_temperature_c: f64,
+    pub oil_optimal_max_temperature_c: f64,
+    pub oil_derating_temperature_c: f64,
+    pub oil_critical_temperature_c: f64,
 }
 
 #[repr(C)]
@@ -84,8 +112,11 @@ pub struct OfpWheelState {
     pub dynamic_camber_rad: f64,
     pub toe_rad: f64,
     pub tire_deflection_m: f64,
+    /// Lumped tread centre temperature (legacy single-zone field; the three zones below
+    /// are the authoritative independent measurements).
     pub tread_temperature_c: f64,
     pub carcass_temperature_c: f64,
+    /// Gauge pressure: measured relative to the profile atmospheric pressure.
     pub pressure_kpa_gauge: f64,
     pub wear_remaining_fraction: f64,
     pub wear_grip_scale: f64,
@@ -96,6 +127,13 @@ pub struct OfpWheelState {
     pub spring_length_m: f64,
     pub tire_radius_m: f64,
     pub ray_distance: [f64; 3],
+    // ABI v5: independent thermal nodes of this corner.
+    pub tread_inner_temperature_c: f64,
+    pub tread_outer_temperature_c: f64,
+    pub gas_temperature_c: f64,
+    pub brake_disc_temperature_c: f64,
+    pub brake_rim_temperature_c: f64,
+    pub brake_efficiency: f64,
 }
 
 impl OfpWheelState {
@@ -122,7 +160,9 @@ pub struct OfpSnapshot {
     pub basis_x: OfpVec3,
     pub basis_y: OfpVec3,
     pub basis_z: OfpVec3,
-    pub engine_rpm_rad_s: f64,
+    /// Engine speed in revolutions per minute (ABI v5 renamed this field: the previous
+    /// `engine_rpm_rad_s` name was wrong and invited a double conversion).
+    pub engine_rpm: f64,
     pub engine_torque_nm: f64,
     pub clutch_engagement: f64,
     pub fuel_kg: f64,
@@ -135,6 +175,10 @@ pub struct OfpSnapshot {
     pub aero_floor_downforce_n: f64,
     pub aero_rear_downforce_n: f64,
     pub aero_drag_n: f64,
+    /// Coolant (water) temperature in degrees Celsius.
+    pub water_temperature_celsius: f64,
+    /// Oil temperature in degrees Celsius.
+    pub oil_temperature_celsius: f64,
     pub wheels: [OfpWheelState; OFP_WHEELS],
     pub floor_clearance: [f64; OFP_FLOOR_PROBES],
     pub floor_valid_mask: u32,
@@ -167,7 +211,7 @@ impl OfpSnapshot {
             basis_x: OfpVec3 { x: 1.0, y: 0.0, z: 0.0 },
             basis_y: OfpVec3 { x: 0.0, y: 1.0, z: 0.0 },
             basis_z: OfpVec3 { x: 0.0, y: 0.0, z: 1.0 },
-            engine_rpm_rad_s: 0.0,
+            engine_rpm: 0.0,
             engine_torque_nm: 0.0,
             clutch_engagement: 0.0,
             fuel_kg: 0.0,
@@ -180,6 +224,8 @@ impl OfpSnapshot {
             aero_floor_downforce_n: 0.0,
             aero_rear_downforce_n: 0.0,
             aero_drag_n: 0.0,
+            water_temperature_celsius: 0.0,
+            oil_temperature_celsius: 0.0,
             wheels: [OfpWheelState::zeroed(); OFP_WHEELS],
             floor_clearance: [0.0; OFP_FLOOR_PROBES],
             floor_valid_mask: 0,
@@ -263,15 +309,19 @@ pub extern "C" fn ofp_abi_signature() -> u64 {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
     mix_layout(&mut hash, std::mem::size_of::<OfpVehicleSpecs>() as u64);
     mix_layout(&mut hash, std::mem::offset_of!(OfpVehicleSpecs, tire_width_m) as u64);
+    mix_layout(&mut hash, std::mem::offset_of!(OfpVehicleSpecs, tread_optimal_temperature_c) as u64);
     mix_layout(&mut hash, std::mem::size_of::<OfpSnapshot>() as u64);
     mix_layout(&mut hash, std::mem::size_of::<OfpWheelState>() as u64);
     mix_layout(&mut hash, std::mem::size_of::<OfpBodyContact>() as u64);
     mix_layout(&mut hash, std::mem::size_of::<OfpControlInput>() as u64);
     mix_layout(&mut hash, std::mem::offset_of!(OfpSnapshot, wheels) as u64);
     mix_layout(&mut hash, std::mem::offset_of!(OfpSnapshot, floor_clearance) as u64);
+    mix_layout(&mut hash, std::mem::offset_of!(OfpSnapshot, water_temperature_celsius) as u64);
     mix_layout(&mut hash, std::mem::offset_of!(OfpSnapshot, body_contact_impulse_ns) as u64);
+    mix_layout(&mut hash, std::mem::offset_of!(OfpWheelState, tread_temperature_c) as u64);
     mix_layout(&mut hash, std::mem::offset_of!(OfpWheelState, contact_point) as u64);
     mix_layout(&mut hash, std::mem::offset_of!(OfpWheelState, ray_distance) as u64);
+    mix_layout(&mut hash, std::mem::offset_of!(OfpWheelState, brake_disc_temperature_c) as u64);
     hash
 }
 

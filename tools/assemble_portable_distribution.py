@@ -8,6 +8,7 @@ import shutil
 import subprocess
 
 from configure_game_fonts import install_game_fonts
+from configure_formula_hud import configure as configure_formula_hud
 
 
 def main():
@@ -33,6 +34,7 @@ def main():
     shutil.copytree(project / 'implementation/initial-settings/cars/categories', data_directory / 'cars/categories', dirs_exist_ok=True)
     shutil.copyfile(project / 'implementation/initial-settings/config/raceman/williams-fuji-practice.xml', data_directory / 'config/raceman/williams-fuji-practice.xml')
     install_game_fonts(project)
+    configure_formula_hud(project)
     shutil.copytree(project / "implementation/ui/monaco-grand-prix/images/color",
                     data_directory / "data/img/formula-garage", dirs_exist_ok=True)
     plugin_directory = compiler_prefix / 'bin/osgPlugins-3.6.5'

@@ -13,10 +13,16 @@
 
 #include <cstdint>
 
-#define OFP_ABI_VERSION 4u
+#define OFP_ABI_VERSION 5u
 #define OFP_MAX_BODY_CONTACTS 32
 #define OFP_WHEELS 4
 #define OFP_FLOOR_PROBES 2
+
+//! `OfpSnapshot::flags` bits: which optional telemetry blocks the running backend
+//! structurally provides (not whether a value is plausible).
+#define OFP_FLAG_POWERTRAIN_THERMAL (1u << 0)
+#define OFP_FLAG_WHEEL_THERMAL (1u << 1)
+#define OFP_FLAG_BRAKE_THERMAL (1u << 2)
 
 struct OfpVec3
 {
@@ -34,6 +40,28 @@ struct OfpVehicleSpecs
     double reverse_ratio;
     double gear_ratios[8];
     double tire_width_m[OFP_WHEELS];
+    // ABI v5: active-profile metadata the presentation layer must not duplicate.
+    double max_rpm;
+    double idle_rpm;
+    double fuel_capacity_kg;
+    double fuel_density_kg_per_litre;
+    double steering_max_angle_rad;
+    double tread_optimal_temperature_c[OFP_WHEELS];
+    double tread_optimal_window_c[OFP_WHEELS];
+    double tread_overheat_temperature_c[OFP_WHEELS];
+    double carcass_optimal_temperature_c[OFP_WHEELS];
+    double brake_optimal_min_temperature_c;
+    double brake_optimal_max_temperature_c;
+    double brake_fade_start_temperature_c;
+    double brake_critical_temperature_c;
+    double water_optimal_min_temperature_c;
+    double water_optimal_max_temperature_c;
+    double water_derating_temperature_c;
+    double water_critical_temperature_c;
+    double oil_optimal_min_temperature_c;
+    double oil_optimal_max_temperature_c;
+    double oil_derating_temperature_c;
+    double oil_critical_temperature_c;
 };
 
 struct OfpControlInput
@@ -81,8 +109,11 @@ struct OfpWheelState
     double dynamic_camber_rad;
     double toe_rad;
     double tire_deflection_m;
+    //! Lumped tread centre temperature; the three zone fields below are the
+    //! authoritative independent measurements.
     double tread_temperature_c;
     double carcass_temperature_c;
+    //! Gauge pressure: measured relative to the profile atmospheric pressure.
     double pressure_kpa_gauge;
     double wear_remaining_fraction;
     double wear_grip_scale;
@@ -93,6 +124,13 @@ struct OfpWheelState
     double spring_length_m;
     double tire_radius_m;
     double ray_distance[3];
+    // ABI v5: independent thermal nodes of this corner.
+    double tread_inner_temperature_c;
+    double tread_outer_temperature_c;
+    double gas_temperature_c;
+    double brake_disc_temperature_c;
+    double brake_rim_temperature_c;
+    double brake_efficiency;
 };
 
 struct OfpSnapshot
@@ -112,7 +150,10 @@ struct OfpSnapshot
     OfpVec3 basis_x;
     OfpVec3 basis_y;
     OfpVec3 basis_z;
-    double engine_rpm_rad_s;
+    //! Engine speed in revolutions per minute. ABI v5 renamed this field from
+    //! `engine_rpm_rad_s`, which described the wrong unit and invited a double
+    //! conversion; the host converts to rad/s exactly once for `tCarElt`.
+    double engine_rpm;
     double engine_torque_nm;
     double clutch_engagement;
     double fuel_kg;
@@ -125,6 +166,10 @@ struct OfpSnapshot
     double aero_floor_downforce_n;
     double aero_rear_downforce_n;
     double aero_drag_n;
+    //! Coolant (water) temperature in degrees Celsius.
+    double water_temperature_celsius;
+    //! Oil temperature in degrees Celsius.
+    double oil_temperature_celsius;
     OfpWheelState wheels[OFP_WHEELS];
     double floor_clearance[OFP_FLOOR_PROBES];
     std::uint32_t floor_valid_mask;

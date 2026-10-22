@@ -29,6 +29,13 @@ namespace
 {
     const double PI = 3.14159265358979323846;
 
+    //! Speed Dreams publishes wheels in FR, FL, RR, RL order; the Rust physics keeps
+    //! FL, FR, RL, RR. These two tables are the single mapping between both orders:
+    //! `SD_TO_RUST_WHEEL[sd]` yields the Rust index of a Speed Dreams wheel and
+    //! `RUST_TO_SD_WHEEL[rust]` the Speed Dreams index of a Rust wheel.
+    const int SD_TO_RUST_WHEEL[4] = { 1, 0, 3, 2 };
+    const int RUST_TO_SD_WHEEL[4] = { 1, 0, 3, 2 };
+
     inline double clampValue(double value, double lower, double upper)
     {
         return value < lower ? lower : (value > upper ? upper : value);
@@ -94,6 +101,7 @@ namespace
         tCarElt* car = nullptr;
         int index = -1;
         OfpSnapshot snapshot{};
+        OfpVehicleSpecs specs{};
         OfpVec3 center_of_mass_local{};
         OfpVec3 inertia{};
         double spawn_height = 0.5;
@@ -108,9 +116,12 @@ namespace
         double forward_speed = 0.0;
         double lateral_speed = 0.0;
         double wheel_rotation[4]{};
+        //! Lock-to-lock steering-wheel rotation of the visual car, in radians.
+        double steering_wheel_lock_rad = 0.0;
     };
 
     void applyIntegrationScenario(RustCar& car, double delta_time);
+    void publishFormulaHud(RustCar& car);
     void logDiagnostics(RustCar& car);
 
     std::vector<RustCar> g_cars;
@@ -232,8 +243,9 @@ namespace
 
         elt->_gear = (int)s.gear;
         elt->_gearNext = (int)s.target_gear;
-        // The Rust powertrain publishes engine speed in revolutions per minute.
-        elt->_enginerpm = (tdble)(s.engine_rpm_rad_s * 2.0 * PI / 60.0);
+        // The Rust powertrain publishes engine speed in revolutions per minute; this is
+        // the single conversion to the Speed Dreams rad/s contract.
+        elt->_enginerpm = (tdble)(s.engine_rpm * 2.0 * PI / 60.0);
         elt->_fuel = (tdble)(s.fuel_kg / rustPhysicsLibrary.fuelDensity(car.handle));
         elt->_tank = (tdble)(s.fuel_capacity_kg / rustPhysicsLibrary.fuelDensity(car.handle));
         elt->_airtemp = 293.15f;
@@ -244,26 +256,45 @@ namespace
         // Speed Dreams wheel order is FR, FL, RR, RL; Rust publishes FL, FR, RL, RR.
         sgMat4 inverse_model;
         sgInvertMat4(inverse_model, elt->pub.posMat);
-        static const int sSdToRust[4] = { 1, 0, 3, 2 };
         for (int sd_index = 0; sd_index < 4; ++sd_index)
         {
-            const OfpWheelState& wheel = s.wheels[sSdToRust[sd_index]];
+            const OfpWheelState& wheel = s.wheels[SD_TO_RUST_WHEEL[sd_index]];
             tWheelState& view = elt->priv.wheel[sd_index];
             view.spinVel = (tdble)wheel.spin_rad_s;
-            view.brakeTemp = 0.0f;
+            // CarElt keeps the brake state normalized to 0..1. The normalization uses the
+            // profile's critical disc temperature, so a cold disc reads near zero without
+            // pretending the physical temperature is zero.
+            const double brake_critical = car.specs.brake_critical_temperature_c;
+            view.brakeTemp = (tdble)(brake_critical > 1.0
+                ? clampValue(wheel.brake_disc_temperature_c / brake_critical, 0.0, 1.0)
+                : 0.0);
             view.state = wheel.grounded ? 0 : 16 /* SIM_WH_INAIR */;
-            // CarElt exposes the tread temperature in kelvin and the pressure as an
-            // absolute value in pascals.
-            view.temp_in = (tdble)(wheel.tread_temperature_c + 273.15);
+            // CarElt exposes the three tread zones in kelvin and the pressure as an
+            // absolute value in pascals. Each zone is its own measurement.
+            view.temp_in = (tdble)(wheel.tread_inner_temperature_c + 273.15);
             view.temp_mid = (tdble)(wheel.tread_temperature_c + 273.15);
-            view.temp_out = (tdble)(wheel.tread_temperature_c + 273.15);
+            view.temp_out = (tdble)(wheel.tread_outer_temperature_c + 273.15);
+            // Optimal tread temperature of this axle, straight from the active profile.
+            view.temp_opt = (tdble)(car.specs.tread_optimal_temperature_c[SD_TO_RUST_WHEEL[sd_index]]
+                                    + 273.15);
             view.condition = (tdble)wheel.wear_remaining_fraction;
             view.treadDepth = (tdble)wheel.wear_remaining_fraction;
             view.Fx = (tdble)wheel.longitudinal_force_n;
             view.Fy = (tdble)wheel.lateral_force_n;
             view.Fz = (tdble)wheel.normal_force_n;
             view.effectiveMu = (tdble)wheel.wear_grip_scale;
+            // Speed Dreams publishes absolute pressure in pascals; the ABI carries gauge
+            // pressure, so the profile atmospheric pressure is added exactly once.
             view.currentPressure = (tdble)((wheel.pressure_kpa_gauge + 101.325) * 1000.0);
+            // Legacy normalized-slip contract consumed by the retired tire widget. The
+            // ratio is bounded and never divides by zero: the Rust tire model has no
+            // published normalized peak, so 1.0 is the display unit.
+            const double combined_slip = std::sqrt(
+                wheel.slip_ratio * wheel.slip_ratio
+                + std::tan(clampValue(wheel.slip_angle_rad, -1.4, 1.4))
+                    * std::tan(clampValue(wheel.slip_angle_rad, -1.4, 1.4)));
+            view.slipNorm = std::isfinite(combined_slip) ? (tdble)combined_slip : 0.0f;
+            view.slipOpt = 1.0f;
 
             const double radius = wheel.tire_radius_m;
             elt->_wheelRadius(sd_index) = (tdble)radius;
@@ -290,6 +321,95 @@ namespace
             elt->pub.corner[sd_index].az = (tdble)contact_z;
             view.seg = elt->_trkPos.seg;
         }
+        publishFormulaHud(car);
+    }
+
+    //! Publishes the Formula HUD presentation snapshot for the step just accepted by the
+    //! physics. All values come from the same snapshot; nothing is estimated here.
+    void publishFormulaHud(RustCar& car)
+    {
+        tCarElt* elt = car.car;
+        if (!elt)
+            return;
+        const OfpSnapshot& s = car.snapshot;
+        const OfpVehicleSpecs& specs = car.specs;
+        tFormulaHudTelemetry& hud = elt->formulaHud;
+        std::memset(&hud, 0, sizeof(hud));
+        std::memset(hud.wheel, 0, sizeof(hud.wheel));
+
+        const bool wheel_thermal = (s.flags & OFP_FLAG_WHEEL_THERMAL) != 0;
+        const bool engine_thermal = (s.flags & OFP_FLAG_POWERTRAIN_THERMAL) != 0;
+        const bool brake_thermal = (s.flags & OFP_FLAG_BRAKE_THERMAL) != 0;
+        const bool fuel_ok = std::isfinite(s.fuel_kg) && std::isfinite(s.fuel_capacity_kg)
+            && s.fuel_capacity_kg > 0.0;
+        const bool rpm_ok = std::isfinite(s.engine_rpm) && specs.max_rpm > 0.0;
+        const bool limits_ok = specs.tread_optimal_temperature_c[0] > 0.0
+            && specs.water_optimal_max_temperature_c > specs.water_optimal_min_temperature_c;
+
+        if (wheel_thermal && brake_thermal)
+            hud.validMask |= FHT_VALID_WHEEL_THERMAL;
+        if (engine_thermal)
+            hud.validMask |= FHT_VALID_ENGINE_THERMAL;
+        if (fuel_ok)
+            hud.validMask |= FHT_VALID_FUEL;
+        if (rpm_ok)
+            hud.validMask |= FHT_VALID_RPM;
+        if (limits_ok)
+            hud.validMask |= FHT_VALID_LIMITS;
+        if (std::isfinite(s.steer_input) && car.steering_wheel_lock_rad > 1.0e-6)
+            hud.validMask |= FHT_VALID_STEERING;
+        if (std::isfinite(s.throttle) && std::isfinite(s.brake))
+            hud.validMask |= FHT_VALID_PEDALS;
+
+        for (int sd_index = 0; sd_index < 4; ++sd_index)
+        {
+            const OfpWheelState& wheel = s.wheels[SD_TO_RUST_WHEEL[sd_index]];
+            tFormulaHudWheel& target = hud.wheel[sd_index];
+            target.treadInnerC = (tdble)wheel.tread_inner_temperature_c;
+            target.treadCenterC = (tdble)wheel.tread_temperature_c;
+            target.treadOuterC = (tdble)wheel.tread_outer_temperature_c;
+            target.carcassC = (tdble)wheel.carcass_temperature_c;
+            target.gasC = (tdble)wheel.gas_temperature_c;
+            target.rimC = (tdble)wheel.brake_rim_temperature_c;
+            target.brakeDiscC = (tdble)wheel.brake_disc_temperature_c;
+            target.brakeEfficiency = (tdble)wheel.brake_efficiency;
+            target.pressureKPaGauge = (tdble)wheel.pressure_kpa_gauge;
+            const int rust_index = SD_TO_RUST_WHEEL[sd_index];
+            hud.treadOptimalC[sd_index] = (tdble)specs.tread_optimal_temperature_c[rust_index];
+            hud.treadWindowC[sd_index] = (tdble)specs.tread_optimal_window_c[rust_index];
+            hud.treadOverheatC[sd_index] = (tdble)specs.tread_overheat_temperature_c[rust_index];
+            hud.carcassOptimalC[sd_index] = (tdble)specs.carcass_optimal_temperature_c[rust_index];
+        }
+
+        hud.waterC = (tdble)s.water_temperature_celsius;
+        hud.oilC = (tdble)s.oil_temperature_celsius;
+        hud.waterOptimalMinC = (tdble)specs.water_optimal_min_temperature_c;
+        hud.waterOptimalMaxC = (tdble)specs.water_optimal_max_temperature_c;
+        hud.waterDeratingC = (tdble)specs.water_derating_temperature_c;
+        hud.waterCriticalC = (tdble)specs.water_critical_temperature_c;
+        hud.oilOptimalMinC = (tdble)specs.oil_optimal_min_temperature_c;
+        hud.oilOptimalMaxC = (tdble)specs.oil_optimal_max_temperature_c;
+        hud.oilDeratingC = (tdble)specs.oil_derating_temperature_c;
+        hud.oilCriticalC = (tdble)specs.oil_critical_temperature_c;
+        hud.brakeOptimalMinC = (tdble)specs.brake_optimal_min_temperature_c;
+        hud.brakeOptimalMaxC = (tdble)specs.brake_optimal_max_temperature_c;
+        hud.brakeFadeStartC = (tdble)specs.brake_fade_start_temperature_c;
+        hud.brakeCriticalC = (tdble)specs.brake_critical_temperature_c;
+        hud.fuelKg = (tdble)s.fuel_kg;
+        hud.fuelCapacityKg = (tdble)s.fuel_capacity_kg;
+        hud.fuelDensityKgPerL = (tdble)specs.fuel_density_kg_per_litre;
+        hud.engineRpm = (tdble)s.engine_rpm;
+        hud.engineRpmMax = (tdble)specs.max_rpm;
+        hud.engineRpmIdle = (tdble)specs.idle_rpm;
+        // Derived steering-wheel angle: the modelled car has no steering-column state.
+        // Half the lock-to-lock rotation maps the normalized effective input to degrees,
+        // keeping the sign convention of the physics (positive = left).
+        hud.steerWheelDeg = (tdble)(s.steer_input
+            * (car.steering_wheel_lock_rad * 0.5) * 180.0 / PI);
+        hud.steerWheelFraction = (tdble)clampValue(s.steer_input, -1.0, 1.0);
+        hud.throttleApplied = (tdble)s.throttle;
+        hud.brakeApplied = (tdble)s.brake;
+        hud.sampleTime = (tdble)s.sim_time_s;
     }
 
     void updateTrackPosition(tCarElt* elt)
@@ -389,7 +509,7 @@ namespace
         input.brake = (double)ctrl->brakeCmd;
         input.handbrake = (double)ctrl->ebrakeCmd;
         input.clutch = (double)ctrl->clutchCmd;
-        input.steering = -(double)ctrl->steer;
+        input.steering = (double)ctrl->steer;
         input.gear_request = (std::int32_t)ctrl->gear;
 
         OfpBodyContact contacts[OFP_MAX_BODY_CONTACTS];
@@ -414,10 +534,9 @@ namespace
             return;
         }
         // Rendering phase only: Rust remains the owner of angular velocity and forces.
-        static const int wheel_map[4] = { 1, 0, 3, 2 };
         for (int i = 0; i < 4; ++i)
             car.wheel_rotation[i] = std::remainder(car.wheel_rotation[i] +
-                car.snapshot.wheels[wheel_map[i]].spin_rad_s *
+                car.snapshot.wheels[SD_TO_RUST_WHEEL[i]].spin_rad_s *
                 clampValue(delta_time, 1.0 / 1000.0, 1.0 / 20.0), 2.0 * PI);
         applyBarrierDamage(car, contacts, contact_count);
         updateTrackPosition(elt);
@@ -441,7 +560,7 @@ namespace
                   "contact=(%d,%d,%d,%d) rays=%.0f/%.0f floor=%.0f/%.0f "
                   "clearance=(%.4f,%.4f) floor_impulse=(%.3f,%.3f) reach=%.3f "
                   "setup_contact=%d backends=0x%x rejected=%u\n",
-                  s.sim_time_s, car.index, x, y, z, speed, s.gear, s.engine_rpm_rad_s,
+                  s.sim_time_s, car.index, x, y, z, speed, s.gear, s.engine_rpm,
                   yaw, pitch, roll, car.forward_speed, car.lateral_speed,
                   s.fuel_kg, s.wheels[0].normal_force_n, s.wheels[1].normal_force_n,
                   s.wheels[2].normal_force_n, s.wheels[3].normal_force_n,
@@ -526,8 +645,8 @@ namespace
             ctrl->steer = (float)clampValue(1.25 * heading_error + 0.30 * lateral_right, -0.5, 0.5);
 
             int gear = (int)s.gear;
-            if (s.engine_rpm_rad_s > 15200.0 && gear < 6) gear += 1;
-            else if (s.engine_rpm_rad_s < 6500.0 && gear > 1) gear -= 1;
+            if (s.engine_rpm > 15200.0 && gear < 6) gear += 1;
+            else if (s.engine_rpm < 6500.0 && gear > 1) gear -= 1;
             // Feed a requested edge through the real human control path. This must
             // respect published gear limits, just like keyboard/controller input.
             if ((int)ctrl->gear != gear)
@@ -593,6 +712,7 @@ namespace
     {
         OfpVehicleSpecs specs{};
         if (rustPhysicsLibrary.vehicleSpecs(car.handle, &specs) != 0) return;
+        car.specs = specs;
         tCarElt* elt = car.car;
         elt->_gearOffset = specs.has_reverse ? 1 : 0;
         elt->_gearNb = specs.forward_gears + 1; // Speed Dreams limit is highest forward gear + 1.
@@ -600,24 +720,32 @@ namespace
         if (specs.has_reverse) elt->_gearRatio[0] = (tdble)(-specs.reverse_ratio * specs.final_drive);
         for (int gear = 1; gear <= specs.forward_gears; ++gear)
             elt->_gearRatio[gear + elt->_gearOffset] = (tdble)(specs.gear_ratios[gear - 1] * specs.final_drive);
-        static const int wheel_map[4] = { 1, 0, 3, 2 };
         static const char* wheel_sections[4] = {SECT_FRNTRGTWHEEL, SECT_FRNTLFTWHEEL, SECT_REARRGTWHEEL, SECT_REARLFTWHEEL};
         static const char* brake_sections[4] = {SECT_FRNTRGTBRAKE, SECT_FRNTLFTBRAKE, SECT_REARRGTBRAKE, SECT_REARLFTBRAKE};
         for (int i = 0; i < 4; ++i) {
-            const double radius = car.snapshot.wheels[wheel_map[i]].tire_radius_m;
+            const double radius = car.snapshot.wheels[SD_TO_RUST_WHEEL[i]].tire_radius_m;
             // Rim and disc dimensions describe visual assets, not a second tire model.
             const double rim = GfParmGetNum(elt->_carHandle, wheel_sections[i], PRM_RIMDIAM, nullptr, 0.3302) * 0.5;
             elt->_rimRadius(i) = (tdble)std::min(rim, radius);
             elt->_tireHeight(i) = (tdble)(radius - elt->_rimRadius(i));
             elt->_wheelRadius(i) = (tdble)radius;
-            elt->_tireWidth(i) = (tdble)specs.tire_width_m[wheel_map[i]];
+            elt->_tireWidth(i) = (tdble)specs.tire_width_m[SD_TO_RUST_WHEEL[i]];
             elt->_brakeDiskRadius(i) = GfParmGetNum(elt->_carHandle, brake_sections[i], PRM_BRKDIAM, nullptr, 0.28) * 0.5;
         }
-        GfLogInfo("RUSTSPECS forward=%d offset=%d ratios=(%.4f,%.4f) wheel_fr=(r=%.6f,w=%.6f) wheel_rr=(r=%.6f,w=%.6f)\n",
+        // Steering-wheel rotation is visual car metadata, not a physics constant: it is
+        // the range the HUD uses to turn the effective normalized steering into degrees.
+        car.steering_wheel_lock_rad = GfParmGetNum(elt->_carHandle, SECT_STEER, PRM_STEERROT,
+                                                   nullptr, 0.0);
+        if (!std::isfinite(car.steering_wheel_lock_rad) || car.steering_wheel_lock_rad < 0.0)
+            car.steering_wheel_lock_rad = 0.0;
+        GfLogInfo("RUSTSPECS forward=%d offset=%d ratios=(%.4f,%.4f) wheel_fr=(r=%.6f,w=%.6f) wheel_rr=(r=%.6f,w=%.6f) "
+                  "rpm_max=%.0f rpm_idle=%.0f steer_lock=%.4f rad fuel_capacity=%.3f kg density=%.4f kg/L\n",
             specs.forward_gears, elt->_gearOffset, (double)elt->_gearRatio[elt->_gearOffset + 1],
             (double)elt->_gearRatio[elt->_gearOffset + specs.forward_gears],
             (double)elt->_wheelRadius(0), (double)elt->_tireWidth(0),
-            (double)elt->_wheelRadius(2), (double)elt->_tireWidth(2));
+            (double)elt->_wheelRadius(2), (double)elt->_tireWidth(2),
+            specs.max_rpm, specs.idle_rpm, car.steering_wheel_lock_rad,
+            specs.fuel_capacity_kg, specs.fuel_density_kg_per_litre);
         std::vector<PhysicsSetupField> fields;
         if (!RustPhysics::self().garageFields(car.index, fields)) return;
         for (const auto& field : fields) {
@@ -632,6 +760,11 @@ namespace
     {
         car.index = index;
         car.car = elt;
+        // Clear any telemetry inherited from a previous car or session: the HUD must show
+        // unknown values until the new vehicle has published an accepted step.
+        std::memset(&elt->formulaHud, 0, sizeof(elt->formulaHud));
+        car.specs = OfpVehicleSpecs{};
+        car.steering_wheel_lock_rad = 0.0;
         // Presentation metadata remains in the visual car XML, independent of the
         // authoritative Rust mass/inertia and suspension configuration.
         void* visual = elt->_carHandle;
@@ -709,11 +842,20 @@ namespace
 
     void destroyCar(RustCar& car)
     {
+        if (car.car)
+        {
+            // Never leave the previous car's presentation telemetry behind.
+            std::memset(&car.car->formulaHud, 0, sizeof(car.car->formulaHud));
+        }
         if (car.handle && rustPhysicsLibrary.destroy)
             rustPhysicsLibrary.destroy(car.handle);
         car.handle = nullptr;
         car.ready = false;
         car.car = nullptr;
+        car.specs = OfpVehicleSpecs{};
+        car.snapshot = OfpSnapshot{};
+        car.steering_wheel_lock_rad = 0.0;
+        std::fill(car.wheel_rotation, car.wheel_rotation + 4, 0.0);
     }
 }
 

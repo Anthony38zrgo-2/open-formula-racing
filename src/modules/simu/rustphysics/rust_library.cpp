@@ -87,15 +87,19 @@ namespace
         std::uint64_t hash = 0xcbf29ce484222325ull;
         mixLayout(hash, (std::uint64_t)sizeof(OfpVehicleSpecs));
         mixLayout(hash, (std::uint64_t)offsetof(OfpVehicleSpecs, tire_width_m));
+        mixLayout(hash, (std::uint64_t)offsetof(OfpVehicleSpecs, tread_optimal_temperature_c));
         mixLayout(hash, (std::uint64_t)sizeof(OfpSnapshot));
         mixLayout(hash, (std::uint64_t)sizeof(OfpWheelState));
         mixLayout(hash, (std::uint64_t)sizeof(OfpBodyContact));
         mixLayout(hash, (std::uint64_t)sizeof(OfpControlInput));
         mixLayout(hash, (std::uint64_t)offsetof(OfpSnapshot, wheels));
         mixLayout(hash, (std::uint64_t)offsetof(OfpSnapshot, floor_clearance));
+        mixLayout(hash, (std::uint64_t)offsetof(OfpSnapshot, water_temperature_celsius));
         mixLayout(hash, (std::uint64_t)offsetof(OfpSnapshot, body_contact_impulse_ns));
+        mixLayout(hash, (std::uint64_t)offsetof(OfpWheelState, tread_temperature_c));
         mixLayout(hash, (std::uint64_t)offsetof(OfpWheelState, contact_point));
         mixLayout(hash, (std::uint64_t)offsetof(OfpWheelState, ray_distance));
+        mixLayout(hash, (std::uint64_t)offsetof(OfpWheelState, brake_disc_temperature_c));
         return hash;
     }
 }

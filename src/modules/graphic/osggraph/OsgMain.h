@@ -40,6 +40,8 @@ extern void *grTrackHandle;
 
 extern int  initTrack(tTrack *track);
 extern int  initCars(tSituation *s);
+//! Track model of the running session (geometry owner), or null before it is loaded.
+extern const tTrack* getTrackModel();
 #define GR_VIEW_STD  0 /* full screen view mode */
 #define GR_VIEW_PART 1 /* partial screen view mode (scissor test) */
 extern int  initView(int x, int y, int width, int height, int mode, void *screen);
