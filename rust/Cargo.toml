@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["vehicle-physics-engine"]
+members = ["vehicle-physics-engine", "vehicle-audio-engine", "v10-engine-synth", "open-formula-audio"]
 
 [workspace.package]
 edition = "2021"

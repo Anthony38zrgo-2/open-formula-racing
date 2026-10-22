@@ -1,0 +1,916 @@
+00:00:00.000 Default  Info    Logger 'Default' created : Level threshold Debug:5
+00:00:00.000 Default  Info    Date and time : 2026/10/22 12:49:49
+00:00:00.000 Default  Info    Built on Windows-10.0.26100
+00:00:00.047 Default  Info      with CMake 4.4.4, 'Ninja' generator
+00:00:00.096 Default  Info      with GNU 16.2.0 compiler ('Release' configuration)
+00:00:00.158 Default  Info    Current OS is Windows  (build 26100) (R10.0, 64 bits)
+00:00:00.224 Default  Info    Compiled against SDL version 2.32.10 
+00:00:00.273 Default  Info    Linking against SDL version 2.32.10.
+00:00:00.327 Default  Info    Speed Dreams v2.4.2 (an Open Motorsport Sim)
+00:00:00.383 Default  Info    Install dir is D:/open-formula/distribution/ (from executable D:\open-formula\distribution\bin\speed-dreams-2.exe)
+00:00:00.444 Default  Info    Parsing command line args (4)
+00:00:00.451 Default  Info      -s williams-fuji-practice : option 'startrace'
+00:00:00.460 Default  Info      -lc D:/open-formula/distribution/user-settings : option 'localdir'
+00:00:00.472 Default  Info    User settings in D:/open-formula/distribution/user-settings/ (from D:/open-formula/distribution/user-settings)
+00:00:00.488 Default  Info    Libraries in D:/open-formula/distribution/lib/games/speed-dreams-2/ (from lib/games/speed-dreams-2/)
+00:00:00.504 Default  Info    Executables in D:/open-formula/distribution/bin/ (from bin/)
+00:00:00.514 Default  Info    Data in D:/open-formula/distribution/share/games/speed-dreams-2/ (from share/games/speed-dreams-2/)
+00:00:00.529 Default  Info    Initializing random number generator for 'true randomness'
+00:00:00.540 Default  Trace   Loaded config/logging.xml (000001cacf40bd60)
+00:00:00.549 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/logging.xml (000001cacf3e86b0)
+00:00:00.564 Default  Trace   Loaded config/raceengine.xml (000001cacf40c1c0)
+00:00:00.573 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/raceengine.xml (000001cacf464750)
+00:00:00.588 Default  Trace   Loaded config/screen.xml (000001cacf40bd60)
+00:00:00.597 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/screen.xml (000001cacf45e7c0)
+00:00:00.611 Default  Trace   Loaded config/graph.xml (000001cacf40c700)
+00:00:00.620 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/graph.xml (000001cacf44c210)
+00:00:00.634 Default  Trace   Loaded config/sound.xml (000001cacf40bd60)
+00:00:00.642 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/sound.xml (000001cacf452980)
+00:00:00.659 Default  Trace   Loaded config/osghudconfig.xml (000001cacf40bd60)
+00:00:00.672 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/osghudconfig.xml (000001cacf6b7120)
+00:00:00.687 Default  Trace   Loaded config/downloadservers.xml (000001cacf40c700)
+00:00:00.697 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/downloadservers.xml (000001cacf40c770)
+00:00:00.711 Default  Trace   Loaded config/language.xml (000001cacf4061e0)
+00:00:00.720 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/language.xml (000001cacf40bf90)
+00:00:00.734 Default  Trace   Loaded config/webserver.xml (000001cacf40bd60)
+00:00:00.743 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/webserver.xml (000001cacf40bdd0)
+00:00:00.757 Default  Trace   Loaded config/raceman/championship-24h.xml (000001cacf4063a0)
+00:00:00.768 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/raceman/championship-24h.xml (000001cacf3faa80)
+00:00:00.784 Default  Trace   Loaded config/raceman/championship-36gp.xml (000001cacf40bdd0)
+00:00:00.795 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/raceman/championship-36gp.xml (000001cacf44c2f0)
+00:00:00.810 Default  Trace   Loaded config/raceman/championship-67gp.xml (000001cacf40bf20)
+00:00:00.822 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/raceman/championship-67gp.xml (000001cacf44d140)
+00:00:00.838 Default  Trace   Loaded config/raceman/championship-ls-gt1.xml (000001cacf40bd60)
+00:00:00.850 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/raceman/championship-ls-gt1.xml (000001cacf45f990)
+00:00:00.867 Default  Trace   Loaded config/raceman/championship-mp1.xml (000001cacf40c700)
+00:00:00.878 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/raceman/championship-mp1.xml (000001cacf44ddb0)
+00:00:00.895 Default  Trace   Loaded config/raceman/championship-mp5.xml (000001cacf40c1c0)
+00:00:00.906 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/raceman/championship-mp5.xml (000001cacf453ca0)
+00:00:00.923 Default  Trace   Loaded config/raceman/championship-mpa11.xml (000001cacf40bd60)
+00:00:00.934 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/raceman/championship-mpa11.xml (000001cacf44cf30)
+00:00:00.951 Default  Trace   Loaded config/raceman/championship-mpa1.xml (000001cacf40c4d0)
+00:00:00.962 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/raceman/championship-mpa1.xml (000001cacf48c570)
+00:00:00.978 Default  Trace   Loaded config/raceman/championship-online.xml (000001cacf40bd60)
+00:00:00.990 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/raceman/championship-online.xml (000001cacf49b930)
+00:00:01.006 Default  Trace   Loaded config/raceman/championship-supercars.xml (000001cacf40c070)
+00:00:01.017 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/raceman/championship-supercars.xml (000001cacf4893e0)
+00:00:01.034 Default  Trace   Loaded config/raceman/championship-trb1.xml (000001cacf40bd60)
+00:00:01.045 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/raceman/championship-trb1.xml (000001cacf498890)
+00:00:01.063 Default  Trace   Loaded config/raceman/championship.xml (000001cacf40c070)
+00:00:01.074 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/raceman/championship.xml (000001cacf49c4e0)
+00:00:01.090 Default  Trace   Loaded config/raceman/netclient.xml (000001cacf40bd60)
+00:00:01.101 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/raceman/netclient.xml (000001cacf3e41a0)
+00:00:01.117 Default  Trace   Loaded config/raceman/netserver.xml (000001cacf40bf20)
+00:00:01.127 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/raceman/netserver.xml (000001cacf450260)
+00:00:01.143 Default  Trace   Loaded config/raceman/netwatcher.xml (000001cacf40bd60)
+00:00:01.154 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/raceman/netwatcher.xml (000001cacf3fae00)
+00:00:01.170 Default  Trace   Loaded config/raceman/networkrace.xml (000001cacf40c700)
+00:00:01.181 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/raceman/networkrace.xml (000001cacf3e4670)
+00:00:01.197 Default  Trace   Loaded config/raceman/optimizationMT.xml (000001cacf40c700)
+00:00:01.209 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/raceman/optimizationMT.xml (000001cacf44cec0)
+00:00:01.226 Default  Trace   Loaded config/raceman/practice.xml (000001cacf40bd60)
+00:00:01.236 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/raceman/practice.xml (000001cacf4503b0)
+00:00:01.252 Default  Trace   Loaded config/raceman/quickrace.xml (000001cacf40bd60)
+00:00:01.262 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/raceman/quickrace.xml (000001cacf451900)
+00:00:01.278 Default  Trace   Loaded config/raceman/singleevent-36gp.xml (000001cacf40c1c0)
+00:00:01.289 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/raceman/singleevent-36gp.xml (000001cacf49c010)
+00:00:01.305 Default  Trace   Loaded config/raceman/singleevent-challenge.xml (000001cacf40bdd0)
+00:00:01.317 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/raceman/singleevent-challenge.xml (000001cacf44e7e0)
+00:00:01.333 Default  Trace   Loaded config/raceman/singleevent-endurance.xml (000001cacf40c4d0)
+00:00:01.345 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/raceman/singleevent-endurance.xml (000001cacf451ac0)
+00:00:01.361 Default  Trace   Loaded config/raceman/singleevent-ls-gt1.xml (000001cacf40bd60)
+00:00:01.373 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/raceman/singleevent-ls-gt1.xml (000001cacf460bb0)
+00:00:01.392 Default  Trace   Loaded config/raceman/singleevent-mp5.xml (000001cacf40c700)
+00:00:01.404 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/raceman/singleevent-mp5.xml (000001cacf44e5b0)
+00:00:01.421 Default  Trace   Loaded config/raceman/singleevent-mpa1.xml (000001cacf40c700)
+00:00:01.432 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/raceman/singleevent-mpa1.xml (000001cacf44d220)
+00:00:01.448 Default  Trace   Loaded config/raceman/extra/skill.xml (000001cacf40c700)
+00:00:01.458 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/raceman/extra/skill.xml (000001cacf40c070)
+00:00:01.473 Default  Trace   Loaded drivers/human/car.xml (000001cacf40c4d0)
+00:00:01.483 Default  Trace   Loaded D:/open-formula/distribution/user-settings/drivers/human/car.xml (000001cacf40c1c0)
+00:00:01.497 Default  Trace   Loaded drivers/human/human.xml (000001cacf4061e0)
+00:00:01.506 Default  Trace   Loaded D:/open-formula/distribution/user-settings/drivers/human/human.xml (000001cacf44e7e0)
+00:00:01.521 Default  Warning Param 'brake max' drivers/human/preferences.xml at line 202 : Loaded value (1.200000) > max (1.000000); fixing the max
+00:00:01.538 Default  Trace   Loaded drivers/human/preferences.xml (000001cacf40bd60)
+00:00:01.548 Default  Warning Param 'brake max' D:/open-formula/distribution/user-settings/drivers/human/preferences.xml at line 158 : Loaded value (1.200000) > max (1.000000); fixing the max
+00:00:01.571 Default  Trace   Loaded D:/open-formula/distribution/user-settings/drivers/human/preferences.xml (000001cacf459e90)
+00:00:01.587 Default  Trace   Loaded drivers/networkhuman/car.xml (000001cacf40bd60)
+00:00:01.597 Default  Trace   Loaded D:/open-formula/distribution/user-settings/drivers/networkhuman/car.xml (000001cacf40c4d0)
+00:00:01.611 Default  Trace   Loaded drivers/networkhuman/networkhuman.xml (000001cacf4063a0)
+00:00:01.623 Default  Trace   Loaded D:/open-formula/distribution/user-settings/drivers/networkhuman/networkhuman.xml (000001cacf3e3bc0)
+00:00:01.639 Default  Warning Param 'brake max' drivers/networkhuman/preferences.xml at line 189 : Loaded value (1.200000) > max (1.000000); fixing the max
+00:00:01.657 Default  Trace   Loaded drivers/networkhuman/preferences.xml (000001cacf40bd60)
+00:00:01.668 Default  Warning Param 'brake max' D:/open-formula/distribution/user-settings/drivers/networkhuman/preferences.xml at line 189 : Loaded value (1.200000) > max (1.000000); fixing the max
+00:00:01.691 Default  Trace   Loaded D:/open-formula/distribution/user-settings/drivers/networkhuman/preferences.xml (000001cacf44e130)
+00:00:01.707 Default  Trace   Loaded D:/open-formula/distribution/user-settings/config/logging.xml (000001cacf40bd60)
+00:00:01.722 Default  Trace   Logger 'Default' settings : stream=stderr, threshold=info, columns=time:level:logger
+00:00:01.735 Default  Info    Changing trace level threshold to Info:3 (was Debug:5)
+00:00:01.744 Optim    Info    Date and time : 2026/10/22 12:49:51
+00:00:01.752 Optim    Info    Current trace level threshold : Info
+00:00:01.760 Optim    Info    Logger 'Optim' created : Level threshold Info:3
+00:00:01.769 DANDROID Info    Date and time : 2026/10/22 12:49:51
+00:00:01.777 DANDROID Info    Current trace level threshold : Info
+00:00:01.784 DANDROID Info    Logger 'DANDROID' created : Level threshold Info:3
+00:00:01.794 SHADOW   Info    Date and time : 2026/10/22 12:49:51
+00:00:01.802 SHADOW   Info    Current trace level threshold : Info
+00:00:01.810 SHADOW   Info    Logger 'SHADOW' created : Level threshold Info:3
+00:00:01.819 Simplix  Info    Date and time : 2026/10/22 12:49:51
+00:00:01.827 Simplix  Info    Current trace level threshold : Info
+00:00:01.835 Simplix  Info    Logger 'Simplix' created : Level threshold Info:3
+00:00:01.845 USR      Info    Date and time : 2026/10/22 12:49:51
+00:00:01.853 USR      Info    Current trace level threshold : Info
+00:00:01.861 USR      Info    Logger 'USR' created : Level threshold Info:3
+00:00:01.883 Default  Info    Trying 'default compatible' mode for video initialization.
+00:00:02.096 Default  Info    Supported OpenGL features :
+00:00:02.103 Default  Info      Double buffer           : Yes
+00:00:02.111 Default  Info      Color depth             : 24 bits
+00:00:02.119 Default  Info      Alpha channel           : No
+00:00:02.126 Default  Info      Max texture size        : 16384
+00:00:02.134 Default  Info      Texture compression     : Yes
+00:00:02.141 Default  Info      Multi-texturing         : Yes (4 units)
+00:00:02.150 Default  Info      Rectangle textures      : Yes
+00:00:02.157 Default  Info      Non power-of-2 textures : Yes
+00:00:02.164 Default  Info      Multi-sampling          : Yes (8 samples)
+00:00:02.174 Default  Info      Stereo Vision           : No
+00:00:02.182 Default  Info      Bump Mapping            : Yes
+00:00:02.190 Default  Info      Anisotropic Filtering   : 2
+00:00:02.198 Default  Info    Selected OpenGL features :
+00:00:02.205 Default  Info      Double buffer           : On
+00:00:02.212 Default  Info      Color depth             : 24 bits
+00:00:02.220 Default  Info      Alpha channel           : Off
+00:00:02.228 Default  Info      Max texture size        : 1024
+00:00:02.235 Default  Info      Texture compression     : On
+00:00:02.242 Default  Info      Multi-texturing         : On (4 units)
+00:00:02.251 Default  Info      Rectangle textures      : On
+00:00:02.259 Default  Info      Non power-of-2 textures : On
+00:00:02.266 Default  Info      Multi-sampling          : On (1 samples)
+00:00:02.275 Default  Info      Stereo vision           : Off
+00:00:02.282 Default  Info      Bump Mapping            : Off
+00:00:02.289 Default  Info      Anisotropic Filtering   : 2
+00:00:02.297 Default  Info    Selected SDL video mode :
+00:00:02.303 Default  Info      Full screen : No
+00:00:02.309 Default  Info      Size        : 1920x1080
+00:00:02.316 Default  Info      Color depth : 32 bits
+00:00:02.322 Default  Info      Max. refresh rate : 120.000000
+00:00:02.330 Default  Info    Video hardware info :
+00:00:02.336 Default  Info      Vendor   : NVIDIA Corporation
+00:00:02.344 Default  Info      Renderer : NVIDIA GeForce RTX 3050/PCIe/SSE2
+00:00:02.353 Default  Info      Version  : 4.6.0 NVIDIA 560.94
+00:00:02.366 Default  Info    Reading Menu SFX config
+00:00:02.373 Default  Info    (Re-)Initializing Menu SFX 
+00:00:02.397 Default  Info    Reading music player config
+00:00:02.404 Default  Info    Default Music changing to: data/music/main.ogg 
+00:00:02.413 Default  Info    (Re-)Initializing music player 
+00:00:02.495 Default  Info    1 Joysticks found
+00:00:02.501 Default  Info    Joystick 1: Xbox One Controller
+00:00:02.509 Default  Info      vendor:  045e
+00:00:02.514 Default  Info      product: 02ff
+00:00:02.520 Default  Info      type:    Game Controller
+00:00:02.527 Default  Info      axes:    6
+00:00:02.532 Default  Info      buttons: 16
+00:00:02.537 Default  Info      hats:    1
+00:00:02.542 Default  Info      haptic:  no
+00:00:02.729 Default  Info    Initialized module D:/open-formula/distribution/lib/games/speed-dreams-2/drivers/dandroid/dandroid.dll (maxItf=3)
+00:00:02.747 Default  Info    Terminated module D:/open-formula/distribution/lib/games/speed-dreams-2/drivers/dandroid/dandroid.dll
+00:00:02.762 Default  Info    Initialized module D:/open-formula/distribution/lib/games/speed-dreams-2/drivers/human/human.dll (maxItf=1)
+00:00:02.779 Default  Info    Terminated module D:/open-formula/distribution/lib/games/speed-dreams-2/drivers/human/human.dll
+00:00:02.794 Default  Info    Initialized module D:/open-formula/distribution/lib/games/speed-dreams-2/drivers/networkhuman/networkhuman.dll (maxItf=1)
+00:00:02.812 Default  Info    Terminated module D:/open-formula/distribution/lib/games/speed-dreams-2/drivers/networkhuman/networkhuman.dll
+00:00:02.837 Default  Info    Initialized module D:/open-formula/distribution/lib/games/speed-dreams-2/drivers/shadow/shadow.dll (maxItf=2)
+00:00:02.854 Default  Info    Terminated module D:/open-formula/distribution/lib/games/speed-dreams-2/drivers/shadow/shadow.dll
+00:00:02.873 Default  Info    Initialized module D:/open-formula/distribution/lib/games/speed-dreams-2/drivers/simplix/simplix.dll (maxItf=0)
+00:00:02.890 Default  Info    Terminated module D:/open-formula/distribution/lib/games/speed-dreams-2/drivers/simplix/simplix.dll
+00:00:02.906 Default  Info    Initialized module D:/open-formula/distribution/lib/games/speed-dreams-2/drivers/usr/usr.dll (maxItf=3)
+00:00:02.966 Default  Info    Terminated module D:/open-formula/distribution/lib/games/speed-dreams-2/drivers/usr/usr.dll
+00:00:02.985 Default  Warning Preview file not found for williams-nineteen-ninety-seven material_12_color skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-material_12_color-preview.jpg)
+00:00:03.010 Default  Warning Preview file not found for williams-nineteen-ninety-seven material_8_color skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-material_8_color-preview.jpg)
+00:00:03.034 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_0 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_0-preview.jpg)
+00:00:03.057 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_1 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_1-preview.jpg)
+00:00:03.080 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_10 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_10-preview.jpg)
+00:00:03.102 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_2 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_2-preview.jpg)
+00:00:03.125 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_3 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_3-preview.jpg)
+00:00:03.148 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_4 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_4-preview.jpg)
+00:00:03.171 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_5 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_5-preview.jpg)
+00:00:03.194 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_6 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_6-preview.jpg)
+00:00:03.216 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_7 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_7-preview.jpg)
+00:00:03.239 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_8 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_8-preview.jpg)
+00:00:03.268 Default  Warning Preview file not found for williams-nineteen-ninety-seven material_12_color skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-material_12_color-preview.jpg)
+00:00:03.292 Default  Warning Preview file not found for williams-nineteen-ninety-seven material_8_color skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-material_8_color-preview.jpg)
+00:00:03.316 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_0 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_0-preview.jpg)
+00:00:03.339 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_1 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_1-preview.jpg)
+00:00:03.362 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_10 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_10-preview.jpg)
+00:00:03.385 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_2 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_2-preview.jpg)
+00:00:03.408 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_3 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_3-preview.jpg)
+00:00:03.431 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_4 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_4-preview.jpg)
+00:00:03.454 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_5 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_5-preview.jpg)
+00:00:03.476 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_6 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_6-preview.jpg)
+00:00:03.499 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_7 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_7-preview.jpg)
+00:00:03.522 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_8 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_8-preview.jpg)
+00:00:03.547 Default  Error   No skin at all found for 'networkhuman/1/sc-lynx-220' : adding dummy 'standard' one
+00:00:03.560 Default  Warning No preview file cars/models/sc-lynx-220/sc-lynx-220-preview.jpg found for dummy 'standard' skin
+00:00:03.574 Default  Warning Changing 'networkhuman' driver 'Player' (#1) 's car to williams-nineteen-ninety-seven (default one 'sc-lynx-220' not available)
+00:00:03.599 Default  Warning Preview file not found for williams-nineteen-ninety-seven material_12_color skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-material_12_color-preview.jpg)
+00:00:03.624 Default  Warning Preview file not found for williams-nineteen-ninety-seven material_8_color skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-material_8_color-preview.jpg)
+00:00:03.649 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_0 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_0-preview.jpg)
+00:00:03.672 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_1 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_1-preview.jpg)
+00:00:03.696 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_10 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_10-preview.jpg)
+00:00:03.718 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_2 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_2-preview.jpg)
+00:00:03.741 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_3 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_3-preview.jpg)
+00:00:03.763 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_4 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_4-preview.jpg)
+00:00:03.786 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_5 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_5-preview.jpg)
+00:00:03.809 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_6 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_6-preview.jpg)
+00:00:03.832 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_7 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_7-preview.jpg)
+00:00:03.856 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_8 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_8-preview.jpg)
+00:00:03.882 Default  Warning Preview file not found for williams-nineteen-ninety-seven material_12_color skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-material_12_color-preview.jpg)
+00:00:03.908 Default  Warning Preview file not found for williams-nineteen-ninety-seven material_8_color skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-material_8_color-preview.jpg)
+00:00:03.933 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_0 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_0-preview.jpg)
+00:00:03.957 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_1 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_1-preview.jpg)
+00:00:03.981 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_10 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_10-preview.jpg)
+00:00:04.004 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_2 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_2-preview.jpg)
+00:00:04.027 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_3 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_3-preview.jpg)
+00:00:04.050 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_4 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_4-preview.jpg)
+00:00:04.073 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_5 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_5-preview.jpg)
+00:00:04.096 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_6 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_6-preview.jpg)
+00:00:04.120 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_7 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_7-preview.jpg)
+00:00:04.144 Default  Warning Preview file not found for williams-nineteen-ninety-seven texture_8 skin (cars/models/williams-nineteen-ninety-seven/williams-nineteen-ninety-seven-texture_8-preview.jpg)
+00:00:04.171 Default  Info    Initialized module D:/open-formula/distribution/lib/games/speed-dreams-2/drivers//dandroid/dandroid.dll (maxItf=3)
+00:00:04.188 Default  Info    Terminated module D:/open-formula/distribution/lib/games/speed-dreams-2/drivers//dandroid/dandroid.dll
+00:00:04.205 Default  Info    Initialized module D:/open-formula/distribution/lib/games/speed-dreams-2/drivers//human/human.dll (maxItf=1)
+00:00:04.221 Default  Info    Terminated module D:/open-formula/distribution/lib/games/speed-dreams-2/drivers//human/human.dll
+00:00:04.236 Default  Info    Initialized module D:/open-formula/distribution/lib/games/speed-dreams-2/drivers//networkhuman/networkhuman.dll (maxItf=1)
+00:00:04.253 Default  Info    Terminated module D:/open-formula/distribution/lib/games/speed-dreams-2/drivers//networkhuman/networkhuman.dll
+00:00:04.277 Default  Info    Initialized module D:/open-formula/distribution/lib/games/speed-dreams-2/drivers//shadow/shadow.dll (maxItf=2)
+00:00:04.293 Default  Info    Terminated module D:/open-formula/distribution/lib/games/speed-dreams-2/drivers//shadow/shadow.dll
+00:00:04.310 Default  Info    Initialized module D:/open-formula/distribution/lib/games/speed-dreams-2/drivers//simplix/simplix.dll (maxItf=0)
+00:00:04.327 Default  Info    Terminated module D:/open-formula/distribution/lib/games/speed-dreams-2/drivers//simplix/simplix.dll
+00:00:04.342 Default  Info    Initialized module D:/open-formula/distribution/lib/games/speed-dreams-2/drivers//usr/usr.dll (maxItf=3)
+00:00:04.358 Default  Info    Terminated module D:/open-formula/distribution/lib/games/speed-dreams-2/drivers//usr/usr.dll
+00:00:04.373 Default  Info    Skipping category without any cars: TRB1
+00:00:04.382 Default  Info    Skipping category without any cars: 22MP1
+00:00:04.391 Default  Info    Skipping category without any cars: 23MP1
+00:00:04.400 Default  Info    Skipping category without any cars: 36GP
+00:00:04.408 Default  Info    Skipping category without any cars: 67GP
+00:00:04.417 Default  Info    Skipping category without any cars: 86mp1
+00:00:04.426 Default  Info    Skipping category without any cars: 92MP1
+00:00:04.435 Default  Info    Skipping category without any cars: Fun-Racer
+00:00:04.445 Default  Info    Skipping category without any cars: LS-GT1
+00:00:04.453 Default  Info    Skipping category without any cars: LS-GT1v41
+00:00:04.462 Default  Info    Skipping category without any cars: LS-GT2
+00:00:04.471 Default  Info    Skipping category without any cars: LS-P1
+00:00:04.480 Default  Info    Skipping category without any cars: LS-P2
+00:00:04.489 Default  Info    Skipping category without any cars: MP1
+00:00:04.497 Default  Info    Skipping category without any cars: MP10
+00:00:04.506 Default  Info    Skipping category without any cars: MP3
+00:00:04.515 Default  Info    Skipping category without any cars: MP5
+00:00:04.524 Default  Info    Skipping category without any cars: MPA1
+00:00:04.533 Default  Info    Skipping category without any cars: MPA11
+00:00:04.542 Default  Info    Skipping category without any cars: MPA12
+00:00:04.550 Default  Info    Skipping category without any cars: MPE
+00:00:04.559 Default  Info    Skipping category without any cars: Nascar
+00:00:04.568 Default  Info    Skipping category without any cars: free
+00:00:04.577 Default  Info    Skipping category without any cars: Raid-T1
+00:00:04.586 Default  Info    Skipping category without any cars: References
+00:00:04.595 Default  Info    Skipping category without any cars: RS
+00:00:04.604 Default  Info    Skipping category without any cars: SD-GTP
+00:00:04.613 Default  Info    Skipping category without any cars: SRW
+00:00:04.621 Default  Info    Skipping category without any cars: Stock
+00:00:04.631 Default  Info    Skipping category without any cars: SuperCup
+00:00:04.640 Default  Info    Skipping category without any cars: SuperTour2
+00:00:04.649 Default  Info    Skipping category without any cars: TA50
+00:00:04.708 Default  Warning Failed to create static control 'static controls/2' of unknown type 'gallery'
+00:00:04.754 Default  Warning Failed to create static control 'static controls/2' of unknown type 'gallery'
+00:00:04.812 Default  Info    Resetting StandardGame race engine.
+00:00:04.821 Default  Info    Loading 'trackv1' track loader ...
+00:00:04.828 Default  Error   Ignoring track dirt.xml : D:/open-formula/distribution/share/games/speed-dreams-2/tracks/categories/dirt.xml/dirt.xml.xml not found
+00:00:04.847 Default  Info    Practice now in EVENT_INIT state
+00:00:04.854 Default  Info    Starting new event (Practice session)
+00:00:04.902 Default  Info    GfParmGetFileName=D:/open-formula/distribution/user-settings/config/raceman/williams-fuji-practice.xml
+00:00:05.124 Default  Info    # RaceTrack Init Weather latitude = 49.01 - longitude = 2.55
+00:00:05.135 Default  Info     # Track Init Config weather month = 8 - day = 222
+00:00:05.144 Default  Info     val = 210.00 - min = 0.00 - max = 0.36 - return sinusoidal = 0.33588
+00:00:05.155 Default  Info     val = 210.00 - min = 0.86 - max = 1.00 - return sinusoidal = 0.99062
+00:00:05.166 Default  Info    ### val = 0.79 - min = 0.34 - max = 0.99 - diff = 0.65 - Return Linear = 0.85
+00:00:05.179 Default  Info    # Month = 8 - hour = 10 - raceTrack config humidity = 0.85 - hmin = 0.34 - hmax = 0.99
+00:00:05.193 Default  Info     val = 210.00 - min = -8.00 - max = 22.00 - return sinusoidal = 19.99038
+00:00:05.206 Default  Info     val = 210.00 - min = 3.00 - max = 35.00 - return sinusoidal = 32.85641
+00:00:05.217 Default  Info     val = 210.00 - min = 8.00 - max = 28.50 - return sinusoidal = 27.12676
+00:00:05.229 Default  Info     val = 420.00 - min = 50.00 - max = 140.00 - return sinusoidal = 72.50000
+00:00:05.242 Default  Info     val = 0.85 - min = 65.00 - max = 95.00 - return sinusoidal = 65.00167
+00:00:05.254 Default  Info    # temperature night = 19.99 - temperature day = 32.86
+00:00:05.263 Default  Info    ### val = 0.79 - min = 19.99 - max = 32.86 - diff = 12.87 - Return Linear = 30.18
+00:00:05.276 Default  Info    ### val = 0.79 - min = 19.99 - max = 32.86 - diff = 12.87 - Return Linear = 30.18
+00:00:05.289 Default  Info    ## TEMPERATE Temperature = 30.18 - Humidity = 65.00 - Precipitation = 72.50
+00:00:05.301 Default  Info     ### Update precipitation : Precipitation =0.00 - Rain = 0 - Clouds = 5.00 - H = 76.00 - Humidity = 65.00
+00:00:05.316 Default  Info    ### val = 0.63 - min = 180.00 - max = 270.00 - diff = 90.00 - Return Linear = 237.03
+00:00:05.328 Default  Info    Wind direction > 30 = 237.03
+00:00:05.335 Default  Info    ### val = 0.37 - min = 3.00 - max = 120.00 - diff = 117.00 - Return Linear = 45.86
+00:00:05.348 Default  Info     val = 210.00 - min = 3.00 - max = 45.86 - return sinusoidal = 42.99086
+00:00:05.360 Default  Info    Wind Speed > 30 = 42.99
+00:00:05.366 Default  Info    Visibility = 10000.000
+00:00:05.373 Default  Info    Wind Speed = 42.991
+00:00:05.379 Default  Info    Wind direction = 237.029
+00:00:05.385 Default  Info    Air Temperature = 30.176
+00:00:05.392 Default  Info    Dew point = 5.000
+00:00:05.398 Default  Info    Air pressure = 101300.000
+00:00:05.404 Default  Info    Rain = 0
+00:00:05.409 Default  Info    Snow = 0
+00:00:05.413 Default  Info    Hail = 0
+00:00:05.418 Default  Info    Relative Humidity = 65.002
+00:00:05.429 Default  Info    ++++++++++++ Track ++++++++++++
+00:00:05.436 Default  Info    Name     = Fuji76-77
+00:00:05.442 Default  Info    Authors  = Source provenance in migration manifest
+00:00:05.451 Default  Info    Filename = tracks/circuit/fuji-seventy-six-seventy-seven/fuji-seventy-six-seventy-seven.xml
+00:00:05.466 Default  Info    Model3D  = fuji-seventy-six-seventy-seven.acc
+00:00:05.475 Default  Info    NSeg     = 4312
+00:00:05.480 Default  Info    Version  = 4
+00:00:05.485 Default  Info    Length   = 4308.667480 m
+00:00:05.492 Default  Info    Width    = 2.000000 m
+00:00:05.498 Default  Info    XSize    = 1739.107422 m
+00:00:05.505 Default  Info    YSize    = 569.721069 m
+00:00:05.511 Default  Info    ZSize    = 33.212601 m
+00:00:05.517 Default  Info    Max Pits = 0
+00:00:05.522 Default  Info    Pits     = none
+00:00:05.527 Default  Info    TimeOfDay= 10:00:00
+00:00:05.533 Default  Info    Sun asc. = 0.0 d
+00:00:05.539 Default  Info    Clouds   = 5 (0=none, 1=cirrus, 2=few, 3=many, 7=full)
+00:00:05.549 Default  Info    Rain     = 0 (0=none, 1=little, 2=medium, 3=heavy)
+00:00:05.558 Default  Info    Water    = 0 (0=none, 1=some, 2=more, 3=swampy)
+00:00:05.567 Default  Info    Not starting Next Event menu, as only one track to race on.
+00:00:05.578 Default  Info    Practice now in PRE_RACE state
+00:00:05.585 Default  Info    Race length : time=-60s, laps=999 (extra=999)
+00:00:05.596 Default  Info    Practice now in RACE_START state
+00:00:05.603 Default  Info    Starting Practice Practice session at Fuji76-77
+00:00:05.613 Default  Info    Not starting Start Race menu, as specified not to.
+00:00:05.625 Default  Info    Initialized module D:/open-formula/distribution/lib/games/speed-dreams-2/drivers/human/human.dll (maxItf=1)
+00:00:05.640 Default  Info    Module D:/open-formula/distribution/lib/games/speed-dreams-2/drivers/human/human.dll loaded
+00:00:05.654 Default  Info    Driver's name: Jacques Villeneuve
+00:00:05.662 Default  Warning Param 'brake max' D:/open-formula/distribution/user-settings/drivers/human/preferences.xml at line 158 : Loaded value (1.200000) > max (1.000000); fixing the max
+00:00:05.684 Default  Info    Command settings for index 1:
+00:00:05.691 Default  Info      up shift	: a
+00:00:05.696 Default  Info      down shift	: z
+00:00:05.701 Default  Info      ASR cmd	: t
+00:00:05.707 Default  Info      ABS cmd	: None
+00:00:05.713 Default  Info      reverse gear	: BTN4-0
+00:00:05.719 Default  Info      neutral gear	: BTN5-0
+00:00:05.725 Default  Info      1st gear	: None (-1)
+00:00:05.731 Default  Info      2nd gear	: None (-1)
+00:00:05.737 Default  Info      3rd gear	: None (-1)
+00:00:05.744 Default  Info      4th gear	: None (-1)
+00:00:05.750 Default  Info      5th gear	: None (-1)
+00:00:05.756 Default  Info      6th gear	: None (-1)
+00:00:05.763 Default  Info      throttle	: Up Arrow
+00:00:05.769 Default  Info      brake	: Down Arrow
+00:00:05.775 Default  Info      left steer	: Left Arrow
+00:00:05.782 Default  Info      right steer	: Right Arrow
+00:00:05.788 Default  Info      Light1 cmd	: l
+00:00:05.794 Default  Info      clutch	: x
+00:00:05.799 Default  Info      Speed Limiter	: s
+00:00:05.804 Default  Info      ebrake cmd	: Space
+00:00:05.810 Default  Info      hbox x	: None (-1)
+00:00:05.816 Default  Info      hbox y	: None (-1)
+00:00:05.822 Default  Info      left glance	: None (-1)
+00:00:05.828 Default  Info      right glance	: None (-1)
+00:00:05.834 Default  Info      dashboard next item	: u
+00:00:05.840 Default  Info      dashboard previous item	: j
+00:00:05.848 Default  Info      dashboard increase	: k
+00:00:05.854 Default  Info      dashboard decrease	: h
+00:00:05.860 Default  Info      camera look back	: None (-1)
+00:00:05.870 Default  Info    Player: D:/open-formula/distribution/user-settings/drivers/human/cars/williams-nineteen-ninety-seven/fuji-seventy-six-seventy-seven.xml Default Setup Loaded
+00:00:05.892 Default  Info    Human #0 : Starting race session with 140.0 l of fuel (computed)
+00:00:05.902 Default  Error   GfParmCheckHandle: parameter "Car/initial fuel" out of bounds: min:10.1333 max:10.1333 val:140 in ("default car" - "D:/open-formula/distribution/user-settings//drivers/human/car.xml")
+00:00:05.926 Default  Error   GfParmCheckHandle: parameter "Features/fixed wheel force" value:"no" not allowed in ("default car" - "D:/open-formula/distribution/user-settings//drivers/human/car.xml")
+00:00:05.949 Default  Error   insertParamMerge: Incompatible ranges "Car/initial fuel": using 10.133333 for min
+00:00:05.961 Default  Error   insertParamMerge: Incompatible ranges "Car/initial fuel": using 10.133333 for max
+00:00:05.974 Default  Error   insertParamMerge: Fixing parameter "Car/initial fuel": 140.000000 -> 10.133333
+00:00:05.987 Default  Error   insertParamMerge: Incompatible ranges "Car/initial fuel": using 10.133333 for min
+00:00:05.999 Default  Error   insertParamMerge: Incompatible ranges "Car/initial fuel": using 10.133333 for max
+00:00:06.011 Default  Error   insertParamMerge: Fixing parameter "Car/initial fuel": 140.000000 -> 10.133333
+00:00:06.024 Default  Info    1 driver(s) ready to race
+00:00:06.031 Default  Warning Param 'brake max' D:/open-formula/distribution/user-settings/drivers/human/preferences.xml at line 158 : Loaded value (1.200000) > max (1.000000); fixing the max
+00:00:06.053 Default  Info    WebServer - Webserver is disabled as per user setting
+00:00:06.063 Default  Info    Rust physics: loaded D:/open-formula/distribution/lib/games/speed-dreams-2/modules/simu/vehicle_physics_engine.dll
+00:00:06.080 Default  Info    Rust physics: open-formula-rust-physics abi=5 source_commit=f3efcf246c2a2abf62477037ed0243f2f9a93a9b build=7f55ac6 profile=williams-fw19-hockenheim
+00:00:06.117 Default  Info    Rust physics: ground mesh D:/open-formula/distribution/share/games/speed-dreams-2/tracks/circuit/fuji-seventy-six-seventy-seven/fuji_ground_collisions.txt (8091 triangles)
+00:00:06.140 Default  Info    Rust physics: profile D:/open-formula/distribution/share/games/speed-dreams-2/cars/rust/williams-fw19-hockenheim/vehicle.json
+00:00:06.157 Default  Info    Rust physics: diagnostics=1 scenario=1
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+SLOW_STATE_BACKEND_READY backend=simplified tires_hertz=20 brakes_hertz=10 powertrain_hertz=10
+SUSPENSION_BACKEND_READY backend=simplified contact_rays=12 prepared=true
+00:00:06.180 Default  Info    RUSTSPECS forward=6 offset=1 ratios=(15.8565,5.7288) wheel_fr=(r=0.311949,w=0.307541) wheel_rr=(r=0.322016,w=0.389105) rpm_max=17500 rpm_idle=3500 steer_lock=6.2832 rad fuel_capacity=105.000 kg density=0.7500 kg/L
+00:00:06.217 Default  Info    RUSTSPECS forward=6 offset=1 ratios=(15.8565,5.7288) wheel_fr=(r=0.311949,w=0.307541) wheel_rr=(r=0.322016,w=0.389105) rpm_max=17500 rpm_idle=3500 steer_lock=6.2832 rad fuel_capacity=105.000 kg density=0.7500 kg/L
+00:00:06.245 Default  Info    Rust garage transaction: applied=1 fields=2 error=
+00:00:06.254 Default  Info    Cars per pit: 4
+00:00:06.259 Default  Info    Display mode : Normal
+00:00:06.269 Default  Info    Movie capture disabled (see raceengine.xml)
+00:00:06.285 Default  Info    Formula controls: left stick steering, A shifts up, X shifts down, RT throttle, LT brake; controller=Xbox One Controller
+00:00:06.302 Default  Info    Formula gear controls: keyboard A shifts up, Z shifts down; sequential gears R, N through 6
+00:00:06.316 Default  Info    rpm 0.000000 = tq 165.000000 
+00:00:06.322 Default  Info    rpm 3499.891507 = tq 165.000031 
+00:00:06.329 Default  Info    rpm 4499.860467 = tq 197.999878 
+00:00:06.336 Default  Info    rpm 5999.813762 = tq 245.999908 
+00:00:06.343 Default  Info    rpm 7499.767348 = tq 292.999969 
+00:00:06.351 Default  Info    rpm 8999.720935 = tq 330.000061 
+00:00:06.358 Default  Info    rpm 10499.674521 = tq 360.000031 
+00:00:06.365 Default  Info    rpm 11999.627524 = tq 382.999878 
+00:00:06.372 Default  Info    rpm 13199.590160 = tq 390.000000 
+00:00:06.379 Default  Info    rpm 15999.503366 = tq 335.039124 
+00:00:06.387 Default  Info    rpm 16999.472035 = tq 321.506409 
+00:00:06.394 Default  Info    rpm 17299.463568 = tq 307.313263 
+00:00:06.401 Default  Info    rpm 17499.457535 = tq 289.950134 
+00:00:06.408 Default  Info    New - Gear 1: Change Up RPM 16274.494423 = Speed 124.601207
+00:00:06.419 Default  Info    New - Gear 2: Change Up RPM 16274.494423 = Speed 160.943225
+00:00:06.429 Default  Info    New - Gear 3: Change Up RPM 16274.494423 = Speed 201.179031
+00:00:06.438 Default  Info    New - Gear 4: Change Up RPM 16274.494423 = Speed 246.027859
+00:00:06.449 Default  Info    New - Gear 5: Change Up RPM 16274.494423 = Speed 294.857803
+00:00:06.459 Default  Info    === (forceFeedback/default/effectsConfig/globalEffect) ===
+00:00:06.468 Default  Info    (enabled): (1)
+00:00:06.473 Default  Info    (multiplier): (100)
+00:00:06.479 Default  Info    (minimum): (5)
+00:00:06.484 Default  Info    (reverse): (0)
+00:00:06.489 Default  Info    === (forceFeedback/default/effectsConfig/autocenterEffect) ===
+00:00:06.499 Default  Info    (enabled): (1)
+00:00:06.504 Default  Info    (frontwheelsmultiplier): (7000)
+00:00:06.511 Default  Info    (smoothing): (100)
+00:00:06.517 Default  Info    (rearwheelsmultiplier): (0)
+00:00:06.523 Default  Info    === (forceFeedback/default/effectsConfig/engineRevvingEffect) ===
+00:00:06.534 Default  Info    (enabled): (0)
+00:00:06.539 Default  Info    (multiplier): (100)
+00:00:06.545 Default  Info    === (forceFeedback/default/effectsConfig/lowSpeedConstantForceEffect) ===
+00:00:06.556 Default  Info    (enabled): (0)
+00:00:06.561 Default  Info    (multiplier): (100)
+00:00:06.567 Default  Info    (maxSpeedAtWhichForceIsApplied): (40)
+00:00:06.574 Default  Info    (maxForce): (10000)
+00:00:07.829 Default  Info    initializing cloud layers
+00:00:07.853 Default  Info    RUSTDIAG time=0.000 car=0 pos=(1194.115,535.772,33.805) speed=0.000 gear=1 rpm=3500.0 yaw=-0.0226 pitch=-0.0000 roll=-0.0000 vf=0.000 vl=-0.000 fuel=7.600 N=(1335.8,1335.8,1668.0,1668.0) travel=(0.0950,0.0950,0.1094,0.1094) contact=(0,0,0,0) rays=0/0 floor=0/0 clearance=(0.0000,0.0000) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:07.898 Default  Info    Formula gear command: 1 (keyboard)
+00:00:07.905 Default  Info    Formula gear command: 0 (keyboard)
+00:00:07.913 Default  Info    Formula gear command: -1 (keyboard)
+00:00:07.920 Default  Info    Formula gear command: 0 (keyboard)
+00:00:07.928 Default  Info    Formula gear command: 1 (keyboard)
+00:00:07.935 Default  Info    Formula gear command: 2 (keyboard)
+00:00:07.942 Default  Info    Formula gear command: 3 (keyboard)
+00:00:07.950 Default  Info    Formula gear command: 4 (keyboard)
+00:00:07.957 Default  Info    Formula gear command: 5 (keyboard)
+00:00:07.964 Default  Info    Formula gear command: 6 (keyboard)
+00:00:07.971 Default  Info    Formula gear command: 6 (keyboard)
+00:00:07.979 Default  Info    Formula gear command: 6 (keyboard)
+00:00:07.986 Default  Info    Formula gear command: 6 (keyboard)
+00:00:07.993 Default  Info    Formula gear command: 6 (keyboard)
+00:00:08.000 Default  Info    Formula gear command: 6 (keyboard)
+00:00:08.008 Default  Info    Formula gear command: 5 (keyboard)
+00:00:08.015 Default  Info    Formula gear command: 4 (keyboard)
+00:00:08.023 Default  Info    Formula gear command: 3 (keyboard)
+00:00:08.030 Default  Info    Formula gear command: 2 (keyboard)
+00:00:08.037 Default  Info    Formula gear command: 1 (keyboard)
+00:00:08.044 Default  Info    Formula gear command: 0 (keyboard)
+00:00:08.052 Default  Info    RUSTHUMANGEAR enabled=1 first=1 neutral=0 reverse=-1 top=6 final=0
+00:00:08.109 Default  Info    RUSTDIAG time=0.250 car=0 pos=(1194.114,535.772,33.799) speed=0.003 gear=0 rpm=3500.0 yaw=-0.0226 pitch=-0.0022 roll=0.0000 vf=-0.003 vl=-0.000 fuel=7.600 N=(1345.3,1345.3,1686.5,1686.5) travel=(0.0440,0.0440,0.0646,0.0646) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0818,0.0871) floor_impulse=(0.000,0.000) reach=0.002 setup_contact=0 backends=0xf rejected=0
+00:00:08.196 Default  Info    RUSTDIAG time=0.500 car=0 pos=(1194.113,535.772,33.798) speed=0.001 gear=0 rpm=3500.0 yaw=-0.0226 pitch=-0.0031 roll=0.0000 vf=-0.001 vl=0.000 fuel=7.599 N=(1336.8,1336.8,1669.8,1669.8) travel=(0.0435,0.0435,0.0667,0.0667) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0821,0.0858) floor_impulse=(0.000,0.000) reach=0.002 setup_contact=0 backends=0xf rejected=0
+00:00:08.282 Default  Info    RUSTDIAG time=0.750 car=0 pos=(1194.113,535.772,33.798) speed=0.000 gear=0 rpm=3500.0 yaw=-0.0226 pitch=-0.0032 roll=0.0000 vf=-0.000 vl=0.000 fuel=7.599 N=(1335.8,1335.8,1668.5,1668.5) travel=(0.0434,0.0434,0.0670,0.0670) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0821,0.0856) floor_impulse=(0.000,0.000) reach=0.002 setup_contact=0 backends=0xf rejected=0
+00:00:08.370 Default  Info    RUSTDIAG time=1.000 car=0 pos=(1194.113,535.772,33.798) speed=0.000 gear=0 rpm=3500.0 yaw=-0.0226 pitch=-0.0032 roll=0.0000 vf=-0.000 vl=0.000 fuel=7.599 N=(1335.7,1335.7,1668.1,1668.1) travel=(0.0434,0.0434,0.0670,0.0670) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0821,0.0856) floor_impulse=(0.000,0.000) reach=0.002 setup_contact=0 backends=0xf rejected=0
+00:00:08.432 Default  Error   OSGHUD: Force a different image size for image: data/img/transparent.png
+00:00:08.444 Default  Error   OSGHUD: Force a different image size for image: data/img/transparent.png
+00:00:08.456 Default  Error   OSGHUD: Force a different image size for image: data/img/transparent.png
+00:00:08.468 Default  Error   OSGHUD: Force a different image size for image: data/img/transparent.png
+00:00:08.480 Default  Error   OSGHUD: Force a different image size for image: data/img/transparent.png
+00:00:08.492 Default  Error   OSGHUD: Force a different image size for image: data/img/transparent.png
+00:00:08.503 Default  Error   OSGHUD: Force a different image size for image: data/img/transparent.png
+00:00:08.567 Default  Info    Formula HUD: layout scale=1.000 min=0.720 margins=(32.0,32.0,32.0,32.0) gaps=(10.0,12.0)
+00:00:08.582 Default  Info    Formula HUD: Libron face D:/open-formula/distribution/share/games/speed-dreams-2/data/fonts/Libron/Libron-Regular.ttf provides every required glyph (787 code points)
+00:00:08.606 Default  Info    Formula HUD: Libron face D:/open-formula/distribution/share/games/speed-dreams-2/data/fonts/Libron/Libron-Bold.ttf provides every required glyph (787 code points)
+00:00:08.633 Default  Info    Formula HUD: created with Libron Regular/Bold (panels=5)
+00:00:08.644 Default  Info    Formula HUD group formulaMapAirTime rect=(1588.0,808.0 300.0x240.0)
+00:00:08.656 Default  Info    Formula HUD group formulaRight rect=(1394.7,32.0 493.4x370.0)
+00:00:08.667 Default  Info    Formula HUD group formulaTires rect=(32.0,32.0 330.0x230.0)
+00:00:08.677 Default  Info    Formula HUD group formulaEngine rect=(1746.0,312.0 130.0x74.0)
+00:00:08.688 Default  Info    Formula HUD group formulaControls rect=(742.2,18.0 435.6x127.6)
+00:00:08.699 Default  Info    OSGHUD: Formula HUD attached (1920 x 1080)
+00:00:08.711 Default  Info    Current screen is #0 (out of 1)
+00:00:08.724 Default  Info    InitCars
+00:00:08.736 Default  Info    [gr] Init(0) car williams-nineteen-ninety-seven for driver human index 1
+00:00:08.748 Default  Info    [gr] Init(0) car  MasterModel name
+00:00:08.755 Default  Info    [gr] Init(0) car  CustomSkin name
+00:00:09.613 Default  Info    Loading Animated Driver 1 - cars/models/williams-nineteen-ninety-seven/static_driver.acc 
+00:00:10.747 Default  Info    All cars loaded
+00:00:10.784 Default  Info    Initializing sound engine (openal)
+00:00:10.807 Default  Info    OpenAL backend info:
+00:00:10.814 Default  Info      Vendor: OpenAL Community
+00:00:10.820 Default  Info      Renderer: OpenAL Soft
+00:00:10.826 Default  Info      Version: 1.1 ALSOFT 1.25.2
+00:00:10.833 Default  Info      Available sources: 256
+00:00:10.839 Default  Info      Available buffers: 1024 or more
+00:00:10.847 Default  Info    Sound global gain set to 1.00
+00:00:10.867 Default  Info      Dynamic Sources: requested: 228, created: 228
+00:00:10.876 Default  Info      Static sources : 28
+00:00:10.882 Default  Info      Dynamic sources: 228
+00:00:10.951 Default  Info    Music changing to: None 
+00:00:10.957 Default  Info    Sound restored
+00:00:10.962 Default  Info    Starting race engine.
+00:00:10.968 Default  Info    Command settings for index 1:
+00:00:10.974 Default  Info      up shift	: a
+00:00:10.979 Default  Info      down shift	: z
+00:00:10.985 Default  Info      ASR cmd	: t
+00:00:10.990 Default  Info      ABS cmd	: None
+00:00:10.995 Default  Info      reverse gear	: BTN4-0
+00:00:11.001 Default  Info      neutral gear	: BTN5-0
+00:00:11.007 Default  Info      1st gear	: None (-1)
+00:00:11.013 Default  Info      2nd gear	: None (-1)
+00:00:11.019 Default  Info      3rd gear	: None (-1)
+00:00:11.025 Default  Info      4th gear	: None (-1)
+00:00:11.032 Default  Info      5th gear	: None (-1)
+00:00:11.038 Default  Info      6th gear	: None (-1)
+00:00:11.043 Default  Info      throttle	: Up Arrow
+00:00:11.050 Default  Info      brake	: Down Arrow
+00:00:11.056 Default  Info      left steer	: Left Arrow
+00:00:11.062 Default  Info      right steer	: Right Arrow
+00:00:11.070 Default  Info      Light1 cmd	: l
+00:00:11.075 Default  Info      clutch	: x
+00:00:11.079 Default  Info      Speed Limiter	: s
+00:00:11.085 Default  Info      ebrake cmd	: Space
+00:00:11.091 Default  Info      hbox x	: None (-1)
+00:00:11.096 Default  Info      hbox y	: None (-1)
+00:00:11.104 Default  Info      left glance	: None (-1)
+00:00:11.110 Default  Info      right glance	: None (-1)
+00:00:11.117 Default  Info      dashboard next item	: u
+00:00:11.123 Default  Info      dashboard previous item	: j
+00:00:11.130 Default  Info      dashboard increase	: k
+00:00:11.136 Default  Info      dashboard decrease	: h
+00:00:11.142 Default  Info      camera look back	: None (-1)
+00:00:11.149 Default  Info    Clearing Keyboard map (index 1)
+00:00:11.157 Default  Info    Practice now in NETWORK_WAIT state
+00:00:11.163 Default  Info    Practice now in PRE RACE PAUSE state
+00:00:11.171 Default  Info    Practice now in RACE state
+00:00:11.177 Default  Info    Ready.
+00:00:11.827 Default  Info    Formula HUD minimap: track=Fuji76-77 segments=539 start=(1224.78,535.57) forward=(1.000,0.000) bounds=(25.5,24.7)-(1712.4,543.1)
+00:00:11.890 Default  Info    RUSTDIAG time=1.250 car=0 pos=(1194.113,535.772,33.798) speed=0.000 gear=0 rpm=3500.0 yaw=-0.0226 pitch=-0.0032 roll=0.0000 vf=-0.000 vl=0.000 fuel=7.598 N=(1335.7,1335.7,1668.1,1668.1) travel=(0.0434,0.0434,0.0670,0.0670) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0821,0.0856) floor_impulse=(0.000,0.000) reach=0.002 setup_contact=0 backends=0xf rejected=0
+00:00:11.979 Default  Info    RUSTDIAG time=1.500 car=0 pos=(1194.113,535.772,33.798) speed=0.000 gear=0 rpm=3500.0 yaw=-0.0226 pitch=-0.0032 roll=0.0000 vf=-0.000 vl=0.000 fuel=7.598 N=(1335.7,1335.7,1668.1,1668.1) travel=(0.0434,0.0434,0.0670,0.0670) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0821,0.0856) floor_impulse=(0.000,0.000) reach=0.002 setup_contact=0 backends=0xf rejected=0
+00:00:12.080 Default  Info    RUSTDIAG time=1.750 car=0 pos=(1194.113,535.772,33.798) speed=0.000 gear=0 rpm=3500.0 yaw=-0.0226 pitch=-0.0032 roll=0.0000 vf=-0.000 vl=0.000 fuel=7.598 N=(1335.7,1335.7,1668.1,1668.1) travel=(0.0434,0.0434,0.0670,0.0670) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0821,0.0856) floor_impulse=(0.000,0.000) reach=0.002 setup_contact=0 backends=0xf rejected=0
+00:00:12.174 Default  Info    RUSTDIAG time=2.000 car=0 pos=(1194.113,535.772,33.798) speed=0.000 gear=0 rpm=3500.0 yaw=-0.0226 pitch=-0.0032 roll=0.0000 vf=-0.000 vl=0.000 fuel=7.597 N=(1335.7,1335.7,1668.1,1668.1) travel=(0.0434,0.0434,0.0670,0.0670) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0821,0.0856) floor_impulse=(0.000,0.000) reach=0.002 setup_contact=0 backends=0xf rejected=0
+00:00:12.220 Default  Info    Set.
+00:00:12.245 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=-0.000291 elapsed=0.020000 attached=1
+00:00:12.300 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=-0.002169 elapsed=0.020000 attached=1
+00:00:12.357 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=-0.003961 elapsed=0.020000 attached=1
+00:00:12.411 Default  Info    RUSTDIAG time=2.252 car=0 pos=(1194.113,535.772,33.798) speed=0.006 gear=0 rpm=5598.7 yaw=-0.0226 pitch=-0.0032 roll=0.0000 vf=-0.006 vl=0.000 fuel=7.596 N=(1336.9,1336.9,1666.8,1666.8) travel=(0.0435,0.0435,0.0670,0.0670) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0820,0.0856) floor_impulse=(0.000,0.000) reach=0.001 setup_contact=0 backends=0xf rejected=0
+00:00:12.462 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=-0.005644 elapsed=0.020000 attached=1
+00:00:12.493 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=-0.007408 elapsed=0.020000 attached=1
+00:00:12.541 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=-0.009126 elapsed=0.020000 attached=1
+00:00:13.018 Default  Info    Visual capture: D:/open-formula/implementation/reports/hud_tyres_compact/frame-030.png
+00:00:13.035 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=-0.010925 elapsed=0.020000 attached=1
+00:00:13.062 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=-0.012620 elapsed=0.020000 attached=1
+00:00:13.079 Default  Info    RUSTDIAG time=2.504 car=0 pos=(1194.110,535.772,33.798) speed=0.013 gear=0 rpm=11547.0 yaw=-0.0226 pitch=-0.0032 roll=0.0000 vf=-0.013 vl=0.000 fuel=7.591 N=(1336.7,1336.7,1667.0,1667.0) travel=(0.0435,0.0435,0.0670,0.0670) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0820,0.0856) floor_impulse=(0.000,0.000) reach=0.001 setup_contact=0 backends=0xf rejected=0
+00:00:13.137 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=-0.014329 elapsed=0.020000 attached=1
+00:00:13.164 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=-0.016027 elapsed=0.020000 attached=1
+00:00:13.186 Default  Info    Formula gear command: 1 (keyboard)
+00:00:13.204 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=-0.018300 elapsed=0.020000 attached=1
+00:00:13.230 Default  Info    RUSTDIAG time=2.756 car=0 pos=(1194.107,535.772,33.798) speed=0.057 gear=1 rpm=3863.2 yaw=-0.0226 pitch=-0.0034 roll=-0.0000 vf=0.057 vl=-0.000 fuel=7.585 N=(1148.3,1147.8,1843.3,1842.8) travel=(0.0431,0.0431,0.0673,0.0673) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0823,0.0855) floor_impulse=(0.000,0.000) reach=0.001 setup_contact=0 backends=0xf rejected=0
+00:00:13.275 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=0.088939 elapsed=0.020000 attached=1
+00:00:13.301 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=0.669502 elapsed=0.020000 attached=1
+00:00:13.324 Default  Info    Jacques Villeneuve got a Stop-and-Go penalty (jumped starting lights).
+00:00:13.347 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=1.289073 elapsed=0.020000 attached=1
+00:00:13.376 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=1.796845 elapsed=0.020000 attached=1
+00:00:13.404 Default  Info    Go.
+00:00:13.409 Default  Info    RUSTDIAG time=3.008 car=0 pos=(1194.429,535.764,33.797) speed=2.519 gear=1 rpm=3943.9 yaw=-0.0227 pitch=-0.0111 roll=-0.0000 vf=2.518 vl=-0.001 fuel=7.584 N=(1002.7,1000.9,2018.3,2017.8) travel=(0.0353,0.0353,0.0818,0.0818) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0883,0.0780) floor_impulse=(0.000,0.000) reach=0.001 setup_contact=0 backends=0xf rejected=0
+00:00:13.458 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=2.618282 elapsed=0.020000 attached=1
+00:00:13.487 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=3.155980 elapsed=0.020000 attached=1
+00:00:13.515 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=3.787531 elapsed=0.020000 attached=1
+00:00:13.546 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=4.317945 elapsed=0.020000 attached=1
+00:00:13.572 Default  Info    RUSTDIAG time=3.260 car=0 pos=(1195.362,535.742,33.795) speed=4.907 gear=1 rpm=3943.9 yaw=-0.0231 pitch=-0.0125 roll=-0.0000 vf=4.906 vl=-0.003 fuel=7.582 N=(977.1,971.8,2037.1,2036.2) travel=(0.0361,0.0361,0.0866,0.0866) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0871,0.0744) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:13.618 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=4.927146 elapsed=0.022000 attached=1
+00:00:13.646 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=5.521546 elapsed=0.020000 attached=1
+00:00:13.673 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=6.068092 elapsed=0.020000 attached=1
+00:00:13.704 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=6.660562 elapsed=0.020000 attached=1
+00:00:13.731 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=7.254824 elapsed=0.022000 attached=1
+00:00:13.750 Default  Info    RUSTDIAG time=3.512 car=0 pos=(1196.907,535.705,33.794) speed=7.330 gear=1 rpm=3943.9 yaw=-0.0235 pitch=-0.0131 roll=0.0000 vf=7.329 vl=0.001 fuel=7.580 N=(997.9,1010.6,1996.6,2001.5) travel=(0.0357,0.0357,0.0879,0.0880) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0874,0.0735) floor_impulse=(0.000,0.000) reach=0.003 setup_contact=0 backends=0xf rejected=0
+00:00:13.821 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=7.806695 elapsed=0.020000 attached=1
+00:00:13.847 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=8.292665 elapsed=0.020000 attached=1
+00:00:13.877 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=8.737621 elapsed=0.020000 attached=1
+00:00:13.908 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=9.213796 elapsed=0.020000 attached=1
+00:00:13.932 Default  Info    RUSTDIAG time=3.764 car=0 pos=(1199.021,535.661,33.794) speed=9.380 gear=1 rpm=4649.1 yaw=-0.0211 pitch=-0.0118 roll=0.0001 vf=9.379 vl=0.018 fuel=7.579 N=(1019.2,1060.2,1960.1,1968.1) travel=(0.0373,0.0375,0.0859,0.0860) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0860,0.0744) floor_impulse=(0.000,0.000) reach=0.008 setup_contact=0 backends=0xf rejected=0
+00:00:13.987 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=9.711084 elapsed=0.020000 attached=1
+00:00:14.020 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=10.204028 elapsed=0.020000 attached=1
+00:00:14.081 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=10.709179 elapsed=0.020000 attached=1
+00:00:14.143 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=11.241837 elapsed=0.020000 attached=1
+00:00:14.173 Default  Info    RUSTDIAG time=4.016 car=0 pos=(1201.653,535.621,33.795) speed=11.537 gear=1 rpm=5759.6 yaw=-0.0158 pitch=-0.0121 roll=0.0001 vf=11.536 vl=0.025 fuel=7.576 N=(973.8,1030.6,1994.5,2003.5) travel=(0.0361,0.0364,0.0856,0.0858) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0870,0.0749) floor_impulse=(0.000,0.000) reach=0.009 setup_contact=0 backends=0xf rejected=0
+00:00:14.232 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=11.816558 elapsed=0.020000 attached=1
+00:00:14.268 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=12.390858 elapsed=0.020000 attached=1
+00:00:14.325 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=12.984261 elapsed=0.020000 attached=1
+00:00:14.387 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=13.599360 elapsed=0.020000 attached=1
+00:00:14.425 Default  Info    RUSTDIAG time=4.268 car=0 pos=(1204.870,535.588,33.794) speed=14.045 gear=1 rpm=7078.9 yaw=-0.0101 pitch=-0.0136 roll=0.0001 vf=14.043 vl=0.021 fuel=7.573 N=(931.4,987.1,2056.3,2064.8) travel=(0.0350,0.0352,0.0887,0.0889) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0878,0.0731) floor_impulse=(0.000,0.000) reach=0.007 setup_contact=0 backends=0xf rejected=0
+00:00:14.491 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=14.236974 elapsed=0.020000 attached=1
+00:00:14.524 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=14.897189 elapsed=0.020000 attached=1
+00:00:14.567 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=15.580063 elapsed=0.020000 attached=1
+00:00:14.625 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=16.283304 elapsed=0.020000 attached=1
+00:00:14.680 Default  Info    RUSTDIAG time=4.520 car=0 pos=(1208.768,535.564,33.793) speed=16.934 gear=1 rpm=8623.3 yaw=-0.0059 pitch=-0.0159 roll=0.0001 vf=16.932 vl=0.011 fuel=7.568 N=(905.7,938.1,2126.6,2130.9) travel=(0.0340,0.0341,0.0941,0.0943) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0884,0.0698) floor_impulse=(0.000,0.000) reach=0.004 setup_contact=0 backends=0xf rejected=0
+00:00:14.729 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=17.004793 elapsed=0.020000 attached=1
+00:00:14.761 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=17.744585 elapsed=0.020000 attached=1
+00:00:14.803 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=18.503220 elapsed=0.020000 attached=1
+00:00:14.868 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=19.279247 elapsed=0.020000 attached=1
+00:00:14.924 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=20.071362 elapsed=0.020000 attached=1
+00:00:14.946 Default  Info    RUSTDIAG time=4.772 car=0 pos=(1213.438,535.544,33.790) speed=20.155 gear=1 rpm=10368.9 yaw=-0.0042 pitch=-0.0185 roll=0.0000 vf=20.151 vl=0.003 fuel=7.562 N=(900.9,911.5,2201.2,2202.7) travel=(0.0335,0.0335,0.1014,0.1015) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0883,0.0650) floor_impulse=(0.000,0.000) reach=0.002 setup_contact=0 backends=0xf rejected=0
+00:00:15.004 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=20.879181 elapsed=0.020000 attached=1
+00:00:15.048 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=21.702051 elapsed=0.020000 attached=1
+00:00:15.105 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=22.538157 elapsed=0.020000 attached=1
+00:00:15.167 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=23.414799 elapsed=0.022000 attached=1
+00:00:15.190 Default  Info    RUSTDIAG time=5.024 car=0 pos=(1218.955,535.525,33.786) speed=23.649 gear=1 rpm=12269.4 yaw=-0.0027 pitch=-0.0221 roll=0.0001 vf=23.643 vl=0.003 fuel=7.553 N=(892.4,950.5,2283.8,2291.3) travel=(0.0336,0.0338,0.1116,0.1119) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0872,0.0578) floor_impulse=(0.000,0.000) reach=0.004 setup_contact=0 backends=0xf rejected=0
+00:00:15.665 Default  Info    Visual capture: D:/open-formula/implementation/reports/hud_tyres_compact/frame-120.png
+00:00:15.688 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=24.360447 elapsed=0.022000 attached=1
+00:00:15.716 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=25.315102 elapsed=0.022000 attached=1
+00:00:15.743 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=26.291689 elapsed=0.022000 attached=1
+00:00:15.771 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=27.254436 elapsed=0.022000 attached=1
+00:00:15.789 Default  Info    RUSTDIAG time=5.276 car=0 pos=(1225.379,535.521,33.780) speed=27.320 gear=1 rpm=14103.1 yaw=0.0006 pitch=-0.0237 roll=0.0001 vf=27.311 vl=0.002 fuel=7.544 N=(977.9,1028.4,2349.4,2366.3) travel=(0.0355,0.0357,0.1208,0.1210) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0847,0.0508) floor_impulse=(0.000,0.000) reach=0.004 setup_contact=0 backends=0xf rejected=0
+00:00:15.846 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=28.186365 elapsed=0.022000 attached=1
+00:00:15.875 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=29.099850 elapsed=0.022000 attached=1
+00:00:15.900 Default  Info    Formula gear command: 2 (keyboard)
+00:00:15.910 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=29.975279 elapsed=0.022000 attached=1
+00:00:15.940 Default  Info    RUSTDIAG time=5.528 car=0 pos=(1232.692,535.536,33.769) speed=30.072 gear=1 rpm=15211.8 yaw=0.0028 pitch=-0.0191 roll=0.0005 vf=30.065 vl=0.002 fuel=7.537 N=(1666.8,1721.4,1878.2,1879.1) travel=(0.0439,0.0441,0.1170,0.1173) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0777,0.0508) floor_impulse=(0.000,0.000) reach=0.003 setup_contact=0 backends=0xf rejected=0
+00:00:15.985 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=30.034237 elapsed=0.022000 attached=1
+00:00:16.012 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=30.320757 elapsed=0.022000 attached=1
+00:00:16.040 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=31.146229 elapsed=0.022000 attached=1
+00:00:16.069 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=32.035603 elapsed=0.022000 attached=1
+00:00:16.095 Default  Info    RUSTDIAG time=5.780 car=0 pos=(1240.522,535.571,33.754) speed=32.666 gear=2 rpm=12859.2 yaw=0.0060 pitch=-0.0218 roll=0.0005 vf=32.656 vl=-0.004 fuel=7.528 N=(1140.7,1211.9,2560.4,2587.6) travel=(0.0390,0.0393,0.1233,0.1236) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0813,0.0480) floor_impulse=(0.000,0.000) reach=0.004 setup_contact=0 backends=0xf rejected=0
+00:00:16.147 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=32.920601 elapsed=0.022000 attached=1
+00:00:16.176 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=33.775986 elapsed=0.022000 attached=1
+00:00:16.203 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=34.623051 elapsed=0.022000 attached=1
+00:00:16.236 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=35.453964 elapsed=0.022000 attached=1
+00:00:16.258 Default  Info    RUSTDIAG time=6.032 car=0 pos=(1249.167,535.625,33.732) speed=35.879 gear=2 rpm=14064.6 yaw=0.0054 pitch=-0.0208 roll=-0.0000 vf=35.869 vl=0.006 fuel=7.518 N=(1281.0,1230.9,2587.6,2553.8) travel=(0.0417,0.0416,0.1240,0.1240) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0786,0.0463) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:16.308 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=36.258099 elapsed=0.022000 attached=1
+00:00:16.342 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=37.038822 elapsed=0.022000 attached=1
+00:00:16.375 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=37.833027 elapsed=0.022000 attached=1
+00:00:16.422 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=38.601189 elapsed=0.022000 attached=1
+00:00:16.447 Default  Info    RUSTDIAG time=6.284 car=0 pos=(1258.591,535.655,33.694) speed=38.858 gear=2 rpm=15131.7 yaw=0.0005 pitch=-0.0189 roll=-0.0003 vf=38.848 vl=0.015 fuel=7.508 N=(1536.2,1411.1,2784.9,2722.2) travel=(0.0459,0.0455,0.1262,0.1257) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0751,0.0443) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:16.509 Default  Info    Formula gear command: 3 (keyboard)
+00:00:16.532 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=39.153297 elapsed=0.022000 attached=1
+00:00:16.598 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=39.350082 elapsed=0.022000 attached=1
+00:00:16.664 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=40.092350 elapsed=0.022000 attached=1
+00:00:16.693 Default  Info    RUSTDIAG time=6.536 car=0 pos=(1268.535,535.636,33.646) speed=40.466 gear=3 rpm=12551.7 yaw=-0.0037 pitch=-0.0178 roll=-0.0001 vf=40.456 vl=0.004 fuel=7.502 N=(1569.6,1518.8,2939.6,2914.7) travel=(0.0471,0.0469,0.1277,0.1275) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0737,0.0427) floor_impulse=(0.000,0.000) reach=0.001 setup_contact=0 backends=0xf rejected=0
+00:00:16.748 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=40.817661 elapsed=0.022000 attached=1
+00:00:16.796 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=41.509308 elapsed=0.022000 attached=1
+00:00:16.863 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=42.215523 elapsed=0.022000 attached=1
+00:00:16.930 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=42.912296 elapsed=0.022000 attached=1
+00:00:16.954 Default  Info    RUSTDIAG time=6.788 car=0 pos=(1279.072,535.593,33.588) speed=43.135 gear=3 rpm=13406.6 yaw=-0.0040 pitch=-0.0160 roll=0.0001 vf=43.125 vl=-0.005 fuel=7.493 N=(1527.6,1557.0,2797.3,2812.4) travel=(0.0473,0.0474,0.1259,0.1260) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0735,0.0437) floor_impulse=(0.000,0.000) reach=0.003 setup_contact=0 backends=0xf rejected=0
+00:00:17.011 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=43.614761 elapsed=0.022000 attached=1
+00:00:17.060 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=44.299915 elapsed=0.022000 attached=1
+00:00:17.123 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=44.965683 elapsed=0.022000 attached=1
+00:00:17.190 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=45.620262 elapsed=0.022000 attached=1
+00:00:17.214 Default  Info    RUSTDIAG time=7.040 car=0 pos=(1290.274,535.561,33.515) speed=45.709 gear=3 rpm=14167.1 yaw=-0.0015 pitch=-0.0149 roll=0.0001 vf=45.699 vl=-0.007 fuel=7.483 N=(1630.2,1680.6,2901.2,2929.3) travel=(0.0492,0.0494,0.1271,0.1273) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0716,0.0421) floor_impulse=(0.000,0.000) reach=0.003 setup_contact=0 backends=0xf rejected=0
+00:00:17.275 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=46.262566 elapsed=0.022000 attached=1
+00:00:17.325 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=46.900269 elapsed=0.022000 attached=1
+00:00:17.396 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=47.517582 elapsed=0.022000 attached=1
+00:00:17.454 Default  Info    RUSTDIAG time=7.292 car=0 pos=(1302.100,535.555,33.428) speed=48.097 gear=3 rpm=14880.6 yaw=0.0004 pitch=-0.0140 roll=0.0001 vf=48.087 vl=-0.006 fuel=7.473 N=(1731.6,1763.0,2978.6,2997.7) travel=(0.0512,0.0513,0.1280,0.1281) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0697,0.0408) floor_impulse=(0.000,0.000) reach=0.002 setup_contact=0 backends=0xf rejected=0
+00:00:17.500 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=48.123226 elapsed=0.022000 attached=1
+00:00:17.533 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=48.718704 elapsed=0.022000 attached=1
+00:00:17.572 Default  Info    Formula gear command: 4 (keyboard)
+00:00:17.586 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=49.288548 elapsed=0.022000 attached=1
+00:00:17.656 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=49.127956 elapsed=0.022000 attached=1
+00:00:17.704 Default  Info    RUSTDIAG time=7.544 car=0 pos=(1314.435,535.564,33.327) speed=49.307 gear=4 rpm=12475.4 yaw=0.0010 pitch=-0.0109 roll=0.0002 vf=49.300 vl=-0.000 fuel=7.466 N=(1833.6,1834.8,2984.2,2988.1) travel=(0.0570,0.0570,0.1267,0.1267) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0644,0.0402) floor_impulse=(0.000,0.000) reach=0.002 setup_contact=0 backends=0xf rejected=0
+00:00:17.755 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=49.436703 elapsed=0.022000 attached=1
+00:00:17.785 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=50.009689 elapsed=0.022000 attached=1
+00:00:17.855 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=50.503307 elapsed=0.022000 attached=1
+00:00:17.920 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=50.923580 elapsed=0.022000 attached=1
+00:00:17.958 Default  Info    RUSTDIAG time=7.796 car=0 pos=(1327.115,535.574,33.219) speed=51.145 gear=4 rpm=12788.9 yaw=0.0004 pitch=-0.0120 roll=0.0000 vf=51.136 vl=0.004 fuel=7.458 N=(1438.9,2060.5,2988.2,3109.1) travel=(0.0552,0.0551,0.1287,0.1286) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0661,0.0394) floor_impulse=(0.000,0.000) reach=0.002 setup_contact=0 backends=0xf rejected=0
+00:00:18.012 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=51.280777 elapsed=0.022000 attached=1
+00:00:18.048 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=51.591606 elapsed=0.022000 attached=1
+00:00:18.118 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=51.850029 elapsed=0.022000 attached=1
+00:00:18.181 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=52.072544 elapsed=0.022000 attached=1
+00:00:18.209 Default  Info    RUSTDIAG time=8.048 car=0 pos=(1340.146,535.576,33.102) speed=52.160 gear=4 rpm=12973.0 yaw=-0.0001 pitch=-0.0106 roll=0.0001 vf=52.152 vl=0.003 fuel=7.452 N=(2105.5,1911.3,3030.9,3015.6) travel=(0.0572,0.0571,0.1283,0.1283) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0643,0.0391) floor_impulse=(0.000,0.000) reach=0.001 setup_contact=0 backends=0xf rejected=0
+00:00:18.265 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=52.266285 elapsed=0.022000 attached=1
+00:00:18.313 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=52.431221 elapsed=0.022000 attached=1
+00:00:18.381 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=52.567734 elapsed=0.022000 attached=1
+00:00:18.446 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=52.687241 elapsed=0.022000 attached=1
+00:00:18.468 Default  Info    RUSTDIAG time=8.298 car=0 pos=(1353.263,535.551,32.980) speed=52.715 gear=4 rpm=13074.5 yaw=-0.0057 pitch=-0.0099 roll=-0.0004 vf=52.707 vl=0.058 fuel=7.448 N=(2302.2,2083.4,3067.0,2945.8) travel=(0.0585,0.0577,0.1285,0.1277) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0635,0.0389) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:18.527 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=52.790733 elapsed=0.022000 attached=1
+00:00:18.578 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=52.877918 elapsed=0.022000 attached=1
+00:00:18.640 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=52.951221 elapsed=0.022000 attached=1
+00:00:18.705 Default  Info    RUSTDIAG time=8.548 car=0 pos=(1366.484,535.443,32.855) speed=53.021 gear=4 rpm=13130.5 yaw=-0.0113 pitch=-0.0096 roll=-0.0003 vf=53.014 vl=0.036 fuel=7.444 N=(2345.9,2226.7,3028.3,2965.9) travel=(0.0589,0.0584,0.1282,0.1278) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0630,0.0388) floor_impulse=(0.000,0.000) reach=0.001 setup_contact=0 backends=0xf rejected=0
+00:00:18.755 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.015278 elapsed=0.022000 attached=1
+00:00:18.787 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.069798 elapsed=0.022000 attached=1
+00:00:18.844 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.116611 elapsed=0.022000 attached=1
+00:00:18.909 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.156712 elapsed=0.022000 attached=1
+00:00:18.958 Default  Info    RUSTDIAG time=8.798 car=0 pos=(1379.761,535.292,32.731) speed=53.189 gear=4 rpm=13161.3 yaw=-0.0106 pitch=-0.0096 roll=0.0002 vf=53.182 vl=-0.021 fuel=7.441 N=(2228.1,2307.8,2974.5,3015.8) travel=(0.0588,0.0591,0.1278,0.1281) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0628,0.0388) floor_impulse=(0.000,0.000) reach=0.003 setup_contact=0 backends=0xf rejected=0
+00:00:19.010 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.190029 elapsed=0.022000 attached=1
+00:00:19.043 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.216866 elapsed=0.022000 attached=1
+00:00:19.106 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.244476 elapsed=0.022000 attached=1
+00:00:19.172 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.265995 elapsed=0.022000 attached=1
+00:00:19.208 Default  Info    RUSTDIAG time=9.048 car=0 pos=(1393.071,535.172,32.610) speed=53.282 gear=4 rpm=13178.7 yaw=-0.0067 pitch=-0.0098 roll=0.0003 vf=53.274 vl=-0.029 fuel=7.439 N=(2230.4,2344.4,2968.3,3032.6) travel=(0.0590,0.0594,0.1278,0.1281) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0626,0.0387) floor_impulse=(0.000,0.000) reach=0.003 setup_contact=0 backends=0xf rejected=0
+00:00:19.262 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.281742 elapsed=0.022000 attached=1
+00:00:19.304 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.294495 elapsed=0.022000 attached=1
+00:00:19.367 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.313217 elapsed=0.022000 attached=1
+00:00:19.437 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.323605 elapsed=0.022000 attached=1
+00:00:19.461 Default  Info    RUSTDIAG time=9.298 car=0 pos=(1406.398,535.096,32.493) speed=53.332 gear=4 rpm=13187.8 yaw=-0.0048 pitch=-0.0102 roll=0.0001 vf=53.325 vl=-0.006 fuel=7.436 N=(2295.3,2315.7,3002.8,3012.6) travel=(0.0593,0.0594,0.1279,0.1280) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0625,0.0387) floor_impulse=(0.000,0.000) reach=0.001 setup_contact=0 backends=0xf rejected=0
+00:00:19.515 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.329346 elapsed=0.022000 attached=1
+00:00:19.570 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.336815 elapsed=0.022000 attached=1
+00:00:19.632 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.348713 elapsed=0.022000 attached=1
+00:00:19.702 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.349869 elapsed=0.022000 attached=1
+00:00:19.725 Default  Info    RUSTDIAG time=9.548 car=0 pos=(1419.734,535.029,32.385) speed=53.359 gear=4 rpm=13194.9 yaw=-0.0054 pitch=-0.0109 roll=-0.0002 vf=53.351 vl=0.006 fuel=7.433 N=(2318.6,2299.9,3022.9,3013.7) travel=(0.0596,0.0595,0.1281,0.1281) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0622,0.0386) floor_impulse=(0.000,0.000) reach=0.002 setup_contact=0 backends=0xf rejected=0
+00:00:19.784 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.351784 elapsed=0.022000 attached=1
+00:00:19.832 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.361282 elapsed=0.022000 attached=1
+00:00:19.895 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.368034 elapsed=0.022000 attached=1
+00:00:19.957 Default  Info    RUSTDIAG time=9.798 car=0 pos=(1433.076,534.951,32.284) speed=53.376 gear=4 rpm=13194.4 yaw=-0.0063 pitch=-0.0112 roll=-0.0000 vf=53.368 vl=0.004 fuel=7.430 N=(2280.0,2268.3,2994.7,2988.6) travel=(0.0592,0.0591,0.1279,0.1278) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0626,0.0388) floor_impulse=(0.000,0.000) reach=0.002 setup_contact=0 backends=0xf rejected=0
+00:00:20.006 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.367500 elapsed=0.022000 attached=1
+00:00:20.037 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.368031 elapsed=0.022000 attached=1
+00:00:20.093 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.378288 elapsed=0.022000 attached=1
+00:00:20.159 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.377674 elapsed=0.022000 attached=1
+00:00:20.206 Default  Info    RUSTDIAG time=10.048 car=0 pos=(1446.422,534.867,32.176) speed=53.382 gear=4 rpm=13195.9 yaw=-0.0062 pitch=-0.0101 roll=0.0002 vf=53.374 vl=-0.005 fuel=7.428 N=(2241.1,2249.5,2970.5,2975.3) travel=(0.0585,0.0586,0.1278,0.1279) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0630,0.0385) floor_impulse=(0.000,0.000) reach=0.002 setup_contact=0 backends=0xf rejected=0
+00:00:20.258 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.376575 elapsed=0.022000 attached=1
+00:00:20.294 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.379608 elapsed=0.022000 attached=1
+00:00:20.358 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.384068 elapsed=0.022000 attached=1
+00:00:20.426 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.388515 elapsed=0.022000 attached=1
+00:00:20.458 Default  Info    RUSTDIAG time=10.298 car=0 pos=(1459.769,534.784,32.047) speed=53.392 gear=4 rpm=13190.9 yaw=-0.0060 pitch=-0.0082 roll=0.0002 vf=53.385 vl=-0.005 fuel=7.425 N=(2244.2,2259.4,2955.5,2963.4) travel=(0.0585,0.0585,0.1274,0.1275) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0632,0.0393) floor_impulse=(0.000,0.000) reach=0.002 setup_contact=0 backends=0xf rejected=0
+00:00:20.527 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.381863 elapsed=0.022000 attached=1
+00:00:20.558 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.383049 elapsed=0.022000 attached=1
+00:00:20.622 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.388443 elapsed=0.022000 attached=1
+00:00:20.686 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.387108 elapsed=0.022000 attached=1
+00:00:20.710 Default  Info    RUSTDIAG time=10.548 car=0 pos=(1473.117,534.704,31.898) speed=53.396 gear=4 rpm=13194.7 yaw=-0.0059 pitch=-0.0071 roll=0.0001 vf=53.390 vl=-0.000 fuel=7.423 N=(2166.4,2301.8,2926.6,2957.4) travel=(0.0590,0.0592,0.1275,0.1274) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0627,0.0391) floor_impulse=(0.000,0.000) reach=0.002 setup_contact=0 backends=0xf rejected=0
+00:00:20.768 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.390991 elapsed=0.022000 attached=1
+00:00:20.822 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.393593 elapsed=0.022000 attached=1
+00:00:20.889 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.394295 elapsed=0.022000 attached=1
+00:00:20.954 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.391338 elapsed=0.022000 attached=1
+00:00:20.970 Default  Info    RUSTDIAG time=10.798 car=0 pos=(1486.466,534.619,31.738) speed=53.397 gear=4 rpm=13200.5 yaw=-0.0053 pitch=-0.0065 roll=0.0003 vf=53.391 vl=-0.030 fuel=7.420 N=(2233.2,2325.2,2978.8,3012.0) travel=(0.0590,0.0595,0.1277,0.1282) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0625,0.0387) floor_impulse=(0.000,0.000) reach=0.002 setup_contact=0 backends=0xf rejected=0
+00:00:21.030 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.392582 elapsed=0.022000 attached=1
+00:00:21.086 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.395470 elapsed=0.022000 attached=1
+00:00:21.148 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.394493 elapsed=0.022000 attached=1
+00:00:21.208 Default  Info    RUSTDIAG time=11.048 car=0 pos=(1499.816,534.548,31.572) speed=53.402 gear=4 rpm=13200.6 yaw=-0.0054 pitch=-0.0063 roll=-0.0000 vf=53.396 vl=0.003 fuel=7.418 N=(2272.4,2262.8,2986.5,2977.0) travel=(0.0593,0.0592,0.1279,0.1278) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0625,0.0387) floor_impulse=(0.000,0.000) reach=0.002 setup_contact=0 backends=0xf rejected=0
+00:00:21.261 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.396336 elapsed=0.020000 attached=1
+00:00:21.292 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.395870 elapsed=0.020000 attached=1
+00:00:21.333 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.396774 elapsed=0.020000 attached=1
+00:00:21.389 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.396912 elapsed=0.020000 attached=1
+00:00:21.455 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.396999 elapsed=0.020000 attached=1
+00:00:21.472 Default  Info    RUSTDIAG time=11.298 car=0 pos=(1513.166,534.474,31.407) speed=53.403 gear=4 rpm=13202.5 yaw=-0.0054 pitch=-0.0065 roll=0.0001 vf=53.397 vl=-0.008 fuel=7.415 N=(2247.0,2291.4,2969.8,3002.5) travel=(0.0593,0.0594,0.1279,0.1281) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0624,0.0386) floor_impulse=(0.000,0.000) reach=0.003 setup_contact=0 backends=0xf rejected=0
+00:00:21.531 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.397495 elapsed=0.020000 attached=1
+00:00:21.571 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.394051 elapsed=0.020000 attached=1
+00:00:21.631 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.395897 elapsed=0.020000 attached=1
+00:00:21.696 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.396606 elapsed=0.020000 attached=1
+00:00:21.720 Default  Info    RUSTDIAG time=11.548 car=0 pos=(1526.516,534.438,31.248) speed=53.403 gear=4 rpm=13202.7 yaw=0.0011 pitch=-0.0071 roll=0.0004 vf=53.397 vl=-0.048 fuel=7.412 N=(2186.8,2352.9,2943.0,3030.9) travel=(0.0591,0.0597,0.1277,0.1283) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0623,0.0386) floor_impulse=(0.000,0.000) reach=0.003 setup_contact=0 backends=0xf rejected=0
+00:00:21.777 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.396832 elapsed=0.020000 attached=1
+00:00:21.810 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.394444 elapsed=0.020000 attached=1
+00:00:21.872 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.396080 elapsed=0.020000 attached=1
+00:00:21.931 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.408726 elapsed=0.020000 attached=1
+00:00:21.957 Default  Info    RUSTDIAG time=11.798 car=0 pos=(1539.868,534.464,31.091) speed=53.421 gear=4 rpm=13178.9 yaw=0.0020 pitch=-0.0052 roll=-0.0001 vf=53.416 vl=0.018 fuel=7.410 N=(2159.5,2082.8,2752.8,2715.7) travel=(0.0579,0.0577,0.1258,0.1256) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0639,0.0406) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:22.014 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.413166 elapsed=0.020000 attached=1
+00:00:22.050 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.389347 elapsed=0.020000 attached=1
+00:00:22.113 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.389435 elapsed=0.020000 attached=1
+00:00:22.169 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.399204 elapsed=0.020000 attached=1
+00:00:22.206 Default  Info    RUSTDIAG time=12.048 car=0 pos=(1553.219,534.441,30.912) speed=53.403 gear=4 rpm=13198.6 yaw=-0.0100 pitch=-0.0054 roll=-0.0013 vf=53.398 vl=0.140 fuel=7.407 N=(2515.7,1995.0,3098.5,2830.2) travel=(0.0601,0.0583,0.1285,0.1268) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0626,0.0389) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:22.261 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.396679 elapsed=0.020000 attached=1
+00:00:22.293 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.393856 elapsed=0.020000 attached=1
+00:00:22.348 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.393520 elapsed=0.020000 attached=1
+00:00:22.410 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.393318 elapsed=0.020000 attached=1
+00:00:22.455 Default  Info    RUSTDIAG time=12.298 car=0 pos=(1566.566,534.202,30.733) speed=53.398 gear=4 rpm=13201.4 yaw=-0.0304 pitch=-0.0054 roll=-0.0018 vf=53.393 vl=0.168 fuel=7.405 N=(2575.7,1962.1,3138.3,2797.6) travel=(0.0603,0.0581,0.1289,0.1268) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0625,0.0387) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:22.508 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.392887 elapsed=0.020000 attached=1
+00:00:22.538 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.392033 elapsed=0.020000 attached=1
+00:00:22.592 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.391041 elapsed=0.020000 attached=1
+00:00:22.655 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.390022 elapsed=0.020000 attached=1
+00:00:22.709 Default  Info    RUSTDIAG time=12.548 car=0 pos=(1579.905,533.685,30.555) speed=53.394 gear=4 rpm=13201.3 yaw=-0.0532 pitch=-0.0054 roll=-0.0024 vf=53.389 vl=0.208 fuel=7.402 N=(2641.1,1899.3,3182.8,2787.4) travel=(0.0606,0.0579,0.1291,0.1265) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0624,0.0387) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:22.756 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.389076 elapsed=0.020000 attached=1
+00:00:22.786 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.388809 elapsed=0.020000 attached=1
+00:00:22.833 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.389973 elapsed=0.020000 attached=1
+00:00:22.890 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.388691 elapsed=0.020000 attached=1
+00:00:22.951 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.429749 elapsed=0.020000 attached=1
+00:00:22.972 Default  Info    RUSTDIAG time=12.798 car=0 pos=(1593.231,532.886,30.367) speed=53.436 gear=4 rpm=13163.2 yaw=-0.0676 pitch=0.0015 roll=-0.0020 vf=53.437 vl=0.082 fuel=7.400 N=(1867.5,1771.9,2576.1,2391.2) travel=(0.0530,0.0526,0.1248,0.1232) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0679,0.0373) floor_impulse=(0.000,0.000) reach=0.001 setup_contact=0 backends=0xf rejected=0
+00:00:23.030 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.376930 elapsed=0.020000 attached=1
+00:00:23.071 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.273514 elapsed=0.020000 attached=1
+00:00:23.133 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.355072 elapsed=0.020000 attached=1
+00:00:23.190 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.443615 elapsed=0.020000 attached=1
+00:00:23.212 Default  Info    RUSTDIAG time=13.048 car=0 pos=(1606.538,531.991,30.128) speed=53.438 gear=4 rpm=13178.6 yaw=-0.0694 pitch=-0.0045 roll=-0.0120 vf=53.433 vl=0.072 fuel=7.397 N=(2437.2,2169.5,4364.1,3240.5) travel=(0.0589,0.0576,0.1253,0.1241) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0637,0.0420) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:23.276 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.342499 elapsed=0.020000 attached=1
+00:00:23.312 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.415489 elapsed=0.020000 attached=1
+00:00:23.373 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.401012 elapsed=0.020000 attached=1
+00:00:23.430 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=53.365917 elapsed=0.020000 attached=1
+00:00:23.459 Default  Info    RUSTDIAG time=13.298 car=0 pos=(1619.842,530.926,29.912) speed=53.164 gear=4 rpm=12949.3 yaw=-0.1023 pitch=-0.0013 roll=-0.0161 vf=53.162 vl=0.409 fuel=7.395 N=(3164.4,1810.8,2868.0,2167.2) travel=(0.0624,0.0576,0.1274,0.1230) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0621,0.0402) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:23.516 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=52.691624 elapsed=0.020000 attached=1
+00:00:23.550 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=51.760376 elapsed=0.020000 attached=1
+00:00:23.614 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=50.811909 elapsed=0.020000 attached=1
+00:00:23.670 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=49.957420 elapsed=0.020000 attached=1
+00:00:23.707 Default  Info    RUSTDIAG time=13.548 car=0 pos=(1632.556,529.272,29.661) speed=49.449 gear=4 rpm=11950.4 yaw=-0.2095 pitch=0.0093 roll=-0.0269 vf=49.425 vl=1.788 fuel=7.395 N=(5573.4,123.0,3111.0,1644.5) travel=(0.0706,0.0535,0.1244,0.1069) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0613,0.0457) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:23.760 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=49.173130 elapsed=0.020000 attached=1
+00:00:23.794 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=48.651531 elapsed=0.020000 attached=1
+00:00:23.852 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=48.488819 elapsed=0.020000 attached=1
+00:00:23.909 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=48.451046 elapsed=0.020000 attached=1
+00:00:23.954 Default  Info    RUSTDIAG time=13.798 car=0 pos=(1644.369,526.357,29.359) speed=48.613 gear=4 rpm=12187.6 yaw=-0.3399 pitch=0.0070 roll=-0.0423 vf=48.586 vl=1.878 fuel=7.392 N=(3275.9,0.0,4225.8,1524.4) travel=(0.0592,0.0461,0.1314,0.0967) contact=(1,0,1,1) rays=12/12 floor=2/2 clearance=(0.0789,0.0532) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:24.005 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=48.625252 elapsed=0.020000 attached=1
+00:00:24.037 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=48.907135 elapsed=0.020000 attached=1
+00:00:24.091 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=49.327675 elapsed=0.020000 attached=1
+00:00:24.151 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=49.650951 elapsed=0.020000 attached=1
+00:00:24.205 Default  Info    RUSTDIAG time=14.048 car=0 pos=(1655.981,522.288,28.923) speed=49.602 gear=4 rpm=12355.6 yaw=-0.3623 pitch=0.0225 roll=-0.0187 vf=49.632 vl=0.451 fuel=7.386 N=(6022.3,1174.3,3300.7,2076.5) travel=(0.0566,0.0548,0.1233,0.1214) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0668,0.0437) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:24.255 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=49.660767 elapsed=0.020000 attached=1
+00:00:24.286 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=49.753262 elapsed=0.020000 attached=1
+00:00:24.334 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=49.703247 elapsed=0.020000 attached=1
+00:00:24.389 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=49.504242 elapsed=0.020000 attached=1
+00:00:24.451 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=49.200932 elapsed=0.020000 attached=1
+00:00:24.472 Default  Info    RUSTDIAG time=14.298 car=0 pos=(1667.560,517.878,28.392) speed=49.142 gear=4 rpm=12211.8 yaw=-0.3772 pitch=0.0212 roll=-0.0102 vf=49.177 vl=0.225 fuel=7.385 N=(417.7,2467.2,2622.6,4861.8) travel=(0.0649,0.0540,0.1324,0.1365) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0582,0.0319) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:24.529 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=49.217224 elapsed=0.020000 attached=1
+00:00:24.569 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=48.783348 elapsed=0.020000 attached=1
+00:00:24.630 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=47.895206 elapsed=0.020000 attached=1
+00:00:24.693 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=46.884071 elapsed=0.020000 attached=1
+00:00:24.715 Default  Info    RUSTDIAG time=14.548 car=0 pos=(1678.707,513.227,27.811) speed=46.663 gear=4 rpm=11418.6 yaw=-0.4490 pitch=0.0257 roll=-0.0061 vf=46.690 vl=1.166 fuel=7.384 N=(3189.5,0.0,4541.5,2684.0) travel=(0.0671,0.0579,0.1378,0.1300) contact=(1,0,1,1) rays=12/12 floor=2/2 clearance=(0.0603,0.0283) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:24.772 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=45.961060 elapsed=0.020000 attached=1
+00:00:24.813 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=45.178387 elapsed=0.020000 attached=1
+00:00:24.872 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=44.402561 elapsed=0.020000 attached=1
+00:00:24.931 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=43.464909 elapsed=0.020000 attached=1
+00:00:24.957 Default  Info    RUSTDIAG time=14.798 car=0 pos=(1688.614,507.996,27.310) speed=43.046 gear=4 rpm=10486.8 yaw=-0.5811 pitch=0.0313 roll=0.0007 vf=43.059 vl=1.317 fuel=7.383 N=(5307.4,1059.4,4089.5,0.0) travel=(0.0837,0.0626,0.1343,0.1191) contact=(1,1,1,0) rays=12/12 floor=2/2 clearance=(0.0526,0.0440) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:25.012 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=42.548214 elapsed=0.020000 attached=1
+00:00:25.054 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=41.705742 elapsed=0.020000 attached=1
+00:00:25.108 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=40.975517 elapsed=0.020000 attached=1
+00:00:25.174 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=40.041046 elapsed=0.020000 attached=1
+00:00:25.207 Default  Info    RUSTDIAG time=15.048 car=0 pos=(1696.866,501.815,26.934) speed=39.617 gear=4 rpm=9545.4 yaw=-0.7903 pitch=0.0194 roll=-0.0068 vf=39.563 vl=2.362 fuel=7.383 N=(5907.0,0.0,3621.0,1217.0) travel=(0.0741,0.0549,0.1292,0.1007) contact=(1,0,1,1) rays=12/12 floor=2/2 clearance=(0.0640,0.0484) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:25.262 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=39.234734 elapsed=0.020000 attached=1
+00:00:25.293 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=38.475170 elapsed=0.020000 attached=1
+00:00:25.356 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=37.753036 elapsed=0.020000 attached=1
+00:00:25.414 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=36.854309 elapsed=0.020000 attached=1
+00:00:25.456 Default  Info    RUSTDIAG time=15.298 car=0 pos=(1703.283,494.841,26.644) speed=36.249 gear=4 rpm=8745.2 yaw=-0.9909 pitch=0.0132 roll=-0.0227 vf=36.148 vl=2.830 fuel=7.383 N=(3994.4,0.0,3927.9,0.0) travel=(0.0765,0.0559,0.1316,0.0907) contact=(1,0,1,0) rays=12/12 floor=2/2 clearance=(0.0666,0.0543) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:25.508 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=35.969513 elapsed=0.020000 attached=1
+00:00:25.541 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=35.224701 elapsed=0.020000 attached=1
+00:00:25.589 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=34.432518 elapsed=0.020000 attached=1
+00:00:25.651 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=33.647121 elapsed=0.020000 attached=1
+00:00:25.705 Default  Info    RUSTDIAG time=15.548 car=0 pos=(1707.857,487.508,26.461) speed=32.971 gear=4 rpm=7919.6 yaw=-1.1575 pitch=0.0028 roll=-0.0241 vf=32.912 vl=1.997 fuel=7.382 N=(5023.0,0.0,3276.9,1116.9) travel=(0.0681,0.0500,0.1244,0.0899) contact=(1,0,1,1) rays=12/12 floor=2/2 clearance=(0.0731,0.0515) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:25.754 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=32.866787 elapsed=0.020000 attached=1
+00:00:25.786 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=32.311596 elapsed=0.020000 attached=1
+00:00:25.833 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=31.689789 elapsed=0.020000 attached=1
+00:00:25.888 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=30.684864 elapsed=0.020000 attached=1
+00:00:25.948 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=29.957937 elapsed=0.020000 attached=1
+00:00:25.969 Default  Info    RUSTDIAG time=15.798 car=0 pos=(1711.013,480.290,26.305) speed=29.874 gear=4 rpm=7029.8 yaw=-1.2251 pitch=0.0214 roll=-0.0035 vf=29.873 vl=0.718 fuel=7.382 N=(3546.1,958.6,2104.3,1286.0) travel=(0.0599,0.0517,0.0783,0.0731) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0707,0.0729) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:26.026 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=29.177353 elapsed=0.020000 attached=1
+00:00:26.072 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=28.482906 elapsed=0.020000 attached=1
+00:00:26.129 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=27.863569 elapsed=0.020000 attached=1
+00:00:26.167 Default  Info    Formula gear command: 3 (keyboard)
+00:00:26.179 Default  Info    Formula gear command: 4 (keyboard)
+00:00:26.209 Default  Info    RUSTDIAG time=16.048 car=0 pos=(1713.105,473.506,26.131) speed=27.211 gear=4 rpm=7707.1 yaw=-1.3601 pitch=0.0299 roll=-0.0051 vf=27.210 vl=0.837 fuel=7.381 N=(3175.7,103.5,1738.0,1055.2) travel=(0.0552,0.0437,0.0686,0.0585) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0766,0.0856) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:26.278 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=26.856455 elapsed=0.020000 attached=1
+00:00:26.294 Default  Info    Formula gear command: 3 (keyboard)
+00:00:26.332 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=26.428207 elapsed=0.020000 attached=1
+00:00:26.395 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=26.223078 elapsed=0.020000 attached=1
+00:00:26.450 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=26.147434 elapsed=0.020000 attached=1
+00:00:26.473 Default  Info    RUSTDIAG time=16.300 car=0 pos=(1714.035,466.908,25.949) speed=26.150 gear=3 rpm=7804.4 yaw=-1.5195 pitch=0.0212 roll=-0.0133 vf=26.154 vl=0.662 fuel=7.380 N=(2018.9,0.0,6429.9,4358.5) travel=(0.0460,0.0388,0.0805,0.0603) contact=(1,0,1,1) rays=12/12 floor=2/2 clearance=(0.0895,0.0843) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:26.533 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=26.137894 elapsed=0.020000 attached=1
+00:00:26.569 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=26.255329 elapsed=0.020000 attached=1
+00:00:26.630 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=26.488905 elapsed=0.020000 attached=1
+00:00:26.693 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=26.620539 elapsed=0.020000 attached=1
+00:00:26.718 Default  Info    RUSTDIAG time=16.552 car=0 pos=(1713.926,460.278,25.738) speed=26.719 gear=3 rpm=8119.3 yaw=-1.6728 pitch=0.0150 roll=-0.0197 vf=26.723 vl=0.632 fuel=7.378 N=(2175.1,0.0,2791.3,1934.4) travel=(0.0430,0.0377,0.1007,0.0703) contact=(1,0,1,1) rays=12/12 floor=2/2 clearance=(0.0962,0.0749) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:26.781 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=26.814926 elapsed=0.020000 attached=1
+00:00:26.814 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=26.847193 elapsed=0.020000 attached=1
+00:00:26.870 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=26.795448 elapsed=0.020000 attached=1
+00:00:26.932 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=26.548140 elapsed=0.020000 attached=1
+00:00:26.962 Default  Info    RUSTDIAG time=16.804 car=0 pos=(1712.858,453.629,25.460) speed=26.424 gear=3 rpm=7849.7 yaw=-1.8104 pitch=0.0309 roll=-0.0174 vf=26.443 vl=0.307 fuel=7.378 N=(2587.2,0.0,2369.0,1127.7) travel=(0.0522,0.0425,0.0947,0.0690) contact=(1,0,1,1) rays=12/12 floor=2/2 clearance=(0.0867,0.0735) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:27.020 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=26.373323 elapsed=0.020000 attached=1
+00:00:27.057 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=26.222855 elapsed=0.020000 attached=1
+00:00:27.113 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=25.970016 elapsed=0.020000 attached=1
+00:00:27.174 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=25.818249 elapsed=0.020000 attached=1
+00:00:27.213 Default  Info    RUSTDIAG time=17.056 car=0 pos=(1710.909,447.362,25.150) speed=25.691 gear=3 rpm=7591.5 yaw=-1.9365 pitch=0.0491 roll=-0.0066 vf=25.721 vl=0.197 fuel=7.377 N=(2445.9,0.0,1766.4,1243.3) travel=(0.0539,0.0429,0.0795,0.0662) contact=(1,0,1,1) rays=12/12 floor=2/2 clearance=(0.0802,0.0825) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:27.264 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=25.694695 elapsed=0.020000 attached=1
+00:00:27.295 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=25.475670 elapsed=0.020000 attached=1
+00:00:27.351 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=25.381302 elapsed=0.020000 attached=1
+00:00:27.414 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=25.316126 elapsed=0.020000 attached=1
+00:00:27.470 Default  Info    RUSTDIAG time=17.308 car=0 pos=(1708.215,441.562,24.793) speed=25.234 gear=3 rpm=7504.1 yaw=-2.0851 pitch=0.0532 roll=-0.0065 vf=25.275 vl=0.606 fuel=7.377 N=(3043.0,0.0,2134.1,1258.5) travel=(0.0492,0.0377,0.0732,0.0616) contact=(1,0,1,1) rays=12/12 floor=2/2 clearance=(0.0824,0.0859) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:27.516 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=25.269154 elapsed=0.020000 attached=1
+00:00:27.549 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=25.247183 elapsed=0.020000 attached=1
+00:00:27.592 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=25.305843 elapsed=0.020000 attached=1
+00:00:27.649 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=25.396461 elapsed=0.020000 attached=1
+00:00:27.712 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=25.474268 elapsed=0.020000 attached=1
+00:00:27.734 Default  Info    RUSTDIAG time=17.560 car=0 pos=(1704.760,436.214,24.371) speed=25.428 gear=3 rpm=7656.4 yaw=-2.2094 pitch=0.0598 roll=-0.0109 vf=25.488 vl=0.257 fuel=7.376 N=(2240.5,0.0,2221.9,1380.3) travel=(0.0460,0.0379,0.0849,0.0688) contact=(1,0,1,1) rays=12/12 floor=2/2 clearance=(0.0896,0.0767) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:27.792 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=25.596350 elapsed=0.020000 attached=1
+00:00:27.830 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=25.589457 elapsed=0.020000 attached=1
+00:00:27.892 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=25.592783 elapsed=0.020000 attached=1
+00:00:27.949 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=25.455933 elapsed=0.020000 attached=1
+00:00:27.974 Default  Info    RUSTDIAG time=17.812 car=0 pos=(1700.675,431.264,23.828) speed=25.396 gear=3 rpm=7675.8 yaw=-2.3584 pitch=0.0807 roll=-0.0161 vf=25.471 vl=0.761 fuel=7.375 N=(3878.2,0.0,2098.0,1347.7) travel=(0.0688,0.0522,0.0822,0.0616) contact=(1,0,1,1) rays=12/12 floor=2/2 clearance=(0.0709,0.0921) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:28.033 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=25.507290 elapsed=0.020000 attached=1
+00:00:28.074 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=25.556282 elapsed=0.020000 attached=1
+00:00:28.131 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=25.643631 elapsed=0.020000 attached=1
+00:00:28.192 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=25.565317 elapsed=0.020000 attached=1
+00:00:28.224 Default  Info    RUSTDIAG time=18.064 car=0 pos=(1695.889,426.988,23.315) speed=25.612 gear=3 rpm=7793.4 yaw=-2.4961 pitch=0.0624 roll=-0.0115 vf=25.680 vl=0.808 fuel=7.374 N=(3976.2,0.0,3385.5,2353.4) travel=(0.0580,0.0447,0.0956,0.0817) contact=(1,0,1,1) rays=12/12 floor=2/2 clearance=(0.0740,0.0691) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:28.279 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=25.766579 elapsed=0.020000 attached=1
+00:00:28.313 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=26.020817 elapsed=0.020000 attached=1
+00:00:28.373 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=26.279705 elapsed=0.020000 attached=1
+00:00:28.429 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=26.799395 elapsed=0.020000 attached=1
+00:00:28.473 Default  Info    RUSTDIAG time=18.316 car=0 pos=(1690.455,423.240,22.799) speed=27.103 gear=3 rpm=8417.6 yaw=-2.5788 pitch=0.0653 roll=-0.0063 vf=27.187 vl=-0.054 fuel=7.370 N=(2528.9,0.0,1869.7,2669.9) travel=(0.0446,0.0334,0.1029,0.0986) contact=(1,0,1,1) rays=12/12 floor=2/2 clearance=(0.0851,0.0568) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:28.527 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=27.354939 elapsed=0.020000 attached=1
+00:00:28.558 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=27.771868 elapsed=0.020000 attached=1
+00:00:28.616 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=28.430651 elapsed=0.020000 attached=1
+00:00:28.673 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=29.083168 elapsed=0.020000 attached=1
+00:00:28.724 Default  Info    RUSTDIAG time=18.568 car=0 pos=(1684.230,419.790,22.226) speed=29.386 gear=3 rpm=9382.9 yaw=-2.6801 pitch=0.0622 roll=-0.0050 vf=29.481 vl=0.260 fuel=7.365 N=(2173.5,433.6,2449.6,1889.2) travel=(0.0452,0.0396,0.1077,0.1027) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0804,0.0637) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:28.775 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=29.525841 elapsed=0.020000 attached=1
+00:00:28.809 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=30.328739 elapsed=0.020000 attached=1
+00:00:28.849 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=30.836390 elapsed=0.020000 attached=1
+00:00:28.914 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=31.396692 elapsed=0.020000 attached=1
+00:00:28.974 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=32.184277 elapsed=0.020000 attached=1
+00:00:28.997 Default  Info    RUSTDIAG time=18.820 car=0 pos=(1677.166,416.591,21.569) speed=32.171 gear=3 rpm=9908.8 yaw=-2.7509 pitch=0.0560 roll=-0.0051 vf=32.275 vl=0.014 fuel=7.359 N=(1448.4,0.0,3064.7,2948.6) travel=(0.0451,0.0379,0.1292,0.1201) contact=(1,0,1,1) rays=12/12 floor=2/2 clearance=(0.0797,0.0460) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:29.054 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=32.770767 elapsed=0.020000 attached=1
+00:00:29.091 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=33.211922 elapsed=0.020000 attached=1
+00:00:29.154 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=33.906654 elapsed=0.020000 attached=1
+00:00:29.219 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=34.604729 elapsed=0.022000 attached=1
+00:00:29.242 Default  Info    RUSTDIAG time=19.072 car=0 pos=(1669.289,413.670,20.868) speed=34.690 gear=3 rpm=10869.4 yaw=-2.8229 pitch=0.0593 roll=-0.0048 vf=34.805 vl=0.263 fuel=7.351 N=(0.0,0.0,3039.5,2624.1) travel=(0.0462,0.0381,0.1255,0.1184) contact=(0,0,1,1) rays=12/12 floor=2/2 clearance=(0.0792,0.0482) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:29.300 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=35.431561 elapsed=0.022000 attached=1
+00:00:29.350 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=35.979355 elapsed=0.022000 attached=1
+00:00:29.413 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=36.862595 elapsed=0.022000 attached=1
+00:00:29.483 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=37.448658 elapsed=0.022000 attached=1
+00:00:29.500 Default  Info    RUSTDIAG time=19.324 car=0 pos=(1660.602,410.999,20.077) speed=37.337 gear=3 rpm=11786.7 yaw=-2.8728 pitch=0.0657 roll=0.0011 vf=37.470 vl=0.283 fuel=7.344 N=(1937.1,767.1,2580.8,2067.1) travel=(0.0512,0.0476,0.1213,0.1173) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0724,0.0498) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:29.562 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=38.296974 elapsed=0.022000 attached=1
+00:00:29.612 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=38.967857 elapsed=0.022000 attached=1
+00:00:29.681 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=39.657204 elapsed=0.022000 attached=1
+00:00:29.733 Default  Info    RUSTDIAG time=19.576 car=0 pos=(1651.126,408.600,19.247) speed=40.194 gear=3 rpm=12410.2 yaw=-2.9196 pitch=0.0557 roll=0.0004 vf=40.303 vl=0.068 fuel=7.335 N=(2291.9,1373.6,3347.4,2669.2) travel=(0.0614,0.0577,0.1313,0.1271) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0625,0.0422) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:29.787 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=40.390076 elapsed=0.022000 attached=1
+00:00:29.820 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=40.879227 elapsed=0.022000 attached=1
+00:00:29.881 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=41.429222 elapsed=0.022000 attached=1
+00:00:29.941 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=42.049770 elapsed=0.022000 attached=1
+00:00:29.989 Default  Info    RUSTDIAG time=19.828 car=0 pos=(1640.937,406.547,18.558) speed=42.463 gear=3 rpm=13223.3 yaw=-2.9696 pitch=0.0380 roll=-0.0032 vf=42.527 vl=0.206 fuel=7.327 N=(2287.4,1113.3,3276.6,2646.6) travel=(0.0592,0.0550,0.1299,0.1260) contact=(1,1,1,1) rays=12/12 floor=2/2 clearance=(0.0647,0.0432) floor_impulse=(0.000,0.000) reach=0.000 setup_contact=0 backends=0xf rejected=0
+00:00:30.044 Default  Info    Formula steering: car=0 raw=0.000000 target=0.000000 filtered=0.000000 speed=42.794010 elapsed=0.022000 attached=1
+00:00:30.080 Default  Info   

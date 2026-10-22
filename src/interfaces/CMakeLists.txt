@@ -4,7 +4,7 @@ SET(INTERFACES_HEADERS car.h graphic.h playerpref.h raceman.h
                        replay.h robot.h telemetry.h track.h
                        iraceengine.h iuserinterface.h igraphicsengine.h
                        iphysicsengine.h itrackloader.h isoundengine.h
-                       camera.h sound.h)
+                       camera.h sound.h ofp_audio_abi.h ofp_audio_presentation.h)
 
 # Fictive = no-output target, for having source files available in IDEs.
 SD_ADD_LIBRARY(interfaces INTERFACE ${INTERFACES_HEADERS})

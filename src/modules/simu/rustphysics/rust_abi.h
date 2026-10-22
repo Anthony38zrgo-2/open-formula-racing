@@ -11,9 +11,10 @@
 #ifndef RUST_ABI_H
 #define RUST_ABI_H
 
+#include <cstddef>
 #include <cstdint>
 
-#define OFP_ABI_VERSION 5u
+#define OFP_ABI_VERSION 6u
 #define OFP_MAX_BODY_CONTACTS 32
 #define OFP_WHEELS 4
 #define OFP_FLOOR_PROBES 2
@@ -62,6 +63,9 @@ struct OfpVehicleSpecs
     double oil_optimal_max_temperature_c;
     double oil_derating_temperature_c;
     double oil_critical_temperature_c;
+    // ABI v6: audio presentation references (appended; v5 offsets preserved).
+    double max_torque_nm;
+    double front_torque_split;
 };
 
 struct OfpControlInput
@@ -182,6 +186,15 @@ struct OfpSnapshot
     std::uint64_t floor_ray_hits;
     std::uint32_t body_contact_count;
     double body_contact_impulse_ns[OFP_MAX_BODY_CONTACTS];
+    // ABI v6: raw audio-mechanical state (appended; v5 offsets preserved).
+    // No acoustic decision is made in the physics integrator; the audio wrapper
+    // derives delivered load, derivatives and shift phases from these fields.
+    double clutch_torque_nm;
+    double tc_cut_ratio_smoothed;
+    std::uint32_t is_rev_limited;
+    double shift_timer_s;
+    double step_dt_s;
+    std::uint64_t sequence;
 };
 
 // Backend mask bits reported by the Rust library.
@@ -189,6 +202,16 @@ struct OfpSnapshot
 #define OFP_BACKEND_AERO_SIMPLIFIED (1u << 1)
 #define OFP_BACKEND_TIRE_RELAXATION (1u << 2)
 #define OFP_BACKEND_SLOW_STATES_SIMPLIFIED (1u << 3)
+
+#ifdef __cplusplus
+/* v6 layout locks (verified by `ofp_audio_v6_probe`): the v6 tail is appended,
+   so every v5 offset is preserved. Any drift breaks compilation here instead
+   of silently reinterpreting memory at load time. */
+static_assert(sizeof(OfpVehicleSpecs) == 400, "OfpVehicleSpecs must stay 400 bytes (ABI v6)");
+static_assert(sizeof(OfpSnapshot) == 2216, "OfpSnapshot must stay 2216 bytes (ABI v6)");
+static_assert(offsetof(OfpSnapshot, clutch_torque_nm) == 2168, "v6 tail must start at 2168");
+static_assert(offsetof(OfpSnapshot, sequence) == 2208, "sequence must stay at 2208");
+#endif
 
 typedef void* OfpHandle;
 

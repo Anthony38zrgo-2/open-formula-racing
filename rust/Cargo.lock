@@ -475,6 +475,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "open_formula_audio"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "vehicle_audio_engine",
+ "vehicle_physics_engine",
+]
+
+[[package]]
 name = "ordered-float"
 version = "5.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -715,6 +724,26 @@ name = "unicode-ident"
 version = "1.0.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
+
+[[package]]
+name = "v10-engine-synth"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "vehicle_audio_engine"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
+ "v10-engine-synth",
+]
 
 [[package]]
 name = "vehicle_physics_engine"

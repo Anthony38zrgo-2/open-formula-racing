@@ -1,16 +1,25 @@
 INCLUDE(../../../../cmake/macros.cmake)
 
+# Etapa 4/5 audio: this module LoadLibrary-loads `open_formula_audio.dll` at
+# run time (see `ofp_audio_loader.cpp`). It never runs Cargo itself: the single
+# workspace build is owned by the `rustphysics` module target, which also
+# installs the audio DLL next to this module (no redundant simultaneous builds).
+
 SET(_SOURCES snddefault.cpp
                        CarSoundData.cpp
                        Sound.cpp OpenalSound.cpp
                        SoundInterface.cpp
                        OpenalSoundInterface.cpp
+                       ofp_audio_loader.cpp
+                       ofp_v10_stream.cpp
                        grsound.cpp)
 SET(_HEADERS snddefault.h
                        CarSoundData.h
                        Sound.h OpenalSound.h
                        SoundInterface.h
                        OpenalSoundInterface.h
+                       ofp_audio_loader.h
+                       ofp_v10_stream.h
                        grsound.h)
 IF(NOT OPTION_USE_MACPORTS)
    SET(_SOURCES ${_SOURCES} PlibSound.cpp PlibSoundInterface.cpp)

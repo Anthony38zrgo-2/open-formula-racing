@@ -369,6 +369,10 @@ pub struct OpenFormulaSimulation {
     last_error: String,
     failed: bool,
     backends: u32,
+    // Etapa 3: audio presentation clock. `sequence` counts accepted steps for
+    // packet ordering; `last_step_dt` is the real accepted-step duration.
+    sequence: u64,
+    last_step_dt: f64,
 }
 
 const BACKEND_SUSPENSION_SIMPLIFIED: u32 = 1 << 0;
@@ -458,6 +462,8 @@ impl OpenFormulaSimulation {
                 | BACKEND_AERO_SIMPLIFIED
                 | BACKEND_TIRE_RELAXATION
                 | BACKEND_SLOW_STATES_SIMPLIFIED,
+            sequence: 0,
+            last_step_dt: 0.0,
         };
         simulation.configure_floor_probes()?;
         Ok(simulation)
@@ -552,6 +558,9 @@ impl OpenFormulaSimulation {
         self.simulator.state.suspension.reset_mechanical_state();
         self.failed = false;
         self.counters = StepCounters::default();
+        // New session/generation for audio packet ordering.
+        self.sequence = 0;
+        self.last_step_dt = 0.0;
         self.last_error.clear();
     }
 
@@ -892,6 +901,11 @@ impl OpenFormulaSimulation {
                     .to_string();
             return Err(self.last_error.clone());
         }
+        // Accepted step: advance the audio presentation clock. The snapshot and
+        // every audio packet reuse this sequence/dt, so cuts resolved here are
+        // never replaced by a later graphic frame.
+        self.sequence = self.sequence.saturating_add(1);
+        self.last_step_dt = dt;
         Ok(())
     }
 
@@ -929,6 +943,14 @@ impl OpenFormulaSimulation {
         snapshot.engine_rpm = state.powertrain.rpm;
         snapshot.engine_torque_nm = state.powertrain.engine_torque;
         snapshot.clutch_engagement = state.powertrain.clutch_engagement;
+        // ABI v6 raw audio-mechanical state: read the existing physical state,
+        // never an acoustic comparison or a controller pulse.
+        snapshot.clutch_torque_nm = state.powertrain.clutch_torque;
+        snapshot.tc_cut_ratio_smoothed = state.powertrain.tc_cut_ratio_smoothed;
+        snapshot.is_rev_limited = u32::from(state.powertrain.is_rev_limited);
+        snapshot.shift_timer_s = state.powertrain.shift_timer;
+        snapshot.step_dt_s = self.last_step_dt;
+        snapshot.sequence = self.sequence;
         snapshot.fuel_kg = config.fuel.current_kg;
         snapshot.fuel_capacity_kg = config.fuel.capacity_kg;
         snapshot.throttle = state.throttle_input_smoothed;
@@ -1086,6 +1108,10 @@ impl OpenFormulaSimulation {
         specs.oil_optimal_max_temperature_c = thermal.oil_optimal_maximum_temperature_celsius;
         specs.oil_derating_temperature_c = thermal.oil_hot_derating_temperature_celsius;
         specs.oil_critical_temperature_c = thermal.oil_critical_temperature_celsius;
+        // ABI v6 audio references: torque scale for delivered load, split mask
+        // for the driven-wheel output-shaft frequency.
+        specs.max_torque_nm = config.powertrain.max_torque;
+        specs.front_torque_split = config.powertrain.front_torque_split;
         specs
     }
 
@@ -1317,5 +1343,76 @@ fn surface_code(surface: SurfaceType) -> i32 {
         SurfaceType::Sand => 5,
         SurfaceType::Wall => 6,
         SurfaceType::Metal => 7,
+    }
+}
+
+#[cfg(test)]
+mod audio_presentation_tests {
+    use super::*;
+    use crate::open_formula_ffi::{OFP_ABI_VERSION, OfpControlInput};
+
+    fn neutral_input() -> OfpControlInput {
+        OfpControlInput {
+            throttle: 0.15,
+            brake: 0.0,
+            handbrake: 0.0,
+            clutch: 0.0,
+            steering: 0.0,
+            gear_request: 1,
+            reserved: 0,
+        }
+    }
+
+    #[test]
+    fn abi_is_v6_and_specs_carry_audio_references() {
+        assert_eq!(OFP_ABI_VERSION, 6);
+        let simulation =
+            OpenFormulaSimulation::create(None, Vec3::ZERO, 0.0, None).expect("williams profile");
+        let specs = simulation.vehicle_specs();
+        assert_eq!(specs.idle_rpm, 3_500.0);
+        assert_eq!(specs.max_rpm, 17_500.0);
+        assert!(specs.max_torque_nm > 100.0);
+        assert_eq!(specs.front_torque_split, 0.0);
+        assert_eq!(specs.final_drive, 4.65);
+    }
+
+    #[test]
+    fn accepted_steps_publish_sequence_dt_and_raw_mechanical_state() {
+        let mut simulation =
+            OpenFormulaSimulation::create(None, Vec3::ZERO, 0.0, None).expect("williams profile");
+        let input = neutral_input();
+        let empty: &[crate::open_formula_ffi::OfpBodyContact] = &[];
+        simulation.step(&input, empty, 0.01).expect("step 1");
+        simulation.step(&input, empty, 0.01).expect("step 2");
+        let snapshot = simulation.snapshot();
+        assert_eq!(snapshot.abi_version, 6);
+        assert_eq!(snapshot.sequence, 2);
+        assert!((snapshot.step_dt_s - 0.01).abs() < 1e-12);
+        // Raw mechanical fields come from the live powertrain state.
+        assert!(snapshot.engine_rpm.is_finite());
+        assert!(snapshot.clutch_torque_nm.is_finite());
+        assert!(snapshot.tc_cut_ratio_smoothed >= 0.0 && snapshot.tc_cut_ratio_smoothed <= 1.0);
+        assert!(snapshot.shift_timer_s >= 0.0);
+        assert!(snapshot.is_rev_limited <= 1);
+        // Williams RWD: rear spins exist; output-shaft math stays in the audio wrapper.
+        let rear_mean =
+            (snapshot.wheels[2].spin_rad_s + snapshot.wheels[3].spin_rad_s) * 0.5;
+        assert!(rear_mean.is_finite());
+    }
+
+    #[test]
+    fn low_fps_step_keeps_its_own_clock_for_cut_windows() {
+        // A 50 ms graphic frame is one accepted step with dt 0.05: the packet
+        // clock must be 0.05 (not an interpolated frame time) so limiter/shift
+        // windows resolved here are never replaced by a later frame.
+        let mut simulation =
+            OpenFormulaSimulation::create(None, Vec3::ZERO, 0.0, None).expect("williams profile");
+        let input = neutral_input();
+        let empty: &[crate::open_formula_ffi::OfpBodyContact] = &[];
+        simulation.step(&input, empty, 0.05).expect("low-fps step");
+        let snapshot = simulation.snapshot();
+        assert_eq!(snapshot.sequence, 1);
+        assert!((snapshot.step_dt_s - 0.05).abs() < 1e-12);
+        assert_eq!(snapshot.physics_hz, 20);
     }
 }

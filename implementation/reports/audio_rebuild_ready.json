@@ -1,0 +1,197 @@
+{
+  "source_head": "9c9164869c8210a558abb5e9aa5e760e5eacf5dd",
+  "working_tree_dirty": true,
+  "full_build": "237/237 succeeded",
+  "installed_binaries": [
+    {
+      "installed": "OpenFormula.exe",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\OpenFormula.exe",
+      "sha256": "88c906ee8308c71ced9a03d3a845cd2184a91b3002a051ba4c47f2cfa510345c"
+    },
+    {
+      "installed": "bin/libsolid.dll",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\bin\\libsolid.dll",
+      "sha256": "6888dbe200740837c3596f490e861edfeb5326f0bd9876926910b9f5a110e7aa"
+    },
+    {
+      "installed": "bin/libmoto.dll",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\bin\\libmoto.dll",
+      "sha256": "642a44d5ca851298f30352fb16f265e605306cf14868e1fbcc5d948e7be99c90"
+    },
+    {
+      "installed": "bin/libbroad.dll",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\bin\\libbroad.dll",
+      "sha256": "eee7203be0d8a37295546fc9e59e4fc972d956e999946ca94817ed99ec4d1e49"
+    },
+    {
+      "installed": "bin/libtgf.dll",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\bin\\libtgf.dll",
+      "sha256": "78940360628a4ca2455da57977ffbabf8bf027a8cace4fe8ec0139f9c657da47"
+    },
+    {
+      "installed": "bin/libtgfclient.dll",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\bin\\libtgfclient.dll",
+      "sha256": "438ff78d3ff9446d21aca2e235cf770795da3e7afd329f46a218df3ee4d142a2"
+    },
+    {
+      "installed": "bin/libtgfdata.dll",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\bin\\libtgfdata.dll",
+      "sha256": "04208949cfbc7bdfb2be4d9a4cc320c627d72163add18a86ffe366873613af9a"
+    },
+    {
+      "installed": "bin/librobottools.dll",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\bin\\librobottools.dll",
+      "sha256": "9da03eae48f570f53d831e3f93cbbe9dcbfc245647ec81bdccc4e9f242dc1c1d"
+    },
+    {
+      "installed": "bin/liblearning.dll",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\bin\\liblearning.dll",
+      "sha256": "59de3bba6ea12095a28c307e3d4bc9277c7b8e0ab5062dd137ade16d54198c13"
+    },
+    {
+      "installed": "bin/libportability.dll",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\bin\\libportability.dll",
+      "sha256": "6852eed4e592ae2bdb0d3e6dc087e276218fc34dcf1163738e4ccadfb0417e60"
+    },
+    {
+      "installed": "bin/libephemeris.dll",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\bin\\libephemeris.dll",
+      "sha256": "5dcf1a2c278082f3713ae4fe6611d4292ea408e0b6e6d00f7f5a47d786ae8a84"
+    },
+    {
+      "installed": "lib/games/speed-dreams-2/drivers/dandroid/dandroid.dll",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\lib\\games\\speed-dreams-2\\drivers\\dandroid\\dandroid.dll",
+      "sha256": "abd4d521ad4b217747c237034d3b1af4bda8dbc97c6f4ccac343abe1e4e8c089"
+    },
+    {
+      "installed": "lib/games/speed-dreams-2/drivers/human/human.dll",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\lib\\games\\speed-dreams-2\\drivers\\human\\human.dll",
+      "sha256": "70b046d3217a183cee18efde0eb4f16d8710ae73af288cc092bc0a3528567bce"
+    },
+    {
+      "installed": "lib/games/speed-dreams-2/drivers/networkhuman/networkhuman.dll",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\lib\\games\\speed-dreams-2\\drivers\\networkhuman\\networkhuman.dll",
+      "sha256": "231287f154b666038eeebd929b4a403e45e3f29e4cac42f19876682dde5a9abc"
+    },
+    {
+      "installed": "lib/games/speed-dreams-2/drivers/shadow/shadow.dll",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\lib\\games\\speed-dreams-2\\drivers\\shadow\\shadow.dll",
+      "sha256": "4eebe6351c8347eacb965773dbd8a09780d8985aea2f69f8f8d434055ff80519"
+    },
+    {
+      "installed": "lib/games/speed-dreams-2/drivers/simplix/simplix.dll",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\lib\\games\\speed-dreams-2\\drivers\\simplix\\simplix.dll",
+      "sha256": "b845ddbeb99e51d9dde3ead48525cac0c867b0bf51e28c2e87481aaa5bdbe41e"
+    },
+    {
+      "installed": "lib/games/speed-dreams-2/drivers/usr/usr.dll",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\lib\\games\\speed-dreams-2\\drivers\\usr\\usr.dll",
+      "sha256": "2f0e4d5a5ac73487d09f541c44698174b4f26172a502d01dd98353b29ff2828b"
+    },
+    {
+      "installed": "lib/games/speed-dreams-2/modules/graphic/ssggraph.dll",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\lib\\games\\speed-dreams-2\\modules\\graphic\\ssggraph.dll",
+      "sha256": "027b5dbb12ff1dd77ca042e45ad27f7c6210fcc8af440b5580b4295503a87250"
+    },
+    {
+      "installed": "lib/games/speed-dreams-2/modules/graphic/osggraph.dll",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\lib\\games\\speed-dreams-2\\modules\\graphic\\osggraph.dll",
+      "sha256": "2a511d26b4a2fe137872508cdf303a0006e58243a1b74ce0f23eaa82a90f1fa2"
+    },
+    {
+      "installed": "lib/games/speed-dreams-2/modules/sound/snddefault.dll",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\lib\\games\\speed-dreams-2\\modules\\sound\\snddefault.dll",
+      "sha256": "675375667c3faf1083e5cb020b177ce38e4cf8fb2c99957aaae1e3e76eb9a862"
+    },
+    {
+      "installed": "lib/games/speed-dreams-2/modules/simu/rustphysics.dll",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\lib\\games\\speed-dreams-2\\modules\\simu\\rustphysics.dll",
+      "sha256": "5967418dec9f7d0f9296ca36d87b4b99f4cf9375390f6379b83dbb80e8e71413"
+    },
+    {
+      "installed": "lib/games/speed-dreams-2/modules/simu/vehicle_physics_engine.dll",
+      "source": "D:\\open-formula\\rust\\target\\release\\vehicle_physics_engine.dll",
+      "sha256": "28756170fcb0e92f3bd9e27aa9a2c3034bfc9d1a2383964ebdc7eadfd1e3ae5b"
+    },
+    {
+      "installed": "lib/games/speed-dreams-2/modules/sound/open_formula_audio.dll",
+      "source": "D:\\open-formula\\rust\\target\\release\\open_formula_audio.dll",
+      "sha256": "44ef136bad140193729798f90b219f0c249e5f587a8605217b180089c9c84ccf"
+    },
+    {
+      "installed": "lib/games/speed-dreams-2/modules/simu/simuv5.dll",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\lib\\games\\speed-dreams-2\\modules\\simu\\simuv5.dll",
+      "sha256": "151bf000a40bc10778c11d3f89e26baeb1495f95c7de38a795daa9dffd68674c"
+    },
+    {
+      "installed": "lib/games/speed-dreams-2/modules/track/trackv1.dll",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\lib\\games\\speed-dreams-2\\modules\\track\\trackv1.dll",
+      "sha256": "8a9fb1cef3f71df58dc4ecb9f8655479a2e62c3e0b5a4ffa06630132c604dc4a"
+    },
+    {
+      "installed": "lib/games/speed-dreams-2/modules/userinterface/legacymenu.dll",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\lib\\games\\speed-dreams-2\\modules\\userinterface\\legacymenu.dll",
+      "sha256": "baf8e5b59138c62743d4dae4b5f7516c7a927dd4513acdec1e74618ad3b2ae2f"
+    },
+    {
+      "installed": "lib/games/speed-dreams-2/modules/userinterface/textonly.dll",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\lib\\games\\speed-dreams-2\\modules\\userinterface\\textonly.dll",
+      "sha256": "f151d6767596916f5b7d61cb5512c6c4ba88c0249851078b1b968f913bd43b58"
+    },
+    {
+      "installed": "lib/games/speed-dreams-2/modules/racing/standardgame.dll",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\lib\\games\\speed-dreams-2\\modules\\racing\\standardgame.dll",
+      "sha256": "93211ea800818af33d96e65a014f98097db1d010c8fed7e66b035a13081dba26"
+    },
+    {
+      "installed": "lib/games/speed-dreams-2/modules/telemetry/telemetryv1.dll",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\lib\\games\\speed-dreams-2\\modules\\telemetry\\telemetryv1.dll",
+      "sha256": "23c2c26d31c918602a5f817809a2829021eebae2f2ea6dd24de714c9d2f979db"
+    },
+    {
+      "installed": "bin/libcsnetworking.dll",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\bin\\libcsnetworking.dll",
+      "sha256": "f2e6e80bed944e76d169fa0eea11245e80fad574b550e82322232a2bdd13ad98"
+    },
+    {
+      "installed": "bin/speed-dreams-2.exe",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\bin\\speed-dreams-2.exe",
+      "sha256": "28dadc1b300473d97b99cfe486ae9be8f1b865dd0c40790c48b0f4afc26dc9bf"
+    },
+    {
+      "installed": "bin/sd2-accc.exe",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\bin\\sd2-accc.exe",
+      "sha256": "7b973582cbbf06c5d03d80372dfda82b00138cf68b04c0c15a89a12fcbe1d8c3"
+    },
+    {
+      "installed": "bin/sd2-nfs2ac.exe",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\bin\\sd2-nfs2ac.exe",
+      "sha256": "ea45af34b7db5213e35c5c1f971cdc2b560e0bb31d1045d5747193525d500492"
+    },
+    {
+      "installed": "bin/sd2-nfsperf.exe",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\bin\\sd2-nfsperf.exe",
+      "sha256": "c9bf97a8430b26f40978badcb11929c9d0169fba336f133e729afcf365b9ec44"
+    },
+    {
+      "installed": "bin/sd2-trackgen.exe",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\bin\\sd2-trackgen.exe",
+      "sha256": "81353705823e9fb43e42295b6c8c4d3470cefbeed474fb95f3acf3477b53edcc"
+    },
+    {
+      "installed": "bin/sd2-menuview.exe",
+      "source": "C:\\Users\\bill\\open-formula-build\\engine\\bin\\sd2-menuview.exe",
+      "sha256": "2744bb03ec15849518004fefd411565f8148baac15420c6faa2d454bb263e442"
+    }
+  ],
+  "dependency_binaries_inspected": 100,
+  "missing_dependencies": [],
+  "protected_settings_unchanged": 508,
+  "session": "williams-fuji-practice",
+  "physics_backend": "rustphysics",
+  "audio_backend": "snddefault",
+  "engine_idle_rpm": 3500,
+  "audio_bank": "v10-v2-bank",
+  "audio_variant": "OFP-V10-3500",
+  "gameplay_listening": "pending user test"
+}

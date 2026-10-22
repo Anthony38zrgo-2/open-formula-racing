@@ -1,0 +1,37 @@
+00:00:00.000 Default  Info    Logger 'Default' created : Level threshold Debug:5
+00:00:00.000 Default  Info    Date and time : 2026/10/22 16:07:11
+00:00:00.000 Default  Info    Built on Windows-10.0.26100
+00:00:00.000 Default  Info      with CMake 4.4.4, 'Ninja' generator
+00:00:00.000 Default  Info      with GNU 16.2.0 compiler ('Release' configuration)
+00:00:00.000 Default  Info    Current OS is Windows  (build 26100) (R10.0, 64 bits)
+00:00:00.000 Default  Info    Compiled against SDL version 2.32.10 
+00:00:00.000 Default  Info    Linking against SDL version 2.32.10.
+00:00:00.000 Default  Info    Speed Dreams v2.4.2 (an Open Motorsport Sim)
+00:00:00.000 Default  Info    Install dir is D:/open-formula/distribution/ (from executable D:\open-formula\distribution\bin\speed-dreams-2.exe)
+00:00:00.000 Default  Info    Parsing command line args (1)
+00:00:00.000 Default  Info      --help : option 'help'
+Usage: D:\open-formula\distribution\bin\speed-dreams-2.exe ...
+         [-v|--version]
+         [-h|--help]
+         [-lc|--localdir <dir path>] [-ld|--libdir <dir path>]
+         [-bd|--bindir <dir path>] [-dd|--datadir <dir path>]
+         [-tl|--tracelevel <integer>] [-ts|--tracestream stdout|stderr|<file name>]
+         [-nr|--norandom]
+         [-m|--hardmouse]
+         [-s|--startrace <race name> [-x|--textonly] ]
+ - locadir : Root dir of the tree where user settings files are stored
+             (default=~/speed-dreams-2.settings/)
+ - libdir  : Root dir of the tree where loadable modules are installed
+             (default=lib/games/speed-dreams-2/)
+ - bindir  : Dir where the game exe and DLLs are installed
+             (default=bin/)
+ - datadir : Root dir of the data tree (cars, tracks, ...)
+             (default=share/games/speed-dreams-2/)
+ - tracelevel  : Maximum level of displayed traces for the default logger
+                 (0=Fatal, 1=Error, 2=Warning, 3=Info, 4=Trace, 5=Debug, ... ; default=5)
+ - tracestream : Target output stream for the default logger (default=stderr)
+ - norandom : Force reproducible random sequences for every game session (default=off)
+ - hardmouse : Use hardware mouse cursor
+ - race name : Name without extension of the selected raceman file,
+               among the .xml files in <user settings>/config/raceman (no default)
+ - text-only : Run the specified race without any GUI (suitable for a headless computer)

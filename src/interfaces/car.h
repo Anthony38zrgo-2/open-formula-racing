@@ -29,6 +29,7 @@
 
 #include <track.h>
 #include <plib/sg.h>
+#include "ofp_audio_presentation.h"
 
 #define CAR_IDENT	0
 
@@ -735,6 +736,17 @@ typedef struct CarElt
     tCarSetup		setup;	/**< private */
     tCarPitCmd		pitcmd;	/**< private */
     tFormulaHudTelemetry formulaHud;	/**< private: presentation telemetry */
+    /** Raw audio steps ring, written by `rustphysics` on every accepted physics
+        step and drained by `snddefault` (Etapa 3/4 audio presentation contract,
+        see `ofp_audio_presentation.h`). This is deliberately separate from
+        `formulaHud`: cut windows and gear transitions ride on the step clock,
+        never on the last graphic frame. Entries are valid only when
+        `schema_version == OFP_AUDIO_STEP_VERSION`; `audio_step_write` is a
+        monotonic write counter and `audio_session` the current generation
+        (bumped on reset so stale packets can never resurrect a cut window). */
+    OfpAudioStepV1 audio_steps[OFP_AUDIO_STEP_DEPTH];
+    std::uint32_t audio_step_write;
+    std::uint32_t audio_session;
     struct RobotItf	*robot;	/**< private */
     struct CarElt	*next;
 } tCarElt;

@@ -205,6 +205,21 @@ void OpenalSoundInterface::setNCars(int n_cars)
 {
 	engpri = new SoundPri[n_cars];
 	car_src = new SoundSource[n_cars];
+	v10_cars.assign(n_cars, 0);
+}
+
+void OpenalSoundInterface::setV10Active(int car_id, bool active)
+{
+	if (car_id < 0 || car_id >= (int)v10_cars.size())
+		return;
+	v10_cars[(size_t)car_id] = active ? 1 : 0;
+}
+
+bool OpenalSoundInterface::isV10Active(int car_id) const
+{
+	if (car_id < 0 || car_id >= (int)v10_cars.size())
+		return false;
+	return v10_cars[(size_t)car_id] != 0;
 }
 
 Sound* OpenalSoundInterface::addSample (const char* filename, unsigned int flags, bool loop, bool static_pool)
@@ -270,9 +285,15 @@ void OpenalSoundInterface::update(CarSoundData** car_sound_data, int n_cars, sgV
 		sgVec3 p;
 		sgVec3 u;
 		CarSoundData* sound_data = car_sound_data[id];
+		Sound* engine = sound_data->getEngineSound();
+		/* Etapa 4 V10: a mixer-owned car never uses its legacy engine voice;
+		   stopping it (not zeroing its volume) returns the pool source. */
+		if (isV10Active(id)) {
+			engine->stop();
+			continue;
+		}
 		sound_data->getCarPosition(p);
 		sound_data->getCarSpeed(u);
-		Sound* engine = sound_data->getEngineSound();
 		engine->setSource(p, u);
 #ifdef USE_OPENAL_DOPPLER
 		engine->setPitch(sound_data->engine.f);
@@ -451,10 +472,15 @@ void OpenalSoundInterface::update(CarSoundData** car_sound_data, int n_cars, sgV
 
 void OpenalSoundInterface::initSharedSourcePool(void)
 {
-	const int nbdynsources = OSI_MAX_SOURCES - n_static_sources_in_use;
+	const int nbdynsources = MAX(0, OSI_MAX_SOURCES - n_static_sources_in_use - reservedStreamingSources);
 	sourcepool = new SharedSourcePool(nbdynsources);
 	GfLogInfo("  Static sources : %d\n", n_static_sources_in_use);
 	GfLogInfo("  Dynamic sources: %d\n", sourcepool->getNbSources());
+}
+
+void OpenalSoundInterface::reserveStreamingSources(int count)
+{
+	reservedStreamingSources = MAX(0, MIN(count, OSI_MAX_SOURCES - n_static_sources_in_use));
 }
 
 bool OpenalSoundInterface::getStaticSource(ALuint *source)

@@ -24,6 +24,7 @@
 #include <track.h>
 
 #include "rust_library.h"
+#include "../../interfaces/ofp_audio_presentation.h"
 
 namespace
 {
@@ -118,7 +119,90 @@ namespace
         double wheel_rotation[4]{};
         //! Lock-to-lock steering-wheel rotation of the visual car, in radians.
         double steering_wheel_lock_rad = 0.0;
+        //! Etapa 3/4 audio presentation: one raw step per accepted physics step,
+        //! written into the `tCarElt` ring that `snddefault` drains (see
+        //! `ofp_audio_presentation.h`). Session increments on car reset so
+        //! stale packets can never resurrect a cut window.
+        std::uint32_t audio_session = 1;
     };
+
+    //! Builds one raw audio step from the just-accepted snapshot + specs.
+    //! Pure mapping: SI units preserved (m/s), no acoustic decision, no
+    //! pedal-for-load substitution, no gear-number transmission sign.
+    inline OfpAudioStepV1 BuildAudioStep(const OfpSnapshot& s, const OfpVehicleSpecs& specs,
+                                         int car_index, std::uint32_t session)
+    {
+        OfpAudioStepV1 step{};
+        step.schema_version = OFP_AUDIO_STEP_VERSION;
+        step.struct_size = (std::uint32_t)sizeof(OfpAudioStepV1);
+        step.car_index = (std::int32_t)car_index;
+        step.session_generation = session;
+        step.sequence = s.sequence;
+        step.sim_time_s = s.sim_time_s;
+        step.dt_s = (float)s.step_dt_s;
+        step.rpm = s.engine_rpm;
+        step.throttle = (float)s.throttle;
+        step.speed_m_s = std::sqrt(s.linear_velocity.x * s.linear_velocity.x
+                                 + s.linear_velocity.y * s.linear_velocity.y
+                                 + s.linear_velocity.z * s.linear_velocity.z);
+        step.gear = s.gear;
+        step.target_gear = s.target_gear;
+        step.engine_torque_nm = s.engine_torque_nm;
+        step.clutch_torque_nm = s.clutch_torque_nm;
+        step.max_torque_nm = specs.max_torque_nm;
+        step.clutch_engagement = s.clutch_engagement;
+        step.tc_cut_ratio_smoothed = s.tc_cut_ratio_smoothed;
+        step.is_rev_limited = s.is_rev_limited;
+        step.shift_timer_s = s.shift_timer_s;
+        for (int i = 0; i < OFP_AUDIO_STEP_WHEELS; ++i)
+        {
+            step.wheel_spin_rad_s[i] = s.wheels[i].spin_rad_s;
+            step.slip_ratio[i] = (float)s.wheels[i].slip_ratio;
+            step.slip_angle_rad[i] = (float)s.wheels[i].slip_angle_rad;
+            step.contact_fraction[i] = (float)s.wheels[i].contact_fraction;
+            step.normal_force_n[i] = (float)s.wheels[i].normal_force_n;
+            step.surface[i] = s.wheels[i].surface;
+        }
+        step.final_drive = specs.final_drive;
+        step.front_torque_split = specs.front_torque_split;
+        step.floor_valid_mask = s.floor_valid_mask;
+        step.floor_impulse_ns[0] = s.floor_impulse_ns[0];
+        step.floor_impulse_ns[1] = s.floor_impulse_ns[1];
+        step.body_contact_count = s.body_contact_count;
+        for (int i = 0; i < OFP_AUDIO_STEP_MAX_CONTACTS; ++i)
+            step.body_contact_impulse_ns[i] = s.body_contact_impulse_ns[i];
+        step.scrape_speed_m_s = (float)std::sqrt(s.linear_velocity.x * s.linear_velocity.x
+                                               + s.linear_velocity.z * s.linear_velocity.z);
+        return step;
+    }
+
+    //! Publishes the raw audio step for the accepted physics step into the
+    //! `tCarElt` ring. Controlled discard on overflow (the consumer counts it
+    //! from the write counter); never fabricates a step.
+    inline void publishAudioStep(RustCar& car)
+    {
+        if (!car.ready || car.failed || !car.car)
+            return;
+        tCarElt* elt = car.car;
+        const OfpAudioStepV1 step = BuildAudioStep(car.snapshot, car.specs, car.index,
+                                                   car.audio_session);
+        elt->audio_steps[elt->audio_step_write % OFP_AUDIO_STEP_DEPTH] = step;
+        elt->audio_step_write += 1;
+        elt->audio_session = car.audio_session;
+    }
+
+    //! New generation on reset: stale packets can never resurrect a cut window.
+    inline void resetAudioSession(RustCar& car)
+    {
+        car.audio_session += 1;
+        if (car.audio_session == 0)
+            car.audio_session = 1;
+        if (car.car)
+        {
+            car.car->audio_step_write = 0;
+            car.car->audio_session = car.audio_session;
+        }
+    }
 
     void applyIntegrationScenario(RustCar& car, double delta_time);
     void publishFormulaHud(RustCar& car);
@@ -541,6 +625,7 @@ namespace
         applyBarrierDamage(car, contacts, contact_count);
         updateTrackPosition(elt);
         publishCar(car);
+        publishAudioStep(car);
     }
 
     void logDiagnostics(RustCar& car)
@@ -703,6 +788,7 @@ namespace
             const double yaw = std::atan2(-car.snapshot.basis_z.y, -car.snapshot.basis_z.x);
             const int code = rustPhysicsLibrary.reset(car.handle, origin, yaw);
             rustPhysicsLibrary.snapshot(car.handle, &car.snapshot);
+            resetAudioSession(car);
             GfLogInfo("RUSTSETUP reset=%d yaw=%.4f\n", code, yaw);
         }
         (void)delta_time;
@@ -763,6 +849,11 @@ namespace
         // Clear any telemetry inherited from a previous car or session: the HUD must show
         // unknown values until the new vehicle has published an accepted step.
         std::memset(&elt->formulaHud, 0, sizeof(elt->formulaHud));
+        // The audio ring is valid only with schema_version == OFP_AUDIO_STEP_VERSION;
+        // clear it so `snddefault` never mistakes stale memory for a step.
+        std::memset(&elt->audio_steps, 0, sizeof(elt->audio_steps));
+        elt->audio_step_write = 0;
+        elt->audio_session = car.audio_session;
         car.specs = OfpVehicleSpecs{};
         car.steering_wheel_lock_rad = 0.0;
         // Presentation metadata remains in the visual car XML, independent of the
@@ -817,6 +908,7 @@ namespace
         rustPhysicsLibrary.reset(car.handle, origin, yaw);
         car.ready = true;
         car.failed = false;
+        resetAudioSession(car);
         if (rustPhysicsLibrary.snapshot(car.handle, &car.snapshot) != 0)
         {
             car.failed = true;
@@ -846,6 +938,9 @@ namespace
         {
             // Never leave the previous car's presentation telemetry behind.
             std::memset(&car.car->formulaHud, 0, sizeof(car.car->formulaHud));
+            // Same for the audio ring: stale steps must never look fresh.
+            std::memset(&car.car->audio_steps, 0, sizeof(car.car->audio_steps));
+            car.car->audio_step_write = 0;
         }
         if (car.handle && rustPhysicsLibrary.destroy)
             rustPhysicsLibrary.destroy(car.handle);

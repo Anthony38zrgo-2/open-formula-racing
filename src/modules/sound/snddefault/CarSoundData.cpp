@@ -59,6 +59,7 @@ CarSoundData::CarSoundData(int id, SoundInterface* sound_interface)
     turbo_on = false;
     turbo_ilag = 0.05f;
     turbo_rpm = 0.0f;
+    v10_active = false;
     this->sound_interface = sound_interface;
     for (int i=0; i<4; i++) {
         for (int j=0; j<3; j++) {
@@ -148,6 +149,34 @@ void CarSoundData::update (tCarElt* car)
     position[0] = car->pub.DynGCg.pos.x;
     position[1] = car->pub.DynGCg.pos.y;
     position[2] = car->pub.DynGCg.pos.z;
+    if (v10_active) {
+        /* The Rust mixer owns every voice of this car: keep position/speed
+           (and the distance attenuation below) but silence all legacy
+           characteristics so shared max-loops exclude the car and no shift is
+           ever sent twice (gear-diff here vs physical phase in the sampler).
+           A stopped engine leaves no idle behind; surfaces may still sound
+           through the mixer while the car rolls. */
+        attenuation = 0.0f;
+        eng_pri.a = 0.0f;
+        engine.a = 0.0f;
+        engine.f = 1.0f;
+        axle.a = 0.0f;
+        turbo.a = 0.0f;
+        engine_backfire.a = 0.0f;
+        curb.a = grass.a = dirt.a = dirt_skid.a = snow.a = road.a = road_scrub.a = 0.0f;
+        skid_metal.a = 0.0f;
+        drag_collision.a = 0.0f;
+        for (int i = 0; i < 4; i++) {
+            wheel[i].skid.a = 0.0f;
+            wheel[i].scrub.a = 0.0f;
+        }
+        prev_gear = car->_gear;
+        gear_changing = false;
+        bottom_crash = false;
+        bang = false;
+        crash = false;
+        return;
+    }
     calculateAttenuation (car);
     calculateEngineSound (car);
     calculateBackfireSound (car);

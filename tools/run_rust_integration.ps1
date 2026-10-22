@@ -6,6 +6,12 @@
 #
 # Usage:
 #   pwsh -File tools/run_rust_integration.ps1 -ThrottleSeconds 6 -BrakeSeconds 3
+#
+# Audio gate (Etapa 6 V10): -RequireAudio turns the captured V10 log lines into a
+# verdict (audio_gate.txt). It requires a game built AFTER the Etapa 4/5 changes
+# (open_formula_audio.dll in modules/sound + staged banks in data/sounds);
+# the binaries currently in distribution/ predate them, so the gate fails there
+# until rebuilt. Never run this unattended: it focuses windows and sends keys.
 
 param(
     [string]$RaceMan = 'williams-fuji-practice',
@@ -15,7 +21,8 @@ param(
     [int]$SteerSeconds = 3,
     [int]$SettleSeconds = 3,
     [int]$StartupTimeoutSeconds = 45,
-    [string]$CaptureDirectory = 'D:/open-formula/implementation/reports/rust_integration'
+    [string]$CaptureDirectory = 'D:/open-formula/implementation/reports/rust_integration',
+    [switch]$RequireAudio
 )
 
 $ErrorActionPreference = 'Stop'
@@ -121,3 +128,36 @@ if (Test-Path $stderr) {
 }
 $diagnostics | Set-Content (Join-Path $CaptureDirectory 'instrumentation.txt') -Encoding utf8
 $diagnostics | Select-Object -Last 20
+
+# Etapa 6 V10 audio gate: verdict over the captured logs (informational unless
+# -RequireAudio was given, in which case a missing gate throws).
+$audioChecks = @()
+foreach ($candidate in @($stderr, $log)) {
+    if (-not (Test-Path $candidate)) { continue }
+    $audioChecks += Select-String -Path $candidate -Pattern 'Open Formula audio:' |
+        ForEach-Object { $_.Line.Trim() }
+}
+$audioChecks = @($audioChecks | Select-Object -Unique)
+# NOTE: `-match` on an array returns the matching lines, not a boolean; count
+# explicitly so single-line and multi-line logs behave identically.
+$audioLoaded = @($audioChecks | Where-Object { $_ -match 'Open Formula audio: loaded ' })
+$audioActive = @($audioChecks | Where-Object { $_ -match 'Open Formula audio: car \d+ activated ' })
+$audioHardFail = @($audioChecks | Where-Object { $_ -match 'V10 unavailable|V10 init reported inactive|audio ABI mismatch|audio ABI layout mismatch|has no OpenAL source|has no OpenAL buffers' })
+$audioDrops = @($audioChecks | Where-Object { $_ -match 'steps dropped=' })
+$audioGate = [ordered]@{
+    loader_ok    = $audioLoaded.Count -gt 0
+    v10_active   = $audioActive.Count -gt 0
+    hard_failure = $audioHardFail.Count -gt 0
+    loader_line  = ($audioLoaded | Select-Object -First 1)
+    active_line  = ($audioActive | Select-Object -First 1)
+    drops_line   = ($audioDrops | Select-Object -First 1)
+}
+$audioGate['verdict'] = if ($audioGate.hard_failure) { 'FAIL' }
+                        elseif ($audioGate.loader_ok -and $audioGate.v10_active) { 'PASS' }
+                        else { 'INCONCLUSIVE (legacy path or predates Etapa 4 build)' }
+($audioGate.GetEnumerator() | ForEach-Object { "$($_.Key): $($_.Value)" }) |
+    Set-Content (Join-Path $CaptureDirectory 'audio_gate.txt') -Encoding utf8
+$audioGate
+if ($RequireAudio -and $audioGate.verdict -ne 'PASS') {
+    throw "Audio gate $($audioGate.verdict): see $(Join-Path $CaptureDirectory 'audio_gate.txt')."
+}

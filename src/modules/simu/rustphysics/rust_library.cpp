@@ -100,6 +100,10 @@ namespace
         mixLayout(hash, (std::uint64_t)offsetof(OfpWheelState, contact_point));
         mixLayout(hash, (std::uint64_t)offsetof(OfpWheelState, ray_distance));
         mixLayout(hash, (std::uint64_t)offsetof(OfpWheelState, brake_disc_temperature_c));
+        // ABI v6 tail (appended; v5 prefix untouched).
+        mixLayout(hash, (std::uint64_t)offsetof(OfpVehicleSpecs, max_torque_nm));
+        mixLayout(hash, (std::uint64_t)offsetof(OfpSnapshot, clutch_torque_nm));
+        mixLayout(hash, (std::uint64_t)offsetof(OfpSnapshot, sequence));
         return hash;
     }
 }

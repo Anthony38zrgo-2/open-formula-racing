@@ -74,11 +74,19 @@ public:
 	bool bang;
 	bool crash;
 
+	/* Etapa 4 V10: when the Rust mixer owns this car, every legacy voice
+	   (engine, axle/turbo, shifts, backfire, commons beds) stays silent so no
+	   effect ever plays twice. `update()` then publishes position/speed only.
+	   N<->1 keeps its commons layer inside the mixer itself. */
+	bool v10_active;
+
 public:
 	
 	CarSoundData (int id, SoundInterface* sound_interface);
 	void setEngineSound (Sound* engine_sound, float rpm_scale);
 	void setTurboParameters (bool turbo_on, float turbo_rpm, float turbo_lag);
+	void setV10Active (bool active) { v10_active = active; }
+	bool isV10Active () const { return v10_active; }
 	Sound* getEngineSound () const;
 	void copyEngPri (SoundPri& epri) const;
 	void setCarPosition (sgVec3 p);

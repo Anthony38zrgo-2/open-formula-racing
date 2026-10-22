@@ -1,0 +1,2 @@
+blocks: 300 x 1024 @44100 (release)
+p50 335.7 us | p95 369.8 us | p99 425.4 us | max 555.1 us | deadline 23220 us

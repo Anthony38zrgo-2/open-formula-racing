@@ -28,6 +28,8 @@
 
 #include "SoundInterface.h"
 
+#include <vector>
+
 class SharedSourcePool;
 
 
@@ -50,8 +52,12 @@ class OpenalSoundInterface : public SoundInterface
 	int OSI_MAX_SOURCES;
 	int OSI_MAX_STATIC_SOURCES;
 	int n_static_sources_in_use;
+	int reservedStreamingSources = 0;
 	SharedSourcePool* sourcepool;
 	static const int OSI_MIN_DYNAMIC_SOURCES;
+	/* Etapa 4 V10: cars owned by the Rust mixer (their legacy engine voices
+	   stay stopped so the pool budget is preserved for the rest). */
+	std::vector<char> v10_cars;
 
     virtual void setMaxSoundCar(CarSoundData** car_sound_data, QueueSoundMap* smap);
 
@@ -67,7 +73,12 @@ class OpenalSoundInterface : public SoundInterface
 	virtual void update(CarSoundData** car_sound_data, int n_cars,
 						sgVec3 p_obs, sgVec3 u_obs, sgVec3 c_obs, sgVec3 a_obs);
 	virtual void initSharedSourcePool();
+	void reserveStreamingSources(int count);
 	virtual bool getStaticSource(ALuint *source);
+
+	/* Etapa 4 V10: flag a car as mixer-owned (legacy engine stopped). */
+	void setV10Active(int car_id, bool active);
+	bool isV10Active(int car_id) const;
 
 	virtual SharedSourcePool* getSourcePool(void);
 

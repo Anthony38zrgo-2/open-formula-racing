@@ -12,3 +12,11 @@ __pycache__/
 /rust/target/
 # Oversized runtime logs (evidence stays on disk, not in git)
 /implementation/reports/rust_integration/**/*.log
+# Etapa 1 audio: bancos stageados localmente (19 MB) + reparación ACL; no versionar bytes ni backups.
+/sounds/
+/.acl-repair-out/
+/rust/vehicle-audio-engine/target/
+/rust/v10-engine-synth/target/
+/rust/open-formula-audio/target/
+# Etapa 2 audio: WAVs offline como evidencia local (manifiesto + informe sí se versionan).
+/implementation/reports/audio_etapa2/*.wav

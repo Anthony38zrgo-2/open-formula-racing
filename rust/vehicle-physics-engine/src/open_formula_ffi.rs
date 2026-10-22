@@ -11,7 +11,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use crate::open_formula::{OpenFormulaSimulation, set_track_ground_mesh, track_ground};
 use crate::types::{Mat3, Vec3};
 
-pub const OFP_ABI_VERSION: u32 = 5;
+pub const OFP_ABI_VERSION: u32 = 6;
 pub const OFP_MAX_CONTACTS: usize = 32;
 pub const OFP_WHEELS: usize = 4;
 pub const OFP_FLOOR_PROBES: usize = 2;
@@ -61,6 +61,10 @@ pub struct OfpVehicleSpecs {
     pub oil_optimal_max_temperature_c: f64,
     pub oil_derating_temperature_c: f64,
     pub oil_critical_temperature_c: f64,
+    // ABI v6: audio presentation references (Etapa 3). Appended so v5 offsets
+    // are preserved. The presentation layer must not duplicate these constants.
+    pub max_torque_nm: f64,
+    pub front_torque_split: f64,
 }
 
 #[repr(C)]
@@ -191,6 +195,23 @@ pub struct OfpSnapshot {
     pub floor_ray_hits: u64,
     pub body_contact_count: u32,
     pub body_contact_impulse_ns: [f64; OFP_MAX_CONTACTS],
+    // ABI v6: raw audio-mechanical state (Etapa 3). Appended after the v5 tail
+    // so every v5 offset is preserved. No acoustic decision is made here; the
+    // audio wrapper derives load/derivatives/shift phases from these fields.
+    // Clutch-transmitted torque (signed, N·m). Sign owns the transmission side.
+    pub clutch_torque_nm: f64,
+    // Smoothed physical traction-control cut [0,1] (already applied downstream
+    // on positive drive torque by the physics model).
+    pub tc_cut_ratio_smoothed: f64,
+    // Discrete physical rev-limiter state (1 when cutting). Windows are timed
+    // by `step_dt_s`, never replaced by the last graphic frame.
+    pub is_rev_limited: u32,
+    // Remaining physical shift-cut time (s). >0 means a real cut is in progress.
+    pub shift_timer_s: f64,
+    // Real duration of the accepted step (s). Audio cut windows use this clock.
+    pub step_dt_s: f64,
+    // Per-handle accepted-step counter. Audio packets reuse it for ordering.
+    pub sequence: u64,
 }
 
 impl OfpSnapshot {
@@ -238,6 +259,12 @@ impl OfpSnapshot {
             floor_ray_hits: 0,
             body_contact_count: 0,
             body_contact_impulse_ns: [0.0; OFP_MAX_CONTACTS],
+            clutch_torque_nm: 0.0,
+            tc_cut_ratio_smoothed: 0.0,
+            is_rev_limited: 0,
+            shift_timer_s: 0.0,
+            step_dt_s: 0.0,
+            sequence: 0,
         }
     }
 }
@@ -322,6 +349,10 @@ pub extern "C" fn ofp_abi_signature() -> u64 {
     mix_layout(&mut hash, std::mem::offset_of!(OfpWheelState, contact_point) as u64);
     mix_layout(&mut hash, std::mem::offset_of!(OfpWheelState, ray_distance) as u64);
     mix_layout(&mut hash, std::mem::offset_of!(OfpWheelState, brake_disc_temperature_c) as u64);
+    // ABI v6 tail (appended; v5 prefix untouched).
+    mix_layout(&mut hash, std::mem::offset_of!(OfpVehicleSpecs, max_torque_nm) as u64);
+    mix_layout(&mut hash, std::mem::offset_of!(OfpSnapshot, clutch_torque_nm) as u64);
+    mix_layout(&mut hash, std::mem::offset_of!(OfpSnapshot, sequence) as u64);
     hash
 }
 

@@ -1,0 +1,71 @@
+{
+  "tool": "va_baseline (donor-frozen binary, 6 scenarios, commons bank)",
+  "donor": {
+    "repo": "D:/Formula90s",
+    "head": "f3efcf246c2a2abf62477037ed0243f2f9a93a9b",
+    "binary": "game/crates/target/debug/va_baseline.exe"
+  },
+  "import": {
+    "repo": "D:/open-formula",
+    "head": "9c9164869c8210a558abb5e9aa5e760e5eacf5dd",
+    "binary": "rust/target/debug/va_baseline.exe"
+  },
+  "inputs": {
+    "bank": "sounds/banks/commons (staged, manifest 1ee39041...)",
+    "profile": "rust/data/vehicles/f1_2026_2008/f1_2026_2008_physics.json",
+    "layout": "junctions game/sounds + game/data/vehicles (identical bytes both sides)"
+  },
+  "tolerance": "exacta en picos/RMS/hashes de audio; solo difieren rutas del wrapper de captura y campos `coste`/`time_ms` de m\u00e1quina",
+  "comparable_lines": 82816,
+  "diffs": 0,
+  "scenarios": [
+    {
+      "name": "idle",
+      "peak_lr": "0.025/0.025",
+      "hash_lr_import": "1fa60c5688987f8c",
+      "hash_lr_donor": "1fa60c5688987f8c",
+      "match": true
+    },
+    {
+      "name": "redline",
+      "peak_lr": "0.083/0.083",
+      "hash_lr_import": "a4023dafd166867b",
+      "hash_lr_donor": "a4023dafd166867b",
+      "match": true
+    },
+    {
+      "name": "sweep",
+      "peak_lr": "0.112/0.112",
+      "hash_lr_import": "4d659f145efb26e1",
+      "hash_lr_donor": "4d659f145efb26e1",
+      "match": true
+    },
+    {
+      "name": "grass",
+      "peak_lr": "0.198/0.198",
+      "hash_lr_import": "1ba128e68824aba8",
+      "hash_lr_donor": "1ba128e68824aba8",
+      "match": true
+    },
+    {
+      "name": "shift_up",
+      "peak_lr": "0.131/0.131",
+      "hash_lr_import": "d8e15fc65fd9f514",
+      "hash_lr_donor": "d8e15fc65fd9f514",
+      "match": true
+    },
+    {
+      "name": "backfire",
+      "peak_lr": "0.113/0.113",
+      "hash_lr_import": "fdb6b61975029156",
+      "hash_lr_donor": "fdb6b61975029156",
+      "match": true
+    }
+  ],
+  "grand_prix_suite": {
+    "donor": "58 passed, 0 failed",
+    "import": "63 passed (58 shared + 5 OFP-V10-3500), 0 failed",
+    "verdict": "paridad de comportamiento en la suite congelada; la extensi\u00f3n solo act\u00faa bajo 4500 RPM"
+  },
+  "verdict": "paridad offline demostrada (Etapa 2/6)"
+}

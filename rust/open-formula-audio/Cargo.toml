@@ -1,0 +1,19 @@
+[package]
+name = "open_formula_audio"
+version = "0.1.0"
+edition = "2021"
+description = "Open Formula audio ABI: owned-mixer wrapper around vehicle-audio-engine for snddefault (Williams V10 + commons, 3500 RPM variant OFP-V10-3500)."
+license = "LicenseRef-Proprietary"
+publish = false
+
+[lib]
+name = "open_formula_audio"
+path = "src/lib.rs"
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+vehicle_audio_engine = { path = "../vehicle-audio-engine" }
+serde_json = "1"
+
+[dev-dependencies]
+vehicle_physics_engine = { path = "../vehicle-physics-engine" }

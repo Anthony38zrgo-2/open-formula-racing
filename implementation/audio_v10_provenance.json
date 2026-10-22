@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "destination": {
+    "repo": "D:/open-formula",
+    "branch": "codex/initial-port",
+    "head": "9c9164869c8210a558abb5e9aa5e760e5eacf5dd",
+    "import_paths": [
+      "rust/vehicle-audio-engine",
+      "rust/v10-engine-synth"
+    ],
+    "workspace_members": [
+      "vehicle-physics-engine",
+      "vehicle-audio-engine",
+      "v10-engine-synth"
+    ]
+  },
+  "source": {
+    "repo": "D:/Formula90s",
+    "head": "f3efcf246c2a2abf62477037ed0243f2f9a93a9b",
+    "crate_paths": [
+      "game/crates/vehicle-audio-engine",
+      "game/crates/v10-engine-synth"
+    ],
+    "local_diff_included": true,
+    "local_diff_stat": "game/crates/vehicle-audio-engine/src/grand_prix_sampler.rs: 25 insertions, 1 deletion",
+    "grand_prix_sampler_sha256_after_copy": "1441064fe5b1868e4794417b97c8d403e047480181730956f465a0089c8480b2",
+    "grand_prix_sampler_diff_summary": "Elimina rechazo de mínimos bajo cobertura, mantiene validación superior, añade tests 3500 RPM con clamp acústico a 4500 (no extiende afinación)."
+  },
+  "banks_frozen_reference": {
+    "v10_bank_dir": "game/sounds/banks/v10-v2-bank",
+    "v10_manifest_sha256": "6cbf798f9535e83144660d25b5c42089af19f4dcbc29e23a7212cbee38f80b8a",
+    "v10_coverage_rpm": [4500.0, 18000.0],
+    "v10_loops": ["engine_idle_loop", "engine_powered_low_loop", "engine_mid_on_loop", "engine_powered_medium_high_loop", "engine_powered_high_loop", "engine_powered_maximum_loop"],
+    "v10_coast_loops": ["engine_low_off_loop", "engine_mid_off_loop", "engine_off_maximum_loop"],
+    "v10_events": ["backfire_burst_3", "backfire_burst_4", "backfire_burst_5", "backfire_burst_6", "backfire_burst_7", "downshift_event", "upshift_event", "limiter_event"],
+    "v10_wav_count": 18,
+    "v10_total_bytes": 19272750,
+    "commons_bank_dir": "game/sounds/banks/commons",
+    "commons_manifest_sha256": "1ee39041141b70a14abd862b556122255d3ba9e9b71b5c9b3d9098ff7454c0fe",
+    "commons_files": ["impact_barrier.wav", "impact_cone.wav", "impact_hit_1.wav", "impact_hit_2.wav", "impact_hit_3.wav", "impact_hit_4.wav", "impact_scrape.wav", "neutral_first_gear_transition.wav", "surf_grass.wav", "surf_rumble.wav", "surf_sand.wav", "tyre_scrub.wav"],
+    "sound_mixer_config": "game/sounds/sound_mixer_config.json",
+    "sound_mixer_config_sha256": "9346307e8235da4166592fb88dee147003ae5c64b15517c19bc35cc56d93e966",
+    "williams_audio_profile": "game/data/vehicles/f1_1997/williams/profiles/hockenheim/audio.json",
+    "williams_audio_profile_sha256": "4ac72521526db0b6cbf05ef6e53f6a9b3f13e57c6d796742e497408546bc7d0c",
+    "note": "Los WAV no se copian en Etapa 1. El helper de Etapa 5 copiará solo assets declarados con verificación de hashes. 19 272 750 bytes es almacenamiento, no memoria del mixer."
+  },
+  "open_formula_adaptations_etapa1": {
+    "build_rs": "Usa HEAD de Open Formula, expone FORMULA90_BUILD_SHA (compat) + OPEN_FORMULA_BUILD_SHA + OPEN_FORMULA_AUDIO_DIRTY, observa ../../.git/HEAD y el ref dinamico al que apunta (sin rama fija), avisa si hay fuentes tracked sucias bajo rust/.",
+    "dsp_runtime": "Sustituye include_str!(../../../BUILD_SOURCE) por match option_env!(OPEN_FORMULA_BUILD_SHA/FORMULA90_BUILD_SHA) con fallback ceros. Ruta DSP desactivada para grand_prix_sampler.",
+    "idle_extension_variant": "OFP-V10-3500",
+    "idle_reference_rpm": 4531.638723634397,
+    "idle_extended_rate": 0.7723,
+    "idle_extended_rate_min": 0.76,
+    "effective_minimum_rpm": 3500.0,
+    "bank_intact": true,
+    "files_changed": [
+      "rust/Cargo.toml",
+      "rust/vehicle-audio-engine/build.rs",
+      "rust/vehicle-audio-engine/src/dsp_runtime.rs",
+      "rust/vehicle-audio-engine/src/grand_prix_sampler.rs"
+    ]
+  },
+  "licenses": {
+    "vehicle_audio_engine": "LicenseRef-Proprietary",
+    "v10_engine_synth": "LicenseRef-Proprietary",
+    "host": "GPL-2.0-or-later",
+    "note": "Evaluación técnica, no autorización de redistribución. Revisar condiciones antes de distribución pública."
+  },
+  "etapa1_exit": {
+    "compilation": "cargo check -p vehicle_audio_engine --offline OK",
+    "pending_validation": "Carga Rust con bancos, paridad offline, escucha y pruebas 3500 Hz/energía (Etapas 2 y 6)."
+  }
+}
