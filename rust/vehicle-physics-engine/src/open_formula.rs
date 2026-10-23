@@ -17,8 +17,9 @@ use parry3d_f64::shape::{SharedShape, TriMesh};
 use serde_json::Value;
 
 use crate::open_formula_ffi::{
-    OfpBodyContact, OfpControlInput, OfpSnapshot, OfpVec3, OfpWheelState, OFP_ABI_VERSION,
-    OFP_FLAG_BRAKE_THERMAL, OFP_FLAG_POWERTRAIN_THERMAL, OFP_FLAG_WHEEL_THERMAL,
+    OfpAxleDiagnostics, OfpBodyContact, OfpControlInput, OfpFailureDiagnostics, OfpSnapshot,
+    OfpVec3, OfpWheelDiagnostics, OfpWheelState, OFP_ABI_VERSION, OFP_FLAG_BRAKE_THERMAL,
+    OFP_FLAG_POWERTRAIN_THERMAL, OFP_FLAG_WHEEL_THERMAL, OFP_WHEELS,
 };
 use crate::simulation::{default_spawn_height, VehicleSimulator, VehicleState};
 use crate::suspension_setup::{
@@ -397,6 +398,7 @@ pub struct StepCounters {
     pub rejected_steps: u32,
 }
 
+#[derive(Clone)]
 pub struct OpenFormulaSimulation {
     simulator: VehicleSimulator,
     document: Value,
@@ -418,6 +420,10 @@ pub struct OpenFormulaSimulation {
     last_body_contact_impulse: [f64; 32],
     last_error: String,
     failed: bool,
+    /// Exact numbers of the last rejection. It lives here rather than in the
+    /// simulator because a rejection restores the simulator to the accepted state,
+    /// and the frozen state must still be able to report why it froze.
+    last_failure: crate::vertical_diagnostics::FailureDiagnostics,
     backends: u32,
     // Etapa 3: audio presentation clock. `sequence` counts accepted steps for
     // packet ordering; `last_step_dt` is the real accepted-step duration.
@@ -516,6 +522,7 @@ impl OpenFormulaSimulation {
             last_body_contact_impulse: [0.0; 32],
             last_error: String::new(),
             failed: false,
+            last_failure: crate::vertical_diagnostics::FailureDiagnostics::default(),
             backends: BACKEND_SUSPENSION_SIMPLIFIED
                 | BACKEND_AERO_SIMPLIFIED
                 | BACKEND_TIRE_RELAXATION
@@ -606,14 +613,7 @@ impl OpenFormulaSimulation {
     }
 
     pub fn reset(&mut self, origin: Vec3, yaw: f64) {
-        let basis = Mat3::from_euler_yxz(yaw, 0.0, 0.0);
-        self.simulator.state.transform = crate::types::Transform3D::new(origin, basis);
-        self.simulator.state.orientation = crate::types::Quat::from_mat3(&basis);
-        self.simulator.state.linear_velocity = Vec3::ZERO;
-        self.simulator.state.angular_velocity = Vec3::ZERO;
-        self.simulator.state.linear_acceleration = Vec3::ZERO;
-        self.simulator.state.angular_acceleration = Vec3::ZERO;
-        self.simulator.state.suspension.reset_mechanical_state();
+        self.simulator.reset(origin, yaw);
         self.failed = false;
         self.counters = StepCounters::default();
         // New session/generation for audio packet ordering.
@@ -777,7 +777,6 @@ impl OpenFormulaSimulation {
     fn apply_body_impulse(&mut self, point_world: Vec3, normal_world: Vec3, restitution: f64) -> f64 {
         let state = &mut self.simulator.state;
         let config = &self.simulator.config;
-        let mass = config.chassis.total_vehicle_mass(&config.tires, &config.fuel).max(1.0);
         let normal = if normal_world.length() > 1e-9 {
             normal_world.normalized()
         } else {
@@ -795,22 +794,14 @@ impl OpenFormulaSimulation {
         if normal_velocity >= 0.0 {
             return 0.0;
         }
-        let inertia_local = crate::simulation::principal_inertia_for_suspension_backend(
-            config,
-            state.suspension.backend,
-        );
         let basis = state.transform.basis;
-        let arm_local = basis.inverse_transform_vector(arm);
-        let normal_local = basis.inverse_transform_vector(normal);
-        let r_cross_n = arm_local.cross(normal_local);
-        let angular_term = Vec3::new(
-            r_cross_n.x / inertia_local.x.max(1e-3),
-            r_cross_n.y / inertia_local.y.max(1e-3),
-            r_cross_n.z / inertia_local.z.max(1e-3),
-        )
-        .cross(arm_local)
-        .dot(normal_local);
-        let inverse_effective_mass = 1.0 / mass + angular_term;
+        let zero = crate::simplified_body_coupling::body_accelerations(config, state, crate::simulation::ForceTorqueOutput::default());
+        let unit = crate::simplified_body_coupling::body_accelerations(config, state,
+            crate::simulation::ForceTorqueOutput { force_world:normal, torque_world:arm.cross(normal) });
+        let (Ok((a0, alpha0)), Ok((a1, alpha1))) = (zero, unit) else { return 0.0; };
+        let response = a1-a0;
+        let angular_response = alpha1-alpha0;
+        let inverse_effective_mass = (response + angular_response.cross(arm)).dot(normal);
         if inverse_effective_mass <= 1e-9 {
             return 0.0;
         }
@@ -818,13 +809,13 @@ impl OpenFormulaSimulation {
         if !impulse.is_finite() || impulse <= 0.0 {
             return 0.0;
         }
-        state.linear_velocity += normal * (impulse / mass);
-        let angular_impulse_local = basis.inverse_transform_vector(arm.cross(normal * impulse));
-        state.angular_velocity += basis.transform_vector(Vec3::new(
-            angular_impulse_local.x / inertia_local.x.max(1e-3),
-            angular_impulse_local.y / inertia_local.y.max(1e-3),
-            angular_impulse_local.z / inertia_local.z.max(1e-3),
-        ));
+        let arms = WheelIndex::ALL.map(|w| crate::simplified_body_coupling::hub_arm(config,state,w));
+        state.linear_velocity += response * impulse;
+        state.angular_velocity += angular_response * impulse;
+        for wheel in WheelIndex::ALL {
+            state.suspension.wheels[wheel as usize].unsprung_velocity_m_s -=
+                (response + angular_response.cross(arms[wheel as usize])).dot(basis.y)*impulse;
+        }
         impulse
     }
 
@@ -841,6 +832,9 @@ impl OpenFormulaSimulation {
             return Ok(());
         }
         let dt = duration_seconds.clamp(1.0 / 1000.0, 1.0 / 20.0);
+        // Host identity; each nested solve subsequently sets its own endpoint and duration.
+        crate::vertical_diagnostics::begin_step(self.simulator.state.sim_time, dt, self.sequence);
+        let accepted_before_step = self.clone();
         self.counters.wheel_queries = 0;
         self.counters.wheel_hits = 0;
         self.counters.floor_queries = 0;
@@ -934,6 +928,29 @@ impl OpenFormulaSimulation {
         self.simulator
             .step_with_aerodynamics_environment(&vehicle_input, &samples, &aero_environment, dt);
 
+        if let Some(error) = self.simulator.state.suspension.mechanical_failure.clone() {
+            // Publish the exact constraint numbers before restoring the accepted
+            // state: the trace keeps the rejected candidate next to it.
+            let mut failure = self.simulator.state.suspension.failure.unwrap_or_default();
+            if failure.code == crate::vertical_diagnostics::FailureCode::None {
+                failure.code = crate::vertical_diagnostics::FailureCode::BodyCornerNotConverged;
+            }
+            let rejected_time_s = self.simulator.state.sim_time;
+            crate::vertical_diagnostics::interval(accepted_before_step.simulator.state.sim_time, 0.0);
+            let accepted = &accepted_before_step.simulator.state;
+            crate::vertical_diagnostics::record(crate::vertical_diagnostics::kind::RESTORED, -1, -1, 0, 0, 0.0,
+                accepted.linear_acceleration, accepted.angular_acceleration,
+                [&accepted.suspension.vertical[0], &accepted.suspension.vertical[1],
+                 &accepted.suspension.vertical[2], &accepted.suspension.vertical[3]]);
+            crate::vertical_diagnostics::dump_rejection(failure, rejected_time_s);
+            *self = accepted_before_step;
+            self.counters.rejected_steps += 1;
+            self.failed = true;
+            self.last_error = error;
+            self.last_failure = failure;
+            return Err(self.last_error.clone());
+        }
+
         let state = &self.simulator.state;
         let finite = state.transform.origin.is_finite()
             && state.linear_velocity.is_finite()
@@ -952,11 +969,32 @@ impl OpenFormulaSimulation {
                     && tire.lateral_force.is_finite()
             });
         if !finite {
+            let failure = crate::vertical_diagnostics::FailureDiagnostics {
+                code: crate::vertical_diagnostics::FailureCode::NonFiniteState,
+                wheel: -1,
+                axle: -1,
+                ..crate::vertical_diagnostics::FailureDiagnostics::default()
+            };
+            let rejected = &self.simulator.state;
+            crate::vertical_diagnostics::record_failure(failure, 0, 0,
+                rejected.linear_acceleration, rejected.angular_acceleration,
+                [&rejected.suspension.vertical[0], &rejected.suspension.vertical[1],
+                 &rejected.suspension.vertical[2], &rejected.suspension.vertical[3]]);
+            let rejected_time_s = self.simulator.state.sim_time;
+            crate::vertical_diagnostics::interval(accepted_before_step.simulator.state.sim_time, 0.0);
+            let accepted = &accepted_before_step.simulator.state;
+            crate::vertical_diagnostics::record(crate::vertical_diagnostics::kind::RESTORED, -1, -1, 0, 0, 0.0,
+                accepted.linear_acceleration, accepted.angular_acceleration,
+                [&accepted.suspension.vertical[0], &accepted.suspension.vertical[1],
+                 &accepted.suspension.vertical[2], &accepted.suspension.vertical[3]]);
+            crate::vertical_diagnostics::dump_rejection(failure, rejected_time_s);
+            *self = accepted_before_step;
             self.counters.rejected_steps += 1;
             self.failed = true;
             self.last_error =
                 "the Rust physics step produced a non-finite vehicle state; the last valid state is preserved"
                     .to_string();
+            self.last_failure = failure;
             return Err(self.last_error.clone());
         }
         // Accepted step: advance the audio presentation clock. The snapshot and
@@ -964,7 +1002,30 @@ impl OpenFormulaSimulation {
         // never replaced by a later graphic frame.
         self.sequence = self.sequence.saturating_add(1);
         self.last_step_dt = dt;
+        self.record_accepted_tick();
         Ok(())
+    }
+
+    /// One accepted-tick row plus the event detector and the pending-window writer.
+    /// Diagnostics only: the simulation result is already committed.
+    fn record_accepted_tick(&self) {
+        let state = &self.simulator.state;
+        crate::vertical_diagnostics::interval(state.sim_time, self.last_step_dt);
+        let vertical = &state.suspension.vertical;
+        let wheels = [&vertical[0], &vertical[1], &vertical[2], &vertical[3]];
+        crate::vertical_diagnostics::record(
+            crate::vertical_diagnostics::kind::TICK,
+            -1,
+            -1,
+            0,
+            0,
+            0.0,
+            state.linear_acceleration,
+            state.angular_acceleration,
+            wheels,
+        );
+        crate::vertical_diagnostics::observe_accepted(state.sim_time, wheels);
+        crate::vertical_diagnostics::service_window(state.sim_time);
     }
 
     fn point_normal_velocity(&self, point_world: Vec3, normal_world: Vec3) -> f64 {
@@ -1122,6 +1183,43 @@ impl OpenFormulaSimulation {
         snapshot.rejected_steps = self.counters.rejected_steps;
         snapshot.body_contact_count = self.last_body_contact_count;
         snapshot.body_contact_impulse_ns = self.last_body_contact_impulse;
+        // ABI v7: vertical-suspension diagnostics. These are measurements of the last
+        // accepted solve plus the rejection record; they never feed a force.
+        snapshot.angular_acceleration = vec3(state.angular_acceleration);
+        for index in 0..OFP_WHEELS {
+            snapshot.wheel_diagnostics[index] = wheel_diagnostics(&state.suspension.vertical[index]);
+        }
+        for axle in 0..2 {
+            let source = &state.suspension.axles[axle];
+            snapshot.axle_diagnostics[axle] = OfpAxleDiagnostics {
+                iterations: source.iterations,
+                converged: i32::from(source.converged),
+                substeps: source.substeps,
+                reserved0: 0,
+                residual_m_s: source.residual_m_s,
+                antiroll_stiffness_n_per_m: source.antiroll_stiffness_n_per_m,
+                antiroll_force_n: source.antiroll_force_n,
+                normal_load_n: source.normal_load_n,
+            };
+        }
+        let failure = self.last_failure;
+        snapshot.failure = OfpFailureDiagnostics {
+            active: i32::from(self.failed),
+            code: failure.code.as_i32(),
+            wheel: failure.wheel,
+            axle: failure.axle,
+            iteration: failure.iteration,
+            subdivisions: failure.subdivisions,
+            demand_m: failure.demand_m,
+            limit_m: failure.limit_m,
+            excess_m: failure.excess_m,
+            limit_velocity_m_s: failure.limit_velocity_m_s,
+            residual_m_s: failure.residual_m_s,
+            axle_wheel: failure.axle_wheels,
+            reserved1: 0,
+            reserved2: 0,
+        };
+        snapshot.trace_records = crate::vertical_diagnostics::buffered() as u32;
         snapshot
     }
 
@@ -1175,6 +1273,97 @@ impl OpenFormulaSimulation {
 
     pub fn fuel_density_kg_per_litre(&self) -> f64 {
         self.simulator.config.fuel.density_kg_per_litre
+    }
+
+    /// Effective setup actually in force, as newline-separated `FIELD` and `DERIVED`
+    /// lines. Every value carries its unit and the range the garage admits, and the
+    /// derived block states the coefficients the solver consumes. This is written
+    /// after the transaction commits, so it can never show a requested value that the
+    /// running car did not adopt.
+    pub fn effective_setup_report(&self) -> String {
+        let config = &self.simulator.config;
+        let mut text = String::with_capacity(8192);
+        for field in SETUP_FIELDS {
+            let pointer = format!("/{}", field.path.replace('.', "/"));
+            let Some(stored) = self.document.pointer(&pointer).and_then(Value::as_f64) else {
+                continue;
+            };
+            let value = if field.path == "fuel.initial_kg" {
+                config.fuel.current_kg
+            } else {
+                stored
+            };
+            text.push_str(&format!(
+                "FIELD path={} label=\"{}\" value={:.6} unit=\"{}\" min={:.6} max={:.6} step={:.6} editable={}\n",
+                field.path,
+                field.label,
+                value,
+                field.unit,
+                field.minimum,
+                field.maximum,
+                field.step,
+                i32::from(field.editable),
+            ));
+        }
+        if let Some(geometry) = config.suspension.geometric_suspension.as_ref() {
+            for wheel in WheelIndex::ALL {
+                let axle = geometry.axle(wheel);
+                let rest_compression_m = crate::suspension::rest_compression_m(config, wheel);
+                let spring_length_m = if wheel.is_front() {
+                    config.suspension.front_spring_length
+                } else {
+                    config.suspension.rear_spring_length
+                };
+                let tire_radius_m = if wheel.is_front() {
+                    config.tires.front_tire_radius
+                } else {
+                    config.tires.rear_tire_radius
+                };
+                text.push_str(&format!(
+                    "DERIVED wheel={:?} rest_compression_m={:.6} spring_length_m={:.6} spring_free_length_m={:.6} spring_installed_length_m={:.6} preload_m={:.6} spring_rate_N_per_m={:.3} damper_bump_Ns_per_m={:.3} damper_rebound_Ns_per_m={:.3} damper_knee_m_per_s={:.6} damper_fast_factor={:.6} droop_m={:.6} bump_m={:.6} tire_radius_m={:.6}\n",
+                    wheel,
+                    rest_compression_m,
+                    spring_length_m,
+                    axle.spring_free_length_m,
+                    axle.spring_installed_length_m,
+                    axle.spring_free_length_m - axle.spring_installed_length_m,
+                    axle.spring_rate_N_per_m,
+                    axle.damper_bump_Ns_per_m,
+                    axle.damper_rebound_Ns_per_m,
+                    axle.damper_knee_m_per_s,
+                    axle.damper_fast_factor,
+                    axle.wheel_droop_m,
+                    axle.wheel_bump_m,
+                    tire_radius_m,
+                ));
+            }
+            for front in [true, false] {
+                text.push_str(&format!(
+                    "DERIVED axle={} arb_ratio={:.6} arb_config={:?}\n",
+                    if front { "front" } else { "rear" },
+                    if front {
+                        config.suspension.front_arb_ratio
+                    } else {
+                        config.suspension.rear_arb_ratio
+                    },
+                    geometry.arb(front),
+                ));
+            }
+        }
+        text.push_str(&format!(
+            "DERIVED mass_kg={:.3} fuel_kg={:.3} front_weight_fraction={:.6} brake_bias_front={:.6}\n",
+            self.simulator.config.chassis.vehicle_mass,
+            config.fuel.current_kg,
+            config.chassis.front_weight_distribution,
+            config.brakes.front_brake_bias,
+        ));
+        // The trims the axle solver actually evaluates (damper multipliers and bar),
+        // not the design coefficients the garage text stated.
+        text.push_str(&format!(
+            "DERIVED effective_elements={}\n",
+            self.effective_suspension_summary()
+        ));
+        text
     }
 
     pub fn setup_fields_text(&self) -> String {
@@ -1438,6 +1627,45 @@ fn vec3(value: Vec3) -> OfpVec3 {
         x: value.x,
         y: value.y,
         z: value.z,
+    }
+}
+
+/// Maps one corner's diagnostics onto the public ABI record. Pure translation: no
+/// clamp, no sign change, no unit conversion (the ABI is SI).
+fn wheel_diagnostics(
+    source: &crate::vertical_diagnostics::WheelVerticalDiagnostics,
+) -> OfpWheelDiagnostics {
+    OfpWheelDiagnostics {
+        ground_detected: i32::from(source.ground_detected),
+        ground_binding: i32::from(source.ground_binding),
+        droop_stop_active: i32::from(source.droop_stop_active),
+        bump_stop_active: i32::from(source.bump_stop_active),
+        trapped_at_stop: i32::from(source.trapped_at_stop),
+        reserved0: 0,
+        compression_m: source.compression_m,
+        ground_separation_m: source.ground_separation_m,
+        ground_separation_normal_m: source.ground_separation_normal_m,
+        ray_shortfall_m: source.ray_shortfall_m,
+        ground_demand_m: source.ground_demand_m,
+        ground_demand_predicted_m: source.ground_demand_predicted_m,
+        max_compression_m: source.max_compression_m,
+        min_compression_m: source.min_compression_m,
+        headroom_to_bump_m: source.headroom_to_bump_m,
+        travel_m: source.travel_m,
+        axial_velocity_m_s: source.axial_velocity_m_s,
+        spring_force_n: source.spring_force_n,
+        damper_force_n: source.damper_force_n,
+        antiroll_force_n: source.antiroll_force_n,
+        stop_force_n: source.stop_force_n,
+        motion_ratio: source.motion_ratio,
+        element_force_sum_n: source.element_force_sum_n,
+        contact_impulse_ns: source.contact_impulse_ns,
+        droop_stop_impulse_ns: source.droop_stop_impulse_ns,
+        bump_stop_impulse_ns: source.bump_stop_impulse_ns,
+        anchor_position: vec3(source.anchor_position),
+        anchor_velocity: vec3(source.anchor_velocity),
+        anchor_acceleration: vec3(source.anchor_acceleration),
+        axial_anchor_acceleration_m_s2: source.axial_anchor_acceleration_m_s2,
     }
 }
 

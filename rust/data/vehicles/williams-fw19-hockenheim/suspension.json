@@ -3,9 +3,9 @@
     "use_authored_wheel_centers": true,
     "virtual_unsprung_mass_multiplier": 1.25,
     "front": {
-      "arb_ratio": 1.00,
+      "arb_ratio": 0.25,
       "bump_damp_multiplier": 1.0,
-      "bump_stop_multiplier": 2.6,
+      "bump_stop_multiplier": 1.0,
       "camber": -0.06981317008,
       "camber_gain_rad_per_m": -0.02,
       "damping_ratio": 0.74,
@@ -227,49 +227,53 @@
         }
       },
       "front": {
-        "bump_stop_mult": 2.6,
-        "damper_bump_Ns_per_m": 6970.0,
+        "bump_stop_mult": 1.0,
+        "damper_bump_Ns_per_m": 8074.843399230281,
         "damper_fast_factor": 0.5,
         "damper_knee_m_per_s": 0.127,
         "damper_max_m": 0.4,
         "damper_min_m": 0.15,
-        "damper_rebound_Ns_per_m": 11475.0,
-        "spring_free_length_m": 0.31413158350545256,
+        "damper_rebound_Ns_per_m": 9938.268799052654,
+        "spring_free_length_m": 0.27142903823632325,
         "spring_installed_length_m": 0.26,
-        "spring_rate_N_per_m": 134300.0,
+        "spring_rate_N_per_m": 200000.0,
         "wheel_bump_m": 0.025,
-        "wheel_droop_m": 0.085
+        "wheel_droop_m": 0.085,
+        "bump_stop_travel_m": 0.005,
+        "hard_stop_overtravel_m": 0.0001
       },
       "front_arb": {
         "mode": "legacy_ratio",
-        "ratio": 0.15
+        "ratio": 0.25
       },
       "rear": {
-        "bump_stop_mult": 2.8,
-        "damper_bump_Ns_per_m": 14000.0,
+        "bump_stop_mult": 1.0,
+        "damper_bump_Ns_per_m": 47431.81426907967,
         "damper_fast_factor": 0.5,
         "damper_knee_m_per_s": 0.127,
         "damper_max_m": 0.4,
         "damper_min_m": 0.15,
-        "damper_rebound_Ns_per_m": 22000.0,
-        "spring_free_length_m": 0.2911941727167742,
+        "damper_rebound_Ns_per_m": 58377.61756194421,
+        "spring_free_length_m": 0.25164038757661955,
         "spring_installed_length_m": 0.25,
-        "spring_rate_N_per_m": 142800.0,
-        "wheel_bump_m": 0.03,
-        "wheel_droop_m": 0.09
+        "spring_rate_N_per_m": 1200000.0,
+        "wheel_bump_m": 0.04,
+        "wheel_droop_m": 0.09,
+        "bump_stop_travel_m": 0.005,
+        "hard_stop_overtravel_m": 0.0001
       },
       "rear_arb": {
         "mode": "legacy_ratio",
-        "ratio": 0.09
+        "ratio": 0.06
       },
       "version": 1
     },
     "model": "geometric",
     "model_version": 1,
     "rear": {
-      "arb_ratio": 0.80,
+      "arb_ratio": 0.06,
       "bump_damp_multiplier": 0.9,
-      "bump_stop_multiplier": 2.8,
+      "bump_stop_multiplier": 1.0,
       "camber": -0.02617993878,
       "camber_gain_rad_per_m": -0.02,
       "damping_ratio": 0.71,

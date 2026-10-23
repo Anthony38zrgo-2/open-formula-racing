@@ -410,6 +410,40 @@ pub struct SuspensionSystem {
     pub arb_energy_front_j: f64,
     #[serde(default)]
     pub arb_energy_rear_j: f64,
+    /// Phase A diagnostics: axle substeps that exhausted the fixed-point budget
+    /// and fell back to the sequential recomputation. Never affects forces.
+    #[serde(default)]
+    pub axle_fallback_count: u64,
+    /// Phase A diagnostics: worst fixed-point iteration count seen on this system.
+    #[serde(default)]
+    pub axle_max_iterations: u32,
+    /// Current trial body acceleration (world); the standalone transaction iterates
+    /// it with the corner solve before committing a single interval.
+    #[serde(default)]
+    pub body_acceleration_world: Vec3,
+    #[serde(default)]
+    pub body_angular_acceleration_world: Vec3,
+    #[serde(default)]
+    pub body_angular_velocity_world: Vec3,
+    /// Chassis linear velocity (world), used only to report anchor velocity.
+    #[serde(default)]
+    pub body_linear_velocity_world: Vec3,
+    #[serde(default)]
+    pub body_reference_world: Vec3,
+    #[serde(default)]
+    pub mechanical_failure: Option<String>,
+    /// Vertical-suspension telemetry of the last solve, one entry per corner.
+    /// Measurements only: nothing here feeds a force or a constraint.
+    #[serde(skip)]
+    pub vertical: [crate::vertical_diagnostics::WheelVerticalDiagnostics; 4],
+    /// Per-axle simultaneous-solve telemetry (front, rear).
+    #[serde(skip)]
+    pub axles: [crate::vertical_diagnostics::AxleVerticalDiagnostics; 2],
+    /// Exact numbers of the constraint that rejected the last solve, when it was
+    /// rejected. Cleared at the start of every new trial, so a published value
+    /// always belongs to the trial being reported.
+    #[serde(skip)]
+    pub failure: Option<crate::vertical_diagnostics::FailureDiagnostics>,
 }
 
 impl SuspensionSystem {
@@ -441,6 +475,17 @@ impl SuspensionSystem {
             transfer_rear_n: 0.0,
             arb_energy_front_j: 0.0,
             arb_energy_rear_j: 0.0,
+            axle_fallback_count: 0,
+            axle_max_iterations: 0,
+            body_acceleration_world: Vec3::ZERO,
+            body_angular_acceleration_world: Vec3::ZERO,
+            body_angular_velocity_world: Vec3::ZERO,
+            body_linear_velocity_world: Vec3::ZERO,
+            body_reference_world: Vec3::ZERO,
+            mechanical_failure: None,
+            vertical: [crate::vertical_diagnostics::WheelVerticalDiagnostics::default(); 4],
+            axles: [crate::vertical_diagnostics::AxleVerticalDiagnostics::default(); 2],
+            failure: None,
         }
     }
 
@@ -478,6 +523,10 @@ impl SuspensionSystem {
             wheel.contact_fraction = 0.0;
             wheel.unsprung_velocity_m_s = 0.0;
         }
+        // Diagnostics describe a solve, so a reset must not leave a stale one behind.
+        self.vertical = [crate::vertical_diagnostics::WheelVerticalDiagnostics::default(); 4];
+        self.axles = [crate::vertical_diagnostics::AxleVerticalDiagnostics::default(); 2];
+        self.failure = None;
     }
 
     pub fn select_backend(&mut self, config: &VehicleConfig, backend: SuspensionBackend) {
@@ -610,7 +659,18 @@ impl SuspensionSystem {
     ) {
         let duration_seconds = duration_seconds.max(1e-5);
         for index in 0..4 {
-            self.sample_contact(configuration, WheelIndex::ALL[index], &contact_samples[index], duration_seconds, body_orientation);
+            let wheel = WheelIndex::ALL[index];
+            self.sample_contact(configuration, wheel, &contact_samples[index], duration_seconds, body_orientation);
+            // Ray geometry is a property of the query, not of the solve: record how
+            // much ray the corner still needed, so a wheel that never finds ground is
+            // distinguishable from one that finds it and is held back.
+            let max_ray_length = spring_length(configuration, wheel) + tire_radius(configuration, wheel);
+            self.vertical[index].ray_shortfall_m =
+                ray_shortfall(&contact_samples[index], max_ray_length);
+            let state = &self.wheels[index];
+            self.vertical[index].contact_point = state.effective_contact_point;
+            self.vertical[index].contact_normal = state.effective_normal;
+            self.vertical[index].ray_hit_mask = (state.ray_grounded[0] as u32) | ((state.ray_grounded[1] as u32) << 1) | ((state.ray_grounded[2] as u32) << 2);
         }
 
         if self.backend == SuspensionBackend::Simplified
@@ -619,11 +679,14 @@ impl SuspensionSystem {
         {
             if let Some(body) = body_kinematics {
                 self.configure_simplified_contact_kinematics(configuration, body);
+                self.body_angular_velocity_world = body.angular_velocity;
+                self.body_linear_velocity_world = body.linear_velocity;
+                self.body_reference_world = body.transform.origin;
             }
             self.solve_simplified_geometric_axle(configuration, mechanical_modifiers,
-                [WheelIndex::FrontLeft, WheelIndex::FrontRight], duration_seconds);
+                [WheelIndex::FrontLeft, WheelIndex::FrontRight], duration_seconds, body_orientation);
             self.solve_simplified_geometric_axle(configuration, mechanical_modifiers,
-                [WheelIndex::RearLeft, WheelIndex::RearRight], duration_seconds);
+                [WheelIndex::RearLeft, WheelIndex::RearRight], duration_seconds, body_orientation);
             if let Some(body) = body_kinematics {
                 self.update_simplified_contact_application_points(configuration, body);
             }
@@ -925,7 +988,7 @@ impl SuspensionSystem {
         let spring_len = spring_length(config, wheel);
         let spring_k = config.suspension.calculate_spring_rate(&config.chassis, &config.tires, &config.fuel, wheel).max(1.0);
         let tuning = WheelMechanicalTuning::for_wheel(config, wheel);
-        let unsprung_mass = tuning.unsprung_mass_kg.max(1.0);
+        let unsprung_mass = tuning.physical_unsprung_mass_kg.max(1.0);
         let arb_ratio = if wheel.is_front() {
             config.suspension.front_arb_ratio
         } else {
@@ -957,6 +1020,7 @@ impl SuspensionSystem {
                         suspension_element_forces(config, wheel, compression_metres,
                             velocity_metres_per_second, spring_k, spring_len, tuning);
                     spring_force_newtons + damping_force_newtons + antiroll_force_newtons + stop_force_newtons
+                        + unsprung_mass * crate::wheel_mechanics::GRAVITY_M_S2
                 },
             );
             x = result.compression_metres;
@@ -1308,6 +1372,10 @@ impl SuspensionSystem {
             state.spring_force + state.damping_force + state.antiroll_force + state.bottom_out_force,
         );
         state.damper_compression_m = finite_or_zero(s_fin);
+        if let Some(integration) = coupled_integration {
+            state.chassis_suspension_force = (integration.suspension_impulse_newton_seconds
+                - integration.travel_limit_impulse_newton_seconds) / dt;
+        }
         state.damper_velocity_m_s = finite_or_zero(r_fin * v);
         state.motion_ratio = finite_or_zero(r_fin);
         state.motion_ratio_rate_per_m = finite_or_zero(drdq);
@@ -1337,12 +1405,46 @@ impl SuspensionSystem {
         state.normal_impulse_newton_seconds = finite_or_zero(normal_impulse_newton_seconds).max(0.0);
         state.suspension_impulse_newton_seconds = finite_or_zero(suspension_impulse_newton_seconds);
         state.travel_limit_impulse_newton_seconds = finite_or_zero(travel_limit_impulse_newton_seconds);
+        if coupled_integration.is_some() {
+            state.normal_impulse_newton_seconds /= state.normal_contact_projection.max(1e-3);
+        }
         state.total_normal_force = if use_implicit_integration {
             state.normal_impulse_newton_seconds / dt
         } else {
             state.tire_vertical_force
         };
         state.is_grounded = state.contact_fraction > 0.0 && state.total_normal_force > if use_implicit_integration { 0.0 } else { 1.0 };
+
+        // Element balance for the host log. The coupled axle solve already published
+        // the contact side (limits, demand, impulses, separation); only the elements
+        // are known here, so the merge is additive and never overwrites them.
+        let index = wheel as usize;
+        let element_balance = (
+            state.suspension_compression_m,
+            state.unsprung_velocity_m_s,
+            state.spring_force,
+            state.damping_force,
+            state.antiroll_force,
+            state.bottom_out_force,
+            state.motion_ratio,
+        );
+        let diagnostic = &mut self.vertical[index];
+        diagnostic.normal_force_n = state.total_normal_force;
+        diagnostic.contact_impulse_ns = state.normal_impulse_newton_seconds;
+        diagnostic.contact_point = state.effective_contact_point;
+        diagnostic.contact_normal = state.effective_normal;
+        diagnostic.ray_hit_mask = (state.ray_grounded[0] as u32) | ((state.ray_grounded[1] as u32) << 1) | ((state.ray_grounded[2] as u32) << 2);
+        diagnostic.compression_m = element_balance.0;
+        diagnostic.axial_velocity_m_s = element_balance.1;
+        diagnostic.spring_force_n = element_balance.2;
+        diagnostic.damper_force_n = element_balance.3;
+        diagnostic.antiroll_force_n = element_balance.4;
+        diagnostic.stop_force_n = element_balance.5;
+        diagnostic.motion_ratio = element_balance.6;
+        // Positive = pushes the wheel down. A negative sum with no ground reaction
+        // means the corner is being lifted, not lowered.
+        diagnostic.element_force_sum_n =
+            element_balance.2 + element_balance.3 + element_balance.4 + element_balance.5;
     }
 }
 
@@ -1565,9 +1667,13 @@ fn geometric_stop_force(
     let mult = axle.bump_stop_mult.max(0.0);
     let mut force = 0.0;
     let mut clamped = false;
-    // Progressive bump stop in the last 18% before x_max (mirrors 0.82 start).
+    // Explicit wheel-space working length when authored; existing profiles keep
+    // their last-18% law. The stop is separate from ride height and wheel stroke.
     let span = (x_max - x_min).max(1e-4);
-    let bump_start = x_max - span * (1.0 - tuning.bump_stop_start_ratio.clamp(0.5, 0.98));
+    let working_length = axle.bump_stop_travel_m
+        .unwrap_or(span * (1.0 - tuning.bump_stop_start_ratio.clamp(0.5, 0.98)))
+        .min(span);
+    let bump_start = x_max - working_length;
     if x > bump_start {
         let excess = (x - bump_start).max(0.0);
         let progress = ((x - bump_start) / (x_max - bump_start).max(1e-4)).clamp(0.0, 2.0);
@@ -1801,6 +1907,32 @@ fn ray_compression(hit: &RaycastHit, max_ray_length: f64) -> f64 {
     } else {
         0.0
     }
+}
+
+/// Distance the rays still had to travel beyond their own length to reach ground.
+///
+/// Positive = no ground was found within the ray (the corner is above everything the
+/// proximity query can see); negative = ground was found that far inside the ray.
+/// This is what tells "the wheel has not arrived yet" apart from "the wheel is
+/// already past the plane".
+fn ray_shortfall(sample: &TriRaycastSample, max_ray_length: f64) -> f64 {
+    let hits = [&sample.inner, &sample.center, &sample.outer];
+    if hits.iter().any(|hit| hit.is_colliding) {
+        return hits
+            .iter()
+            .filter(|hit| hit.is_colliding)
+            .map(|hit| hit.distance - max_ray_length)
+            .fold(f64::NEG_INFINITY, f64::max);
+    }
+    hits.iter()
+        .map(|hit| {
+            if hit.distance.is_finite() {
+                hit.distance - max_ray_length
+            } else {
+                f64::INFINITY
+            }
+        })
+        .fold(f64::INFINITY, f64::min)
 }
 
 fn tricast_contact_fraction(sample: &TriRaycastSample) -> f64 {

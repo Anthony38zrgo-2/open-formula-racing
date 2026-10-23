@@ -12,8 +12,13 @@ pub const GRAVITY_M_S2: f64 = 9.80665;
 
 #[derive(Debug, Clone, Copy)]
 pub struct WheelMechanicalTuning {
-    /// Virtual unsprung mass. The rigid body still represents total vehicle mass;
-    /// this mass is therefore used as an inertial contact filter, not added to gravity.
+    /// Physical corner unsprung mass from the inventory (wheel, rim, tyre, upright and
+    /// corner-attached members), counted exactly once. The sprung body integrates
+    /// `total - sum(physical_unsprung_mass_kg)`, so this mass carries its own weight and
+    /// exchanges momentum with the chassis through the suspension element.
+    pub physical_unsprung_mass_kg: f64,
+    /// Legacy virtual mass = physical mass x `virtual_unsprung_mass_multiplier`.
+    /// Kept only as the damping/stiffness calibration filter; never added to gravity.
     pub unsprung_mass_kg: f64,
     /// Radial carcass spring stiffness.
     pub tire_vertical_stiffness_n_m: f64,
@@ -70,7 +75,9 @@ impl WheelMechanicalTuning {
         // declares a complete mass inventory (wheel assembly plus upright and
         // corner-attached members). Profiles without one keep the legacy filter
         // heuristic so their behaviour does not change.
-        let unsprung_mass_kg = crate::vehicle_mass_properties::unsprung_mass(config, wheel)
+        let physical_unsprung_mass_kg =
+            crate::vehicle_mass_properties::unsprung_mass(config, wheel).max(1.0);
+        let unsprung_mass_kg = physical_unsprung_mass_kg
             * config
                 .suspension
                 .virtual_unsprung_mass_multiplier
@@ -87,6 +94,7 @@ impl WheelMechanicalTuning {
             2.0 * radial_damping_ratio * (tire_vertical_stiffness_n_m * unsprung_mass_kg).sqrt();
 
         Self {
+            physical_unsprung_mass_kg,
             unsprung_mass_kg,
             tire_vertical_stiffness_n_m,
             tire_vertical_damping_n_s_m,
@@ -101,7 +109,9 @@ impl WheelMechanicalTuning {
             road_height_filter_tau_s: 0.004,
             max_road_velocity_m_s: 15.0,
             bump_stop_start_ratio: 0.82,
-            hard_stop_overtravel_m: 0.030,
+            hard_stop_overtravel_m: config.suspension.geometric_suspension.as_ref()
+                .and_then(|geometry| geometry.axle(wheel).hard_stop_overtravel_m)
+                .unwrap_or(0.030),
             rotational_inertia_factor: 0.72,
             contact_patch_load_gain: 0.12,
             contact_patch_deflection_gain: 0.20,

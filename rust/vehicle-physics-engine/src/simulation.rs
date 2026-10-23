@@ -211,6 +211,34 @@ pub struct VehicleSimulator {
     pub pending_coupled_thermal_interval: Option<CoupledThermalAdvanceContext>,
 }
 
+/// Appends one body/corner iteration to the trace ring. The gate and the clock live
+/// in the diagnostics module, so this is a single relaxed load when tracing is off.
+fn record_iteration(
+    candidate: &VehicleSimulator,
+    iteration: u16,
+    subdivisions: u16,
+    residual: f64,
+    linear_acceleration: Vec3,
+    angular_acceleration: Vec3,
+) {
+    crate::vertical_diagnostics::record(
+        crate::vertical_diagnostics::kind::ITERATION,
+        -1,
+        -1,
+        iteration,
+        subdivisions,
+        residual,
+        linear_acceleration,
+        angular_acceleration,
+        [
+            &candidate.state.suspension.vertical[0],
+            &candidate.state.suspension.vertical[1],
+            &candidate.state.suspension.vertical[2],
+            &candidate.state.suspension.vertical[3],
+        ],
+    );
+}
+
 #[derive(Debug, Clone)]
 pub struct CoupledVehicleForceContext {
     pub normal_force_newtons: [f64; 4],
@@ -254,6 +282,22 @@ impl VehicleSimulator {
 
     /// Pit-service refuel: leaves exactly the requested load in the tank,
     /// clamped to the profile capacity. Does not touch wear or thermals.
+    /// Place the vehicle at `origin`/`yaw` with zero velocity and force the next step to
+    /// re-derive the rest reference from the freshly placed chassis.
+    pub fn reset(&mut self, origin: Vec3, yaw: f64) {
+        let basis = Mat3::from_euler_yxz(yaw, 0.0, 0.0);
+        self.state.transform = Transform3D::new(origin, basis);
+        self.state.orientation = Quat::from_mat3(&basis);
+        self.state.linear_velocity = Vec3::ZERO;
+        self.state.angular_velocity = Vec3::ZERO;
+        self.state.linear_acceleration = Vec3::ZERO;
+        self.state.angular_acceleration = Vec3::ZERO;
+        self.state.suspension.body_acceleration_world = Vec3::ZERO;
+        self.state.suspension.body_angular_acceleration_world = Vec3::ZERO;
+        self.state.suspension.mechanical_failure = None;
+        self.state.suspension.reset_mechanical_state();
+    }
+
     pub fn set_fuel_kg(&mut self, target_kg: f64) {
         self.config.fuel.set_current_kg(target_kg);
     }
@@ -288,12 +332,25 @@ impl VehicleSimulator {
         samples: &[TriRaycastSample; 4],
         dt: f64,
     ) -> TelemetryFrame {
+        let original = self.clone();
+        if !dt.is_finite() || dt <= 0.0 { return self.build_telemetry_frame(); }
         let env = AeroEnvironment::unavailable();
         let previous_mode = self.aero_probe_mode;
         self.aero_probe_mode = AeroProbeMode::Disabled;
-        let (forces, _) = self.solve_forces(input, samples, &env, dt);
+        let substeps = internal_substeps(dt);
+        let h = dt / substeps as f64;
+        for _ in 0..substeps {
+            if let Err(error) = self.advance_transaction(input, samples, &env, h, 0) {
+                if original.state.suspension.mechanical_failure.is_none() { eprintln!("MECHANICAL_STEP_REJECTED time={} reason={error}", original.state.sim_time); }
+                let failure = self.state.suspension.failure;
+                *self = original;
+                self.state.suspension.mechanical_failure = Some(error);
+                // The rejection record belongs to the step, not to the restored state.
+                self.state.suspension.failure = failure;
+                break;
+            }
+        }
         self.aero_probe_mode = previous_mode;
-        self.integrate_standalone(forces, dt);
         self.build_telemetry_frame()
     }
 
@@ -304,8 +361,21 @@ impl VehicleSimulator {
         environment: &AeroEnvironment,
         duration_seconds: f64,
     ) -> TelemetryFrame {
-        let (forces, _) = self.solve_forces(input, samples, environment, duration_seconds);
-        self.integrate_standalone(forces, duration_seconds);
+        let original = self.clone();
+        if !duration_seconds.is_finite() || duration_seconds <= 0.0 { return self.build_telemetry_frame(); }
+        let substeps = internal_substeps(duration_seconds);
+        let h = duration_seconds / substeps as f64;
+        for _ in 0..substeps {
+            if let Err(error) = self.advance_transaction(input, samples, environment, h, 0) {
+                if original.state.suspension.mechanical_failure.is_none() { eprintln!("MECHANICAL_STEP_REJECTED time={} reason={error}", original.state.sim_time); }
+                let failure = self.state.suspension.failure;
+                *self = original;
+                self.state.suspension.mechanical_failure = Some(error);
+                // The rejection record belongs to the step, not to the restored state.
+                self.state.suspension.failure = failure;
+                break;
+            }
+        }
         self.build_telemetry_frame()
     }
 
@@ -325,6 +395,134 @@ impl VehicleSimulator {
         );
         self.aero_probe_mode = previous_mode;
         output
+    }
+
+    /// Coupled body/corner fixed point. Every trial starts from the same complete
+    /// state: rejected trials never burn fuel, advance clocks, heat tyres or spin
+    /// wheels twice. An unresolved interval is subdivided, never published partially.
+    fn advance_transaction(&mut self, input: &VehicleInput, samples: &[TriRaycastSample;4],
+        environment: &AeroEnvironment, dt: f64, depth: usize) -> Result<(), String> {
+        crate::vertical_diagnostics::interval(self.state.sim_time + dt, dt);
+        let _mass_cache = crate::vehicle_mass_properties::StepMassCache::new();
+        let original = self.clone();
+        let mut linear = original.state.linear_acceleration;
+        let mut angular = original.state.angular_acceleration;
+        let mut reason = "Body/corner iteration did not converge".to_string();
+        // Last trial that failed, kept only so the trace can publish the rejected
+        // candidate next to the accepted state. Diagnostics only; never integrated.
+        let mut failing: Option<VehicleSimulator> = None;
+        let mut iteration: u16 = 0;
+        let mut last_residual = f64::INFINITY;
+        for _ in 0..32 {
+            iteration = iteration.saturating_add(1);
+            let mut candidate = original.clone();
+            candidate.state.linear_acceleration = linear;
+            candidate.state.angular_acceleration = angular;
+            candidate.state.suspension.mechanical_failure = None;
+            candidate.state.suspension.failure = None;
+            let (forces, _) = candidate.solve_forces(input, samples, environment, dt);
+
+            if let Some(error) = &candidate.state.suspension.mechanical_failure {
+                if let Some(failure) = candidate.state.suspension.failure.as_mut() {
+                    failure.subdivisions = depth as u32;
+                    failure.iteration = iteration as u32;
+                }
+                reason = error.clone();
+                failing = Some(candidate);
+                break;
+            }
+            for axle in 0..2 {
+                crate::vertical_diagnostics::record(crate::vertical_diagnostics::kind::SUBSTEP,
+                    axle, -1, iteration, depth as u16, candidate.state.suspension.axles[axle as usize].residual_m_s,
+                    linear, angular, [&candidate.state.suspension.vertical[0], &candidate.state.suspension.vertical[1],
+                    &candidate.state.suspension.vertical[2], &candidate.state.suspension.vertical[3]]);
+            }
+            if let Err(error) = candidate.integrate_standalone(forces, dt) { reason = error; failing = Some(candidate); break; }
+            let next_linear = candidate.state.linear_acceleration;
+            let next_angular = candidate.state.angular_acceleration;
+            let residual = ((next_linear-linear).length() + (next_angular-angular).length()) * dt;
+            last_residual = residual;
+            record_iteration(&candidate, iteration, depth as u16, residual, next_linear, next_angular);
+            if residual <= 1e-8 {
+                *self = candidate;
+                return Ok(());
+            }
+            linear = linear * 0.25 + next_linear * 0.75;
+            angular = angular * 0.25 + next_angular * 0.75;
+            failing = Some(candidate);
+        }
+        if depth < 3 && dt * 0.5 >= 0.001 {
+            let mut candidate = original;
+            // A failed subdivision must not lose the record of why: propagate the
+            // diagnostics of the rejected candidate, not only the message.
+            if let Err(error) = candidate.advance_transaction(input, samples, environment, dt*0.5, depth+1) {
+                self.state.suspension.failure = candidate.state.suspension.failure;
+                return Err(error);
+            }
+            if let Err(error) = candidate.advance_transaction(input, samples, environment, dt*0.5, depth+1) {
+                self.state.suspension.failure = candidate.state.suspension.failure;
+                return Err(error);
+            }
+            *self = candidate;
+            return Ok(());
+        }
+        // Publish the rejection on `self` before returning: the caller rolls the
+        // simulator back to the accepted state, and a failure that only lived in the
+        // discarded candidate would be lost exactly when it is needed.
+        let mut failure = failing
+            .as_ref()
+            .and_then(|candidate| candidate.state.suspension.failure)
+            .or_else(|| self.state.suspension.failure);
+        if failure.is_none() {
+            // No axle-level rejection: classify the body/corner failure and still
+            // name the corner that was furthest past its bump limit.
+            let mut diagnostics = crate::vertical_diagnostics::FailureDiagnostics {
+                code: crate::vertical_diagnostics::FailureCode::BodyCornerNotConverged,
+                wheel: -1,
+                axle: -1,
+                iteration: iteration as u32,
+                subdivisions: depth as u32,
+                residual_m_s: last_residual,
+                ..crate::vertical_diagnostics::FailureDiagnostics::default()
+            };
+            if let Some(candidate) = failing.as_ref() {
+                let vertical = &candidate.state.suspension.vertical;
+                let worst = vertical
+                    .iter()
+                    .enumerate()
+                    .min_by(|left, right| {
+                        left.1
+                            .headroom_to_bump_m
+                            .partial_cmp(&right.1.headroom_to_bump_m)
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    });
+                if let Some((index, corner)) = worst {
+                    diagnostics.wheel = index as i32;
+                    diagnostics.axle = (index / 2) as i32;
+                    diagnostics.demand_m = corner.ground_demand_predicted_m;
+                    diagnostics.limit_m = corner.max_compression_m;
+                    diagnostics.excess_m = corner.ground_demand_predicted_m - corner.max_compression_m;
+                }
+            }
+            failure = Some(diagnostics);
+        }
+        if let (Some(candidate), Some(failure)) = (failing.as_ref(), failure) {
+            crate::vertical_diagnostics::record_failure(
+                failure,
+                iteration,
+                depth as u16,
+                candidate.state.linear_acceleration,
+                candidate.state.angular_acceleration,
+                [
+                    &candidate.state.suspension.vertical[0],
+                    &candidate.state.suspension.vertical[1],
+                    &candidate.state.suspension.vertical[2],
+                    &candidate.state.suspension.vertical[3],
+                ],
+            );
+        }
+        self.state.suspension.failure = failure;
+        Err(reason)
     }
 
     /// External solve with the five-point underfloor environment supplied by the
@@ -505,6 +703,10 @@ impl VehicleSimulator {
                 } else { 0.0 };
             }
         } else {
+            // The corner pseudo-force needs the body acceleration; the solve is explicit
+            // in the body state, so it uses the value produced by the previous step.
+            st.suspension.body_acceleration_world = st.linear_acceleration;
+            st.suspension.body_angular_acceleration_world = st.angular_acceleration;
             st.suspension.step_with_modifiers_and_body_kinematics(
                 cfg, &thermal_modifiers, samples, dt, BodyKinematics { transform: st.transform, orientation: st.orientation,
                     linear_velocity: st.linear_velocity, angular_velocity: st.angular_velocity },
@@ -569,8 +771,10 @@ impl VehicleSimulator {
         let is_geo = matches!(cfg.suspension.suspension_model, SuspensionModelKind::Geometric)
             && cfg.suspension.geometric_suspension.is_some();
         let cg_local = center_of_mass_local_for_suspension_backend(cfg, suspension_backend);
-        let total_mass_initial = cfg.chassis.total_vehicle_mass(&cfg.tires, &cfg.fuel).max(1e-6);
-        let body_inertia = principal_inertia_for_suspension_backend(cfg, suspension_backend);
+        // Body budget: the physical corners integrate their own mass, so the chassis
+        // only carries the sprung remainder. Same contract as `integrate_standalone`.
+        let total_mass_initial = sprung_mass_kg(cfg);
+        let body_inertia = sprung_principal_inertia(cfg, suspension_backend);
         let body_transform = st.transform;
         let separately_integrated_unsprung_mass_kilograms = 0.0;
         let separately_integrated_unsprung_acceleration_metres_per_second_squared = 0.0;
@@ -605,6 +809,24 @@ impl VehicleSimulator {
                 st.suspension.wheels[i].tire_deflection_m,
                 st.suspension.wheels[i].contact_fraction,
             );
+            // Structural: the suspension element force reaches the chassis through the
+            // linkage at the wheel anchor, never through the tyre patch. It therefore
+            // exists whether or not the wheel is on the ground; only the tangential
+            // tyre forces require contact. Applying it once here keeps the wrench
+            // continuous across touchdown and never duplicates the support.
+            if coupled_context.is_none()
+                && !(is_geo && st.suspension.resolves_internal_link_forces())
+            {
+                let element_force_world =
+                    basis.y * st.suspension.wheels[i].chassis_suspension_force;
+                let anchor_world = body_transform.transform_point(
+                    cfg.tires
+                        .wheel_anchor_local(&cfg.chassis, &cfg.suspension, wheel),
+                );
+                total_force += element_force_world;
+                total_torque += (anchor_world - cg_world).cross(element_force_world);
+            }
+
             if !st.suspension.wheels[i].is_grounded {
                 if coupled_context.is_some() {
                     st.tires.process_wheel_forces(
@@ -761,15 +983,16 @@ impl VehicleSimulator {
             let tire = &st.tires.wheels[i];
             let tire_force_world =
                 contact_right * lateral_force + contact_forward * tire.longitudinal_force;
-            // The chassis receives the suspension element reaction (spring, damper,
-            // anti-roll bar and stops) along the suspension axis. The accepted ground
-            // reaction acts on the unsprung mass and only limits the tyre grip; adding
-            // it to the chassis again double-counts the support and excites the observed
-            // left/right contact limit cycle.
+            // The suspension element reaction (spring, damper, anti-roll bar and
+            // stops) is applied at the wheel anchor above, from
+            // `chassis_suspension_force`. What remains here is the tyre force at the
+            // contact patch: the accepted ground reaction acts on the unsprung
+            // coordinate and only limits grip, so it is never added to the chassis a
+            // second time.
             let support_force_world = if st.suspension.resolves_internal_link_forces() {
                 contact_normal * st.suspension.wheels[i].total_normal_force
             } else {
-                basis.y * st.suspension.wheels[i].chassis_suspension_force
+                Vec3::ZERO
             };
             let wheel_force = tire_force_world + support_force_world;
             let align_world = contact_normal * tire.aligning_torque;
@@ -1113,7 +1336,7 @@ impl VehicleSimulator {
         basis.transform_vector(Vec3::new(0.0, torque_y, 0.0))
     }
 
-    fn integrate_standalone(&mut self, forces: ForceTorqueOutput, dt: f64) {
+    fn integrate_standalone(&mut self, forces: ForceTorqueOutput, dt: f64) -> Result<(), String> {
         let dt = dt.clamp(1.0 / 1000.0, 1.0 / 20.0);
         let cfg = &self.config;
         let st = &mut self.state;
@@ -1122,26 +1345,13 @@ impl VehicleSimulator {
             center_of_mass_local_for_suspension_backend(cfg, st.suspension.backend);
         let mut cg_world = st.transform.origin + old_basis.transform_vector(cg_local);
 
-        let total_mass = cfg.chassis.total_vehicle_mass(&cfg.tires, &cfg.fuel);
-        let gravity_force = Vec3::new(0.0, -9.80665 * total_mass, 0.0);
-        st.linear_acceleration = (forces.force_world + gravity_force) / total_mass.max(1e-6);
+        let (linear, angular) = crate::simplified_body_coupling::body_accelerations(cfg, st, forces)?;
+        st.linear_acceleration = linear;
         st.linear_velocity += st.linear_acceleration * dt;
         cg_world += st.linear_velocity * dt;
 
-        let inertia = principal_inertia_for_suspension_backend(cfg, st.suspension.backend);
-        let torque_local = old_basis.inverse_transform_vector(forces.torque_world);
         let mut omega_local = old_basis.inverse_transform_vector(st.angular_velocity);
-        let i_omega = Vec3::new(
-            inertia.x * omega_local.x,
-            inertia.y * omega_local.y,
-            inertia.z * omega_local.z,
-        );
-        let gyro = omega_local.cross(i_omega);
-        let alpha_local = Vec3::new(
-            (torque_local.x - gyro.x) / inertia.x.max(1e-6),
-            (torque_local.y - gyro.y) / inertia.y.max(1e-6),
-            (torque_local.z - gyro.z) / inertia.z.max(1e-6),
-        );
+        let alpha_local = old_basis.inverse_transform_vector(angular);
         omega_local += alpha_local * dt;
         st.orientation = st
             .orientation
@@ -1152,6 +1362,7 @@ impl VehicleSimulator {
         st.transform.origin = cg_world - new_basis.transform_vector(cg_local);
         st.angular_velocity = new_basis.transform_vector(omega_local);
         st.angular_acceleration = old_basis.transform_vector(alpha_local);
+        Ok(())
     }
 
     fn filter_inputs(
@@ -1635,6 +1846,69 @@ pub fn principal_inertia_for_suspension_backend(
             Vec3::new(moments[0], moments[1], moments[2])
         }
     }
+}
+
+/// Physical unsprung mass of one corner (wheel, rim, tyre, upright and the
+/// corner-attached members resolved by the inventory). Counted exactly once.
+pub fn corner_unsprung_mass_kg(config: &VehicleConfig, wheel: WheelIndex) -> f64 {
+    crate::vehicle_mass_properties::unsprung_mass(config, wheel).max(0.0)
+}
+
+/// Mass carried by the sprung rigid body: the configured total minus every physical
+/// corner mass. The corners integrate their own weight and momentum, so the body must
+/// not integrate them again (the contract that closes mass and momentum accounting).
+pub fn sprung_mass_kg(config: &VehicleConfig) -> f64 {
+    let total = config
+        .chassis
+        .total_vehicle_mass(&config.tires, &config.fuel);
+    let unsprung: f64 = WheelIndex::ALL
+        .iter()
+        .map(|wheel| corner_unsprung_mass_kg(config, *wheel))
+        .sum();
+    (total - unsprung).max(1.0)
+}
+
+/// Sprung principal inertia: the total tensor minus every corner mass at its anchor
+/// (diagonal parallel-axis term). Products of inertia stay in the total tensor; the
+/// axis-aligned approximation keeps the existing diagonal integrator.
+pub fn sprung_principal_inertia(
+    config: &VehicleConfig,
+    suspension_backend: SuspensionBackend,
+) -> Vec3 {
+    let total = principal_inertia_for_suspension_backend(config, suspension_backend);
+    let centre = crate::vehicle_mass_properties::resolve_vehicle_mass_properties_for_suspension_backend(
+        config,
+        suspension_backend,
+    )
+    .center_of_mass_local_metres;
+    let mut inertia = total;
+    for wheel in WheelIndex::ALL {
+        let mass = corner_unsprung_mass_kg(config, wheel);
+        if mass <= 0.0 {
+            continue;
+        }
+        let arm = config
+            .tires
+            .wheel_anchor_local(&config.chassis, &config.suspension, wheel)
+            - centre;
+        inertia.x -= mass * (arm.y * arm.y + arm.z * arm.z);
+        inertia.y -= mass * (arm.x * arm.x + arm.z * arm.z);
+        inertia.z -= mass * (arm.x * arm.x + arm.y * arm.y);
+    }
+    Vec3::new(inertia.x.max(1.0), inertia.y.max(1.0), inertia.z.max(1.0))
+}
+
+/// Largest internal step at which the coupled body/corner model is validated. A host
+/// that delivers a coarser frame is subdivided internally so the explicit
+/// body-corner coupling sees the same `h`; the published state still advances exactly
+/// the requested duration (a 1/120 s frame runs two 1/240 s solves).
+pub const MAX_INTERNAL_STEP_SECONDS: f64 = 1.0 / 240.0;
+
+pub fn internal_substeps(duration_seconds: f64) -> usize {
+    if !duration_seconds.is_finite() || duration_seconds <= 0.0 {
+        return 1;
+    }
+    (duration_seconds / MAX_INTERNAL_STEP_SECONDS).ceil() as usize
 }
 
 /// Below this contact lateral speed the tire is treated as a sticking contact.

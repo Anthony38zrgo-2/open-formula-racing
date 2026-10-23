@@ -178,6 +178,14 @@ pub struct AxlePhysicalElements {
     /// rate in the soft-stop region, mirroring the legacy shape explicitly.
     #[serde(default = "default_bump_stop_mult")]
     pub bump_stop_mult: f64,
+    /// Progressive stop working length at the wheel, measured back from full bump.
+    /// None preserves the legacy last-18%-of-stroke law.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bump_stop_travel_m: Option<f64>,
+    /// Numerical travel allowance beyond the geometric envelope, not a ride spring.
+    /// None preserves the existing mechanical tuning for other profiles.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hard_stop_overtravel_m: Option<f64>,
 }
 
 fn default_bump_stop_mult() -> f64 {
@@ -199,6 +207,8 @@ impl Default for AxlePhysicalElements {
             damper_min_m: 0.15,
             damper_max_m: 0.40,
             bump_stop_mult: default_bump_stop_mult(),
+            bump_stop_travel_m: None,
+            hard_stop_overtravel_m: None,
         }
     }
 }
@@ -382,6 +392,16 @@ fn validate_axle(name: &str, a: &AxlePhysicalElements) -> Result<(), String> {
         return Err(format!(
             "suspension.geometry_physical.{name}.bump_stop_mult must be finite and >= 0"
         ));
+    }
+    if let Some(travel) = a.bump_stop_travel_m {
+        if !travel.is_finite() || travel <= 0.0 || travel > a.wheel_bump_m + a.wheel_droop_m {
+            return Err(format!("suspension.geometry_physical.{name}.bump_stop_travel_m must be positive and within the wheel stroke"));
+        }
+    }
+    if let Some(overtravel) = a.hard_stop_overtravel_m {
+        if !overtravel.is_finite() || overtravel < 0.0 || overtravel > a.wheel_bump_m + a.wheel_droop_m {
+            return Err(format!("suspension.geometry_physical.{name}.hard_stop_overtravel_m must be nonnegative and within the wheel stroke"));
+        }
     }
     Ok(())
 }
@@ -783,6 +803,10 @@ struct JsonAxlePhysical {
     damper_max_m: f64,
     #[serde(default = "default_bump_stop_mult")]
     bump_stop_mult: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    bump_stop_travel_m: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    hard_stop_overtravel_m: Option<f64>,
 }
 
 fn default_knee() -> f64 {
@@ -962,6 +986,8 @@ fn axle_from_json(name: &str, j: &JsonAxlePhysical) -> Result<AxlePhysicalElemen
         damper_min_m: j.damper_min_m,
         damper_max_m: j.damper_max_m,
         bump_stop_mult: j.bump_stop_mult,
+        bump_stop_travel_m: j.bump_stop_travel_m,
+        hard_stop_overtravel_m: j.hard_stop_overtravel_m,
     };
     validate_axle(name, &a)?;
     Ok(a)
@@ -1191,7 +1217,7 @@ pub fn geometric_to_json_value(cfg: &GeometricSuspensionConfig) -> serde_json::V
             "motion_ratio": motion_ratio,
         }),
     };
-    serde_json::json!({
+    let mut value = serde_json::json!({
         "version": cfg.version,
         "front": {
             "spring_rate_N_per_m": cfg.front.spring_rate_N_per_m,
@@ -1229,7 +1255,16 @@ pub fn geometric_to_json_value(cfg: &GeometricSuspensionConfig) -> serde_json::V
             "RL": rl_json,
             "RR": rr_json,
         },
-    })
+    });
+    for (name, axle) in [("front", &cfg.front), ("rear", &cfg.rear)] {
+        if let Some(travel) = axle.bump_stop_travel_m {
+            value[name]["bump_stop_travel_m"] = serde_json::json!(travel);
+        }
+        if let Some(overtravel) = axle.hard_stop_overtravel_m {
+            value[name]["hard_stop_overtravel_m"] = serde_json::json!(overtravel);
+        }
+    }
+    value
 }
 
 #[cfg(test)]

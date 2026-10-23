@@ -119,6 +119,14 @@ namespace
         double wheel_rotation[4]{};
         //! Lock-to-lock steering-wheel rotation of the visual car, in radians.
         double steering_wheel_lock_rad = 0.0;
+        //! Next simulation time at which this car emits its summary block.
+        double next_diagnostic_s = 0.0;
+        //! Rejection counter already reported, so the failure block is logged once.
+        std::uint32_t reported_rejections = 0;
+        //! True from the first rejection until the session resets: the published
+        //! state no longer advances, and the log must say so instead of repeating
+        //! the same frozen timestamp as if it were live telemetry.
+        bool frozen = false;
         //! Etapa 3/4 audio presentation: one raw step per accepted physics step,
         //! written into the `tCarElt` ring that `snddefault` drains (see
         //! `ofp_audio_presentation.h`). Session increments on car reset so
@@ -207,6 +215,9 @@ namespace
     void applyIntegrationScenario(RustCar& car, double delta_time);
     void publishFormulaHud(RustCar& car);
     void logDiagnostics(RustCar& car);
+    void logCarFailure(RustCar& car);
+    void dumpTrace(RustCar& car, const char* reason);
+    void logEffectiveSetup(RustCar& car, const char* reason);
 
     std::vector<RustCar> g_cars;
     tTrack* g_track = nullptr;
@@ -215,13 +226,24 @@ namespace
     std::string g_ground_mesh_path;
     bool g_track_ready = false;
 
+    // Wheel order of every diagnostic line, matching the Rust ABI (FL, FR, RL, RR).
+    const char* const kWheelNames[OFP_WHEELS] = { "FL", "FR", "RL", "RR" };
+
     // Instrumentation / integration scenario (single session, no separate test suite).
     bool g_diagnostics = false;
     bool g_scenario = false;
-    double g_diagnostic_interval = 0.25;
+    //! Summary cadence. 50-100 Hz is the range that still resolves a brief loss of
+    //! contact; the old 0.25 s hid entire recoveries.
+    double g_diagnostic_interval = 0.02;
     double g_elapsed = 0.0;
-    double g_next_diagnostic = 0.0;
     int g_scenario_flags = 0;
+    //! Substep/iteration ring in the Rust library (ABI v7).
+    bool g_diagnostic_trace = false;
+    std::string g_trace_directory;
+
+    //! True when any structured diagnostic output is enabled. Used by the setup report
+    //! so the verbose block is never written in a plain race.
+    bool garageDiagnosticsEnabled() { return g_diagnostics; }
 
     std::string trackGroundMeshPath(tTrack* track)
     {
@@ -603,12 +625,29 @@ namespace
                                                  (std::uint32_t)contact_count, delta_time);
         if (code != 0)
         {
-            char buffer[512] = { 0 };
+            char buffer[1024] = { 0 };
             rustPhysicsLibrary.getLastError(car.handle, buffer, sizeof(buffer));
             car.last_error = buffer;
             car.failed = true;
+            car.frozen = true;
             GfLogError("Rust physics rejected the step for car %d: %s\n", car.index,
                        car.last_error.c_str());
+            // Re-read the snapshot so the rejection counter and the failure block are
+            // current. Position, time and every physical value stay at the last
+            // accepted step: the host must not publish a new state for a step that
+            // was rejected.
+            if (rustPhysicsLibrary.snapshot(car.handle, &car.snapshot) != 0)
+            {
+                GfLogWarning("Rust physics: cannot read the frozen snapshot for car %d\n",
+                             car.index);
+            }
+            if (g_diagnostics && car.snapshot.rejected_steps != car.reported_rejections)
+            {
+                car.reported_rejections = car.snapshot.rejected_steps;
+                logCarFailure(car);
+                logDiagnostics(car);
+                dumpTrace(car, "rejection");
+            }
             return;
         }
         if (rustPhysicsLibrary.snapshot(car.handle, &car.snapshot) != 0)
@@ -639,24 +678,153 @@ namespace
         basisFromSnapshot(s, forward_axis, left_axis, up_axis);
         double yaw = 0.0, pitch = 0.0, roll = 0.0;
         eulerFromBasis(forward_axis, left_axis, up_axis, yaw, pitch, roll);
-        GfLogInfo("RUSTDIAG time=%.3f car=%d pos=(%.3f,%.3f,%.3f) speed=%.3f gear=%d rpm=%.1f "
+        const OfpWheelDiagnostics* d = s.wheel_diagnostics;
+        // One summary row per sample. `steer_rad` replaces the old `reach`, which
+        // actually carried `steering_angle_rad`; `failed`/`frozen` make the rejection
+        // explicit instead of leaving a repeated timestamp looking like live data.
+        GfLogInfo("RUSTDIAG time=%.4f car=%d pos=(%.3f,%.3f,%.3f) speed=%.3f gear=%d rpm=%.1f "
                   "yaw=%.4f pitch=%.4f roll=%.4f vf=%.3f vl=%.3f "
                   "fuel=%.3f N=(%.1f,%.1f,%.1f,%.1f) travel=(%.4f,%.4f,%.4f,%.4f) "
-                  "contact=(%d,%d,%d,%d) rays=%.0f/%.0f floor=%.0f/%.0f "
-                  "clearance=(%.4f,%.4f) floor_impulse=(%.3f,%.3f) reach=%.3f "
-                  "setup_contact=%d backends=0x%x rejected=%u\n",
+                  "vax=(%.3f,%.3f,%.3f,%.3f) sep=(%.4f,%.4f,%.4f,%.4f) "
+                  "ground=(%d,%d,%d,%d) contact=(%d,%d,%d,%d) rays=%llu/%llu floor=%llu/%llu "
+                  "clearance=(%.4f,%.4f) floor_impulse=(%.3f,%.3f) steer_rad=%.4f "
+                  "setup_contact=%d backends=0x%x rejected=%u "
+                  "iters=(%u,%u) conv=(%d,%d) resid=(%.3e,%.3e) "
+                  "failed=%d frozen=%d trace=%u\n",
                   s.sim_time_s, car.index, x, y, z, speed, s.gear, s.engine_rpm,
                   yaw, pitch, roll, car.forward_speed, car.lateral_speed,
                   s.fuel_kg, s.wheels[0].normal_force_n, s.wheels[1].normal_force_n,
                   s.wheels[2].normal_force_n, s.wheels[3].normal_force_n,
                   s.wheels[0].suspension_travel_m, s.wheels[1].suspension_travel_m,
                   s.wheels[2].suspension_travel_m, s.wheels[3].suspension_travel_m,
+                  d[0].axial_velocity_m_s, d[1].axial_velocity_m_s,
+                  d[2].axial_velocity_m_s, d[3].axial_velocity_m_s,
+                  d[0].ground_separation_m, d[1].ground_separation_m,
+                  d[2].ground_separation_m, d[3].ground_separation_m,
+                  d[0].ground_detected, d[1].ground_detected,
+                  d[2].ground_detected, d[3].ground_detected,
                   s.wheels[0].grounded, s.wheels[1].grounded, s.wheels[2].grounded,
-                  s.wheels[3].grounded, (double)s.wheel_ray_hits, (double)s.wheel_ray_queries,
-                  (double)s.floor_ray_hits, (double)s.floor_ray_queries,
+                  s.wheels[3].grounded,
+                  (unsigned long long)s.wheel_ray_hits, (unsigned long long)s.wheel_ray_queries,
+                  (unsigned long long)s.floor_ray_hits, (unsigned long long)s.floor_ray_queries,
                   s.floor_clearance[0], s.floor_clearance[1],
                   s.floor_impulse_ns[0], s.floor_impulse_ns[1],
-                  s.steering_angle_rad, s.body_contact_count, s.backends, s.rejected_steps);
+                  s.steering_angle_rad, s.body_contact_count, s.backends, s.rejected_steps,
+                  s.axle_diagnostics[0].iterations, s.axle_diagnostics[1].iterations,
+                  s.axle_diagnostics[0].converged, s.axle_diagnostics[1].converged,
+                  s.axle_diagnostics[0].residual_m_s, s.axle_diagnostics[1].residual_m_s,
+                  s.failure.active ? 1 : 0, car.frozen ? 1 : 0, s.trace_records);
+        // One balance row per corner: sign, source and magnitude of every element,
+        // the limits the solver honoured and the anchor motion that moved the mount.
+        for (int wheel = 0; wheel < OFP_WHEELS; ++wheel)
+        {
+            const OfpWheelDiagnostics& w = d[wheel];
+            GfLogInfo("RUSTSUSP time=%.4f car=%d axle=%d wheel=%s ground=%d binding=%d "
+                      "sep_m=%.4f sep_n_m=%.4f shortfall_m=%.4f comp_m=%.4f vax_m_s=%.3f "
+                      "travel_m=%.4f lim_m=(%.4f,%.4f) demand_m=%.4f pred_m=%.4f headroom_m=%.4f "
+                      "spring_n=%.1f damper_n=%.1f arb_n=%.1f stop_n=%.1f sum_n=%.1f mr=%.3f "
+                      "jN=%.4f jBump=%.4f jDroop=%.4f stop=(%d,%d) trapped=%d "
+                      "anchor_p=(%.3f,%.3f,%.3f) anchor_v=(%.3f,%.3f,%.3f) "
+                      "anchor_a=(%.3f,%.3f,%.3f) axial_a=%.3f "
+                      "ray_mask=%u contact_p=(%.6f,%.6f,%.6f) contact_n=(%.6f,%.6f,%.6f)\n",
+                      s.sim_time_s, car.index, wheel / 2, kWheelNames[wheel],
+                      w.ground_detected, w.ground_binding,
+                      w.ground_separation_m, w.ground_separation_normal_m,
+                      w.ray_shortfall_m, w.compression_m, w.axial_velocity_m_s,
+                      w.travel_m, w.min_compression_m, w.max_compression_m,
+                      w.ground_demand_m, w.ground_demand_predicted_m, w.headroom_to_bump_m,
+                      w.spring_force_n, w.damper_force_n, w.antiroll_force_n,
+                      w.stop_force_n, w.element_force_sum_n, w.motion_ratio,
+                      w.contact_impulse_ns, w.bump_stop_impulse_ns, w.droop_stop_impulse_ns,
+                      w.bump_stop_active, w.droop_stop_active, w.trapped_at_stop,
+                      w.anchor_position.x, w.anchor_position.y, w.anchor_position.z,
+                      w.anchor_velocity.x, w.anchor_velocity.y, w.anchor_velocity.z,
+                      w.anchor_acceleration.x, w.anchor_acceleration.y,
+                      w.anchor_acceleration.z, w.axial_anchor_acceleration_m_s2,
+                      s.wheels[wheel].ray_hit_mask,
+                      s.wheels[wheel].contact_point.x, s.wheels[wheel].contact_point.y, s.wheels[wheel].contact_point.z,
+                      s.wheels[wheel].contact_normal.x, s.wheels[wheel].contact_normal.y, s.wheels[wheel].contact_normal.z);
+        }
+        // Per-axle solve quality and the bar load: the coupling that can hold a
+        // corner while the other one is free.
+        for (int axle = 0; axle < 2; ++axle)
+        {
+            const OfpAxleDiagnostics& a = s.axle_diagnostics[axle];
+            GfLogInfo("RUSTAXLE time=%.4f car=%d axle=%d iterations=%u converged=%d "
+                      "substeps=%u residual_m_s=%.3e arb_stiffness_n_per_m=%.1f "
+                      "arb_force_n=%.1f normal_load_n=%.1f\n",
+                      s.sim_time_s, car.index, axle, a.iterations, a.converged,
+                      a.substeps, a.residual_m_s, a.antiroll_stiffness_n_per_m,
+                      a.antiroll_force_n, a.normal_load_n);
+        }
+    }
+
+    //! Exact rejection record. Emitted once per rejection, before the frozen state
+    //! starts repeating its timestamp, and only when the counter actually advanced.
+    void logCarFailure(RustCar& car)
+    {
+        const OfpSnapshot& s = car.snapshot;
+        const OfpFailureDiagnostics& f = s.failure;
+        const char* reason = car.last_error.empty() ? "unknown" : car.last_error.c_str();
+        if (f.wheel >= 0 && f.wheel < OFP_WHEELS)
+        {
+            GfLogError("RUSTFAIL time=%.6f car=%d code=%d reason=\"%s\" wheel=%s(%d) axle=%d "
+                       "iteration=%u subdivisions=%u demand_m=%.6f limit_m=%.6f excess_m=%.6f "
+                       "limit_velocity_m_s=%.6f residual=%.3e rejected=%u failed=1 frozen=1 "
+                       "state_time=%.6f note=\"state frozen at the last accepted step\"\n",
+                       s.sim_time_s, car.index, f.code, reason, kWheelNames[f.wheel], f.wheel,
+                       f.axle, f.iteration, f.subdivisions, f.demand_m, f.limit_m, f.excess_m,
+                       f.limit_velocity_m_s, f.residual_m_s, s.rejected_steps, s.sim_time_s);
+        }
+        else
+        {
+            GfLogError("RUSTFAIL time=%.6f car=%d code=%d reason=\"%s\" wheel=none axle=%d "
+                       "iteration=%u subdivisions=%u residual=%.3e rejected=%u failed=1 frozen=1 "
+                       "state_time=%.6f note=\"state frozen at the last accepted step\"\n",
+                       s.sim_time_s, car.index, f.code, reason, f.axle, f.iteration,
+                       f.subdivisions, f.residual_m_s, s.rejected_steps, s.sim_time_s);
+        }
+    }
+
+    //! Writes the Rust ring next to the log and reports where it went. The dump holds
+    //! the rejected candidate row next to the last accepted tick; nothing is invented
+    //! if tracing was never enabled.
+    void dumpTrace(RustCar& car, const char* reason)
+    {
+        if (!rustPhysicsLibrary.traceDump || g_trace_directory.empty())
+            return;
+        const std::uint32_t buffered = rustPhysicsLibrary.traceBuffered
+            ? rustPhysicsLibrary.traceBuffered() : 0u;
+        const std::string path = g_trace_directory + "rustphysics_" + reason + "_car" +
+            std::to_string(car.index) + "_t" + std::to_string((long long)(car.snapshot.sim_time_s * 1000.0)) +
+            ".csv";
+        const int rows = rustPhysicsLibrary.traceDump(path.c_str());
+        GfLogInfo("RUSTTRACE car=%d reason=%s path=\"%s\" buffered=%u rows=%d\n",
+                  car.index, reason, path.c_str(), buffered, rows);
+    }
+
+    //! The effective setup, straight from the running configuration: value, unit,
+    //! admitted range and the derived coefficients the solver consumed.
+    void logEffectiveSetup(RustCar& car, const char* reason)
+    {
+        if (!garageDiagnosticsEnabled() || !car.handle || !rustPhysicsLibrary.effectiveSetup)
+            return;
+        static char buffer[16384];
+        const int length = rustPhysicsLibrary.effectiveSetup(car.handle, buffer, (std::uint32_t)sizeof(buffer));
+        if (length <= 0)
+            return;
+        GfLogInfo("RUSTSETUPEFFECTIVE car=%d reason=%s bytes=%d\n", car.index, reason, length);
+        const char* line = buffer;
+        while (*line)
+        {
+            const char* end = std::strchr(line, '\n');
+            const int span = end ? (int)(end - line) : (int)std::strlen(line);
+            if (span > 0)
+                GfLogInfo("RUSTSETUP %.*s\n", span, line);
+            if (!end)
+                break;
+            line = end + 1;
+        }
     }
 
     double normaliseAngle(double angle)
@@ -845,6 +1013,11 @@ namespace
     void createCar(RustCar& car, int index, tCarElt* elt, tTrack* track)
     {
         car.index = index;
+        // A new car never inherits the previous session's frozen state or counters.
+        car.frozen = false;
+        car.reported_rejections = 0;
+        car.next_diagnostic_s = 0.0;
+        car.last_error.clear();
         car.car = elt;
         // Clear any telemetry inherited from a previous car or session: the HUD must show
         // unknown values until the new vehicle has published an accepted step.
@@ -920,6 +1093,9 @@ namespace
         // cannot identify a car/track pair and must not override this profile.
         updateTrackPosition(elt);
         publishCar(car);
+        // The car exists with a known setup: record what is actually in force before
+        // the first step, so a later transaction has a baseline to compare against.
+        logEffectiveSetup(car, "create");
     }
 
     void destroyCar(RustCar& car)
@@ -1038,13 +1214,29 @@ void RustPhysics::initialize(int nCars, struct Track* pTrack)
         const double scenario = ::GfParmGetNum(configuration, "RustPhysics",
                                              "integration scenario", nullptr, 0.0);
         g_diagnostic_interval = ::GfParmGetNum(configuration, "RustPhysics",
-                                              "diagnostic interval seconds", nullptr, 0.25);
+                                              "diagnostic interval seconds", nullptr, 0.04);
+        if (!std::isfinite(g_diagnostic_interval) || g_diagnostic_interval < 0.01)
+            g_diagnostic_interval = 0.01;
+        g_diagnostic_trace = ::GfParmGetNum(configuration, "RustPhysics",
+                                           "diagnostic trace", nullptr, 0.0) > 0.0;
+        const char* trace_directory = ::GfParmGetStr(configuration, "RustPhysics",
+                                                    "diagnostic trace directory", "rustphysics/");
+        g_trace_directory = std::string(GfLocalDir())
+            + (trace_directory && *trace_directory ? trace_directory : "rustphysics/");
         g_diagnostics = diagnostics > 0.0;
         g_scenario = scenario > 0.0;
         ::GfParmReleaseHandle(configuration);
     }
-    GfLogInfo("Rust physics: diagnostics=%d scenario=%d\n", g_diagnostics ? 1 : 0,
-              g_scenario ? 1 : 0);
+    if (g_diagnostics && g_diagnostic_trace && rustPhysicsLibrary.isLoaded()
+        && rustPhysicsLibrary.traceConfigure)
+    {
+        const int trace = rustPhysicsLibrary.traceConfigure(g_trace_directory.c_str());
+        GfLogInfo("Rust physics: trace directory %s enabled=%d\n",
+                  g_trace_directory.c_str(), trace);
+    }
+    GfLogInfo("Rust physics: diagnostics=%d scenario=%d interval=%.4f trace=%d\n",
+              g_diagnostics ? 1 : 0, g_scenario ? 1 : 0, g_diagnostic_interval,
+              (g_diagnostics && g_diagnostic_trace) ? 1 : 0);
 }
 
 void RustPhysics::configureCar(struct CarElt* pCar)
@@ -1101,10 +1293,10 @@ void RustPhysics::updateSituation(struct Situation* pSituation, double fDeltaTim
         RustCar& car = g_cars[index];
         if (!car.car)
             continue;
-        if (g_diagnostics && g_elapsed >= g_next_diagnostic && car.ready)
+        if (g_diagnostics && car.ready && !car.frozen && g_elapsed >= car.next_diagnostic_s)
         {
             logDiagnostics(car);
-            g_next_diagnostic = g_elapsed + g_diagnostic_interval;
+            car.next_diagnostic_s = g_elapsed + g_diagnostic_interval;
         }
         if (pSituation->_raceState & RM_RACE_PRESTART)
         {
@@ -1150,6 +1342,8 @@ struct DynPt* RustPhysics::getCar(int nCarIndex)
 
 void RustPhysics::shutdown()
 {
+    // Drain/join while the host is running normally, before module unload/DllMain.
+    if (rustPhysicsLibrary.traceShutdown) rustPhysicsLibrary.traceShutdown();
     for (RustCar& car : g_cars)
         destroyCar(car);
     g_cars.clear();
@@ -1276,6 +1470,9 @@ bool RustPhysics::applyGarageFields(int car_index,
     if (result) {
         RustCar& car = g_cars[car_index];
         for (const auto& value : values) car.setup_overrides[value.first] = value.second;
+        // Read back from the running configuration, never from the request: this is
+        // the only record that proves which values the axle solver is using.
+        logEffectiveSetup(car, "apply");
     }
     GfLogInfo("Rust garage transaction: applied=%d fields=%u error=%s\n", result ? 1 : 0,
         (unsigned)values.size(), error.c_str());

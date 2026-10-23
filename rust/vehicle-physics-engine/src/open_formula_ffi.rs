@@ -11,7 +11,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use crate::open_formula::{OpenFormulaSimulation, set_track_ground_mesh, track_ground};
 use crate::types::{Mat3, Vec3};
 
-pub const OFP_ABI_VERSION: u32 = 6;
+pub const OFP_ABI_VERSION: u32 = 7;
 pub const OFP_MAX_CONTACTS: usize = 32;
 pub const OFP_WHEELS: usize = 4;
 pub const OFP_FLOOR_PROBES: usize = 2;
@@ -146,6 +146,124 @@ impl OfpWheelState {
     }
 }
 
+/// ABI v7: what one corner's vertical solve measured, including the constraint that
+/// held it and the gap it still had to close. Measurements only; never an input.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct OfpWheelDiagnostics {
+    pub ground_detected: i32,
+    pub ground_binding: i32,
+    pub droop_stop_active: i32,
+    pub bump_stop_active: i32,
+    pub trapped_at_stop: i32,
+    pub reserved0: i32,
+    /// Current unsprung-coordinate compression (m).
+    pub compression_m: f64,
+    /// Gap to the ground limit along the suspension axis (m, + = airborne, NaN = no
+    /// ground plane inside any ray).
+    pub ground_separation_m: f64,
+    /// The same gap projected on the true contact normal (m).
+    pub ground_separation_normal_m: f64,
+    /// Distance the rays still needed beyond their own length (m, + = no ground).
+    pub ray_shortfall_m: f64,
+    /// Compression the ground demanded at the start of the interval (m, NaN = none).
+    pub ground_demand_m: f64,
+    /// Compression the ground demands at the end of the interval (m).
+    pub ground_demand_predicted_m: f64,
+    /// Maximum compression the linkage admits (m).
+    pub max_compression_m: f64,
+    /// Minimum compression the linkage admits (m).
+    pub min_compression_m: f64,
+    /// `max_compression_m - ground_demand_predicted_m` (m, negative = infeasible).
+    pub headroom_to_bump_m: f64,
+    /// Travel from design (m, + = bump).
+    pub travel_m: f64,
+    /// Axial velocity along the body up axis (m/s, + = compressing).
+    pub axial_velocity_m_s: f64,
+    /// Spring force at the wheel (N, + pushes the wheel down).
+    pub spring_force_n: f64,
+    /// Damper force at the wheel (N, + pushes the wheel down).
+    pub damper_force_n: f64,
+    /// Anti-roll force at the wheel (N, signed).
+    pub antiroll_force_n: f64,
+    /// Travel-stop force at the wheel (N, signed).
+    pub stop_force_n: f64,
+    /// Motion ratio r = ds/dq (dimensionless).
+    pub motion_ratio: f64,
+    /// Signed sum of the four elements at the wheel (N).
+    pub element_force_sum_n: f64,
+    /// Accepted ground reaction impulse over the step (N s).
+    pub contact_impulse_ns: f64,
+    /// Accepted droop/extension stop impulse (N s, <= 0).
+    pub droop_stop_impulse_ns: f64,
+    /// Accepted bump/compression stop impulse (N s, >= 0).
+    pub bump_stop_impulse_ns: f64,
+    /// Chassis-side attachment point (world, m).
+    pub anchor_position: OfpVec3,
+    /// Attachment-point velocity (world, m/s).
+    pub anchor_velocity: OfpVec3,
+    /// Attachment-point acceleration (world, m/s^2).
+    pub anchor_acceleration: OfpVec3,
+    /// Attachment acceleration projected on the suspension axis (m/s^2).
+    pub axial_anchor_acceleration_m_s2: f64,
+}
+
+/// ABI v7: one axle's simultaneous solve.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct OfpAxleDiagnostics {
+    /// Fixed-point iterations consumed by the last axle substep.
+    pub iterations: u32,
+    /// Non-zero when every projected residual closed within tolerance.
+    pub converged: i32,
+    /// Substeps the axle integrated in the last step.
+    pub substeps: u32,
+    pub reserved0: i32,
+    /// Worst projected residual of the last axle solve (m/s).
+    pub residual_m_s: f64,
+    /// Anti-roll stiffness the axle used (N/m).
+    pub antiroll_stiffness_n_per_m: f64,
+    /// Anti-roll force on the axle's first corner (N).
+    pub antiroll_force_n: f64,
+    /// Sum of both corners' ground reactions (N).
+    pub normal_load_n: f64,
+}
+
+/// ABI v7: the constraint combination that rejected the step, with the corner that
+/// produced it. `active != 0` means the published state is frozen at the last
+/// accepted step.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct OfpFailureDiagnostics {
+    /// 1 when the published state is frozen by a rejection.
+    pub active: i32,
+    /// 1 ground beyond bump limit, 2 axle not converged, 3 body/corner not
+    /// converged, 4 non-finite state, 0 none.
+    pub code: i32,
+    /// Offending corner 0..3 (FL/FR/RL/RR) or -1 when not per wheel.
+    pub wheel: i32,
+    /// 0 front, 1 rear, -1 unknown.
+    pub axle: i32,
+    /// Iteration that produced the rejection (0 = unknown).
+    pub iteration: u32,
+    /// Subdivision depth the transaction reached before giving up.
+    pub subdivisions: u32,
+    /// Compression the ground demanded at the end of the interval (m).
+    pub demand_m: f64,
+    /// Maximum compression the linkage admits (m).
+    pub limit_m: f64,
+    /// `demand_m - limit_m` (m, positive = the incompatibility).
+    pub excess_m: f64,
+    /// Rate of change of the ground limit (m/s).
+    pub limit_velocity_m_s: f64,
+    /// Worst projected residual of the failing solve (m/s).
+    pub residual_m_s: f64,
+    /// Both corners of the failing axle.
+    pub axle_wheel: [i32; 2],
+    pub reserved1: i32,
+    pub reserved2: i32,
+}
+
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct OfpSnapshot {
@@ -212,6 +330,18 @@ pub struct OfpSnapshot {
     pub step_dt_s: f64,
     // Per-handle accepted-step counter. Audio packets reuse it for ordering.
     pub sequence: u64,
+    // ABI v7: vertical-suspension diagnostics (appended; every v6 offset preserved).
+    /// Chassis angular acceleration (world, rad/s^2).
+    pub angular_acceleration: OfpVec3,
+    /// One record per corner in FL, FR, RL, RR order.
+    pub wheel_diagnostics: [OfpWheelDiagnostics; OFP_WHEELS],
+    /// Front and rear axle solves.
+    pub axle_diagnostics: [OfpAxleDiagnostics; 2],
+    /// Why the last step was rejected, and which corner produced it.
+    pub failure: OfpFailureDiagnostics,
+    /// Records currently buffered by the trace ring (0 when tracing is off).
+    pub trace_records: u32,
+    pub reserved_v7: u32,
 }
 
 impl OfpSnapshot {
@@ -265,6 +395,12 @@ impl OfpSnapshot {
             shift_timer_s: 0.0,
             step_dt_s: 0.0,
             sequence: 0,
+            angular_acceleration: OfpVec3::default(),
+            wheel_diagnostics: [OfpWheelDiagnostics::default(); OFP_WHEELS],
+            axle_diagnostics: [OfpAxleDiagnostics::default(); 2],
+            failure: OfpFailureDiagnostics::default(),
+            trace_records: 0,
+            reserved_v7: 0,
         }
     }
 }
@@ -353,6 +489,15 @@ pub extern "C" fn ofp_abi_signature() -> u64 {
     mix_layout(&mut hash, std::mem::offset_of!(OfpVehicleSpecs, max_torque_nm) as u64);
     mix_layout(&mut hash, std::mem::offset_of!(OfpSnapshot, clutch_torque_nm) as u64);
     mix_layout(&mut hash, std::mem::offset_of!(OfpSnapshot, sequence) as u64);
+    // ABI v7 tail (appended; every v6 offset untouched).
+    mix_layout(&mut hash, std::mem::size_of::<OfpWheelDiagnostics>() as u64);
+    mix_layout(&mut hash, std::mem::size_of::<OfpFailureDiagnostics>() as u64);
+    mix_layout(&mut hash, std::mem::offset_of!(OfpSnapshot, angular_acceleration) as u64);
+    mix_layout(&mut hash, std::mem::offset_of!(OfpSnapshot, wheel_diagnostics) as u64);
+    mix_layout(&mut hash, std::mem::offset_of!(OfpSnapshot, axle_diagnostics) as u64);
+    mix_layout(&mut hash, std::mem::offset_of!(OfpSnapshot, failure) as u64);
+    mix_layout(&mut hash, std::mem::offset_of!(OfpSnapshot, trace_records) as u64);
+    mix_layout(&mut hash, std::mem::offset_of!(OfpWheelDiagnostics, anchor_position) as u64);
     hash
 }
 
@@ -734,3 +879,82 @@ pub extern "C" fn ofp_vehicle_geometry(
         None => -1,
     }
 }
+
+/// ABI v7: turns the substep/iteration trace on and points it at `directory`.
+///
+/// The ring is process-wide (one vehicle per session is instrumented) and costs one
+/// relaxed atomic load per record when it is off. `directory == NULL` keeps the
+/// records in memory so `ofp_trace_dump` can still write them elsewhere.
+#[no_mangle]
+pub extern "C" fn ofp_trace_configure(directory: *const c_char) -> i32 {
+    match catch_unwind(AssertUnwindSafe(|| -> i32 {
+        let path = read_c_string(directory).map(|value| value.to_string());
+        crate::vertical_diagnostics::configure(path.as_deref());
+        0
+    })) {
+        Ok(code) => code,
+        Err(_) => -2,
+    }
+}
+
+/// ABI v7: writes every buffered trace record to `path`. Returns the row count, or a
+/// negative code when tracing is off or the file cannot be written.
+#[no_mangle]
+pub extern "C" fn ofp_trace_dump(path: *const c_char) -> i32 {
+    match catch_unwind(AssertUnwindSafe(|| -> i32 {
+        let Some(path) = read_c_string(path) else { return -1 };
+        match crate::vertical_diagnostics::trace_dump(path) {
+            Some(rows) => rows as i32,
+            None => -2,
+        }
+    })) {
+        Ok(code) => code,
+        Err(_) => -3,
+    }
+}
+
+/// ABI v7: records currently buffered by the ring (0 when tracing is off).
+#[no_mangle]
+pub extern "C" fn ofp_trace_buffered() -> u32 {
+    crate::vertical_diagnostics::buffered() as u32
+}
+
+/// ABI v7: the effective setup actually in force, one `FIELD`/`DERIVED` line per
+/// value, with units, admitted limits and the derived coefficients the solver used.
+/// Returns the byte count, or a negative code when the handle is invalid.
+#[no_mangle]
+pub extern "C" fn ofp_effective_setup(
+    handle: *const c_void,
+    buffer: *mut c_char,
+    capacity: u32,
+) -> i32 {
+    match catch_unwind(AssertUnwindSafe(|| -> i32 {
+        let simulation = match handle_ref(handle) {
+            Some(simulation) => simulation,
+            None => return -1,
+        };
+        let text = simulation.effective_setup_report();
+        if buffer.is_null() || capacity == 0 {
+            return text.len() as i32;
+        }
+        let mut bytes = text.into_bytes();
+        bytes.truncate(capacity as usize - 1);
+        let written = bytes.len() as i32;
+        // SAFETY: the caller guarantees a writable buffer of `capacity` bytes.
+        unsafe {
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), buffer as *mut u8, bytes.len());
+            *(buffer as *mut u8).add(bytes.len()) = 0;
+        }
+        written
+    })) {
+        Ok(code) => code,
+        Err(_) => -2,
+    }
+}
+
+/// Tooling/session boundary: wait for queued windows (never during a physics tick).
+#[no_mangle]
+pub extern "C" fn ofp_trace_flush() { let _ = catch_unwind(AssertUnwindSafe(crate::vertical_diagnostics::flush_writer)); }
+/// Host must call before unloading this DLL to join the background writer.
+#[no_mangle]
+pub extern "C" fn ofp_trace_shutdown() { let _ = catch_unwind(AssertUnwindSafe(crate::vertical_diagnostics::shutdown_writer)); }

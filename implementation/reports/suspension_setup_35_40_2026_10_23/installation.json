@@ -1,0 +1,51 @@
+{
+  "installed": {
+    "lib/games/speed-dreams-2/modules/simu/vehicle_physics_engine.dll": {
+      "sha256": "4aedab2346809729f32ed63373256d2d22457e75d4bd3c11b52c951bc5afaffb",
+      "size": 5182976
+    },
+    "share/games/speed-dreams-2/cars/rust/williams-fw19-hockenheim/suspension.json": {
+      "sha256": "46dc61a462c6378802d0857b87eb94f1b5c28389baf164bd7a6c08c2b5b4a824",
+      "size": 7410
+    },
+    "share/games/speed-dreams-2/cars/rust/williams-fw19-hockenheim/profile_provenance.json": {
+      "sha256": "c3d3ebb9172dab9cfcd227c7eabccaa1c9bf8d855a46756796e7b7183e829767",
+      "size": 28144
+    }
+  },
+  "previous_sha256": {
+    "lib/games/speed-dreams-2/modules/simu/vehicle_physics_engine.dll": "07c202b31ca8207d07614658437853cc68f041aa2882d8f563fc2c0f672fb2b8",
+    "share/games/speed-dreams-2/cars/rust/williams-fw19-hockenheim/suspension.json": "46dc61a462c6378802d0857b87eb94f1b5c28389baf164bd7a6c08c2b5b4a824",
+    "share/games/speed-dreams-2/cars/rust/williams-fw19-hockenheim/profile_provenance.json": "c3d3ebb9172dab9cfcd227c7eabccaa1c9bf8d855a46756796e7b7183e829767",
+    "distribution_manifest.json": "6a8f708653801514bb57c876c4a8b805dcc2503ec840cce2c1bad11117c579ac"
+  },
+  "backup": "C:\\Users\\bill\\open-formula-backups\\2026-10-23-install-35-40-b4f80ac8",
+  "rollback": "C:\\Users\\bill\\open-formula-backups\\2026-10-23-install-35-40-b4f80ac8\\rollback.ps1",
+  "baseline_rollback": "C:\\Users\\bill\\open-formula-backups\\2026-10-23-install-35-40-552910e3\\rollback.ps1",
+  "protected_sha256": {
+    "D:\\open-formula\\distribution\\user-settings\\open_formula.db": "713c33324d8f3d70e2a3eb76ef90c61dc86204ae1cd0d181ef682648b13fdeda",
+    "D:\\open-formula\\distribution\\user-settings\\config\\rust_physics.xml": "a7ffac1682caaee5fd8bab79d98fcb57a49139241ac5bb49fd7a6dc11c4e5913",
+    "D:\\open-formula\\distribution\\share\\games\\speed-dreams-2\\cars\\rust\\williams-fw19-hockenheim\\aerodynamics.json": "b63892829c61142a4a449efa8d91c8fbba38f76d87bc4eb3d349e4bbe9530953",
+    "D:\\open-formula\\distribution\\share\\games\\speed-dreams-2\\cars\\rust\\williams-fw19-hockenheim\\audio.json": "4ac72521526db0b6cbf05ef6e53f6a9b3f13e57c6d796742e497408546bc7d0c",
+    "D:\\open-formula\\distribution\\share\\games\\speed-dreams-2\\cars\\rust\\williams-fw19-hockenheim\\brakes.json": "42fc0593846d009dc8bf1f03f703b6ebebea5c3e5a0572060e4521eed5e8e100",
+    "D:\\open-formula\\distribution\\share\\games\\speed-dreams-2\\cars\\rust\\williams-fw19-hockenheim\\chassis.json": "504b41b070156bffc27360b57623bdcc5c1fbe96a614d3079723e59eab0004b5",
+    "D:\\open-formula\\distribution\\share\\games\\speed-dreams-2\\cars\\rust\\williams-fw19-hockenheim\\coupled_world.json": "079546b5cc16578ea90615ce6fd3a5a560739331c1ee0e9cd7cf30aed236f175",
+    "D:\\open-formula\\distribution\\share\\games\\speed-dreams-2\\cars\\rust\\williams-fw19-hockenheim\\driving_assistance.json": "fbf2e5298355e4e6da4727a29ee75d6bf4317c9c57401e0213bf1be7f5e394a1",
+    "D:\\open-formula\\distribution\\share\\games\\speed-dreams-2\\cars\\rust\\williams-fw19-hockenheim\\fuel.json": "6afbae1641b1a3820c1f9603e906c1705dbd371b053f87c3a15b7745706f7d5f",
+    "D:\\open-formula\\distribution\\share\\games\\speed-dreams-2\\cars\\rust\\williams-fw19-hockenheim\\powertrain.json": "cdecb4cfac3feca3fbc9c4e9c734f65722caab2bf8af144d89e4d6e05f79e54e",
+    "D:\\open-formula\\distribution\\share\\games\\speed-dreams-2\\cars\\rust\\williams-fw19-hockenheim\\steering.json": "16a83857b2159b22c4e73510e3afdd7a2ab322dd34b5246a43b044b1c228097d",
+    "D:\\open-formula\\distribution\\share\\games\\speed-dreams-2\\cars\\rust\\williams-fw19-hockenheim\\suspension_presentation.json": "bbea99bc9aeefea94f9b07e8fa18aa76da4574720b1185c580e720266b7d629b",
+    "D:\\open-formula\\distribution\\share\\games\\speed-dreams-2\\cars\\rust\\williams-fw19-hockenheim\\tires.json": "783aa938f874cfc791dbc02b688c273869935b8d76d7fc9858d09465f0acb281",
+    "D:\\open-formula\\distribution\\share\\games\\speed-dreams-2\\cars\\rust\\williams-fw19-hockenheim\\underfloor_contact.json": "6b6f9c4bb82f0e1067e3213f82def931e648bdcd5350ddeab3b204c697c5b557",
+    "D:\\open-formula\\distribution\\share\\games\\speed-dreams-2\\cars\\rust\\williams-fw19-hockenheim\\vehicle.json": "33af96f7e95c02ef2d95a13f3288d00eb7772ae87e77b1cd6c311395a019638f"
+  },
+  "ride_height_target_m": {
+    "front": 0.035,
+    "rear": 0.04
+  },
+  "bump_stop_working_length_m": {
+    "front": 0.005,
+    "rear": 0.005
+  },
+  "human_driving_acceptance": "pending"
+}

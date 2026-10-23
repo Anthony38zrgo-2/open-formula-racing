@@ -4,6 +4,27 @@ use crate::suspension_mass_properties::{
 };
 use crate::types::{Vec3, WheelIndex};
 use crate::vehicle_config::VehicleConfig;
+use std::cell::RefCell;
+
+// A transaction evaluates clones of ONE immutable mechanical configuration; only
+// fuel may change inside it. Cache pure inventory audits for those fuel/backend
+// pairs. The RAII scope cannot leak to another car, setup transaction or thread.
+type CachedMass = (u64, SuspensionBackend, VehicleMassProperties);
+thread_local! { static STEP_MASS_CACHE: RefCell<Option<Vec<CachedMass>>> = const { RefCell::new(None) }; }
+pub(crate) struct StepMassCache { previous: Option<Vec<CachedMass>> }
+impl StepMassCache {
+    pub(crate) fn new() -> Self {
+        Self { previous: STEP_MASS_CACHE.with(|cache| cache.replace(Some(Vec::new()))) }
+    }
+}
+impl Drop for StepMassCache {
+    fn drop(&mut self) { STEP_MASS_CACHE.with(|cache| { cache.replace(self.previous.take()); }); }
+}
+fn cached(configuration: &VehicleConfig, backend: Option<SuspensionBackend>) -> Option<VehicleMassProperties> {
+    let fuel=configuration.fuel.effective_current_kg().to_bits();
+    STEP_MASS_CACHE.with(|cache| cache.borrow().as_ref()?.iter()
+        .find(|(f,b,_)| *f==fuel && backend.map_or(true,|requested| requested==*b)).map(|(_,_,p)| *p))
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MassPropertySource {
@@ -45,6 +66,17 @@ pub fn resolve_vehicle_mass_properties_for_suspension_backend(
     configuration: &VehicleConfig,
     suspension_backend: SuspensionBackend,
 ) -> VehicleMassProperties {
+    if let Some(properties)=cached(configuration,Some(suspension_backend)) { return properties; }
+    let properties=calculate_vehicle_mass_properties(configuration,suspension_backend);
+    STEP_MASS_CACHE.with(|cache| {
+        if let Some(entries)=cache.borrow_mut().as_mut() {
+            entries.push((configuration.fuel.effective_current_kg().to_bits(),suspension_backend,properties));
+        }
+    });
+    properties
+}
+
+fn calculate_vehicle_mass_properties(configuration: &VehicleConfig, suspension_backend: SuspensionBackend) -> VehicleMassProperties {
     let total_mass = configuration
         .chassis
         .total_vehicle_mass(&configuration.tires, &configuration.fuel);
@@ -99,6 +131,7 @@ pub fn resolve_vehicle_mass_properties_for_suspension_backend(
 }
 
 pub fn wheel_spin_inertia(configuration: &VehicleConfig, wheel: WheelIndex) -> f64 {
+    if let Some(properties)=cached(configuration,None) { return properties.wheel_spin_inertia_kilogram_square_metres[wheel as usize]; }
     if configuration.chassis.uses_authored_wheel_frame() {
         if let Some(values) = inventory_wheel_spin_inertia(configuration) {
             return values[wheel as usize];
@@ -108,6 +141,7 @@ pub fn wheel_spin_inertia(configuration: &VehicleConfig, wheel: WheelIndex) -> f
 }
 
 pub fn unsprung_mass(configuration: &VehicleConfig, wheel: WheelIndex) -> f64 {
+    if let Some(properties)=cached(configuration,None) { return properties.unsprung_mass_kilograms[wheel as usize]; }
     if configuration.chassis.uses_authored_wheel_frame() {
         if let Some(values) = inventory_unsprung_mass(configuration) {
             return values[wheel as usize];

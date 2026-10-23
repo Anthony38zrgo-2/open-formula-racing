@@ -28,6 +28,17 @@ El trabajo existente incluye conversión visual y de materiales, contacto y coli
 
 El nuevo modelo de neumáticos y térmica inspirado en Rust está implementado como candidato seleccionable para el Williams/Fuji en [implementation/reports/williams_coupled_tire_model.md](implementation/reports/williams_coupled_tire_model.md). La especificación de origen se conserva en [instrucciones.md](instrucciones.md). La activación no implica aceptación de conducción: la validación humana, la lluvia y las vueltas completas siguen pendientes. Los resultados y límites del trabajo actual están en [implementation/reports](implementation/reports).
 
+## Investigación y referencias bibliográficas
+
+Las fuentes de apoyo para investigar suspensión, dinámica del vehículo y neumáticos se conservan en [docs/investigation](docs/investigation/README.md), con citas completas, enlaces a los PDF y notas sobre su aplicación:
+
+- **[INV-01]** Romano, L., Bruzelius, F., Hjort, M., y Jacobson, B. (2023). [*Development and analysis of the two-regime transient tyre model for combined slip*](docs/investigation/530309_Fulltext.pdf). *Vehicle System Dynamics*, 61(4), 1028–1062. [DOI: 10.1080/00423114.2022.2057335](https://doi.org/10.1080/00423114.2022.2057335).
+- **[INV-02]** Gaspar, D. L. M. (2026). [*Modelo de Comportamento Dinâmico do Veículo Formula Student para otimização do Sistema de Suspensão*](docs/investigation/content.pdf). Proyecto de máster, Instituto Politécnico de Leiria.
+- **[INV-03]** Díaz de Rábago Areilza, J. (2024). [*Analysis and design of a roll-heave decoupled front suspension for a Formula Student prototype*](docs/investigation/TFG-DiazdeRabagoAreilza,Jose.pdf). Trabajo Fin de Grado, Universidad Pontificia Comillas, ICAI.
+- **[INV-04]** Gaither, A. (2021). [*Vehicle Dynamics on an Electric Formula SAE Racecar*](docs/investigation/gaither-gaither-sb-2-2021-thesis.pdf). Tesis de grado, Massachusetts Institute of Technology.
+
+Estas referencias documentan las bases de investigación; sus resultados no implican una calibración o validación automática del vehículo del proyecto. Los documentos conservan sus propios avisos de autoría y condiciones de uso.
+
 ## Créditos principales del contenido utilizado
 
 - **Williams FW19 y variante visual GP4:** VRC, MSchumi24 y Hega; actualizaciones de SkaningeN. El carset *F1 1997 Season Mod v2.0* está organizado por MSchumi24.

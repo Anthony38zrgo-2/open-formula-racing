@@ -1,2 +1,4 @@
 # Keep the captured telemetry byte-identical to its recorded SHA-256.
 implementation/reports/melbourne_t3_extension/latest_telemetry/runtime.log -text whitespace=-blank-at-eol
+# Preserve supplied research PDFs byte-for-byte and disable global text diff drivers.
+docs/investigation/*.pdf binary

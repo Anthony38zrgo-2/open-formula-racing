@@ -1,0 +1,30 @@
+{
+  "passed": true,
+  "candidate": "D:\\open-formula\\distribution\\lib\\games\\speed-dreams-2\\modules\\simu\\vehicle_physics_engine.dll",
+  "sha256": "4aedab2346809729f32ed63373256d2d22457e75d4bd3c11b52c951bc5afaffb",
+  "abi_version": 7,
+  "abi_signature": "0xa91cdeba9d3fe775",
+  "accepted_steps": 2000,
+  "trace_records_without_opt_in": 0,
+  "ride_height_m": [
+    0.03501417454753826,
+    0.039990948398010914
+  ],
+  "normal_loads_n": [
+    1335.8412645463502,
+    1335.8412779785547,
+    1667.9083640604601,
+    1667.9083776137634
+  ],
+  "stop_forces_n": [
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "floor_impulse_ns": [
+    0.0,
+    0.0
+  ],
+  "source_profile_sha256": "46dc61a462c6378802d0857b87eb94f1b5c28389baf164bd7a6c08c2b5b4a824"
+}

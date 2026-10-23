@@ -21,6 +21,7 @@ RustPhysicsLibrary::RustPhysicsLibrary()
       setPose(nullptr), step(nullptr), snapshot(nullptr), getLastError(nullptr),
       backendMask(nullptr), setupDocument(nullptr), setupFields(nullptr), fuelDensity(nullptr), vehicleSpecs(nullptr), applySetup(nullptr),
       resetSetup(nullptr), pitFuel(nullptr), pitTires(nullptr), vehicleGeometry(nullptr),
+      traceShutdown(nullptr), traceConfigure(nullptr), traceDump(nullptr), traceBuffered(nullptr), effectiveSetup(nullptr),
       _module(nullptr)
 {
 }
@@ -104,6 +105,15 @@ namespace
         mixLayout(hash, (std::uint64_t)offsetof(OfpVehicleSpecs, max_torque_nm));
         mixLayout(hash, (std::uint64_t)offsetof(OfpSnapshot, clutch_torque_nm));
         mixLayout(hash, (std::uint64_t)offsetof(OfpSnapshot, sequence));
+        // ABI v7 tail (appended; every v6 offset untouched).
+        mixLayout(hash, (std::uint64_t)sizeof(OfpWheelDiagnostics));
+        mixLayout(hash, (std::uint64_t)sizeof(OfpFailureDiagnostics));
+        mixLayout(hash, (std::uint64_t)offsetof(OfpSnapshot, angular_acceleration));
+        mixLayout(hash, (std::uint64_t)offsetof(OfpSnapshot, wheel_diagnostics));
+        mixLayout(hash, (std::uint64_t)offsetof(OfpSnapshot, axle_diagnostics));
+        mixLayout(hash, (std::uint64_t)offsetof(OfpSnapshot, failure));
+        mixLayout(hash, (std::uint64_t)offsetof(OfpSnapshot, trace_records));
+        mixLayout(hash, (std::uint64_t)offsetof(OfpWheelDiagnostics, anchor_position));
         return hash;
     }
 }
@@ -159,6 +169,14 @@ bool RustPhysicsLibrary::load(const std::string& library_path)
             return false;
         }
     }
+    // ABI v7 diagnostics entry points. A v7 library always exports them; resolving
+    // them without failing keeps the bridge usable with a v7 build that dropped the
+    // optional dumper, and the call sites guard on null.
+    traceShutdown = reinterpret_cast<TraceShutdownFn>(resolve(_module, "ofp_trace_shutdown"));
+    traceConfigure = reinterpret_cast<TraceConfigureFn>(resolve(_module, "ofp_trace_configure"));
+    traceDump = reinterpret_cast<TraceDumpFn>(resolve(_module, "ofp_trace_dump"));
+    traceBuffered = reinterpret_cast<TraceBufferedFn>(resolve(_module, "ofp_trace_buffered"));
+    effectiveSetup = reinterpret_cast<EffectiveSetupFn>(resolve(_module, "ofp_effective_setup"));
     if (abiVersion() != OFP_ABI_VERSION)
     {
         _last_error = "Rust physics ABI mismatch: library reports " +
@@ -179,8 +197,10 @@ bool RustPhysicsLibrary::load(const std::string& library_path)
 
 void RustPhysicsLibrary::unload()
 {
-    if (_module)
+    if (_module) {
+        if (traceShutdown) traceShutdown();
         closeLibrary(_module);
+    }
     _module = nullptr;
     abiVersion = nullptr;
     buildProvenance = nullptr;
@@ -203,4 +223,9 @@ void RustPhysicsLibrary::unload()
     pitFuel = nullptr;
     pitTires = nullptr;
     vehicleGeometry = nullptr;
+    traceShutdown = nullptr;
+    traceConfigure = nullptr;
+    traceDump = nullptr;
+    traceBuffered = nullptr;
+    effectiveSetup = nullptr;
 }

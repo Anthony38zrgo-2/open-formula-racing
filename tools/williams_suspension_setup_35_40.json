@@ -1,0 +1,42 @@
+{
+  "revision": "2026-10-23-ride-35-40",
+  "kind": "estimated_calibrated_candidate",
+  "ride_height_target_m": {
+    "front": 0.035,
+    "rear": 0.04
+  },
+  "ride_reference": "vertical clearance at axle stations of the existing floor datum; static, 7.6 kg fuel, flat road",
+  "calibration": "production solver; output implementation/reports/suspension_setup_35_40_2026_10_23",
+  "front": {
+    "arb_ratio": 0.25,
+    "bump_stop_multiplier": 1.0,
+    "elements": {
+      "spring_rate_N_per_m": 200000.0,
+      "spring_free_length_m": 0.27142903823632325,
+      "damper_bump_Ns_per_m": 8074.843399230281,
+      "damper_rebound_Ns_per_m": 9938.268799052654,
+      "bump_stop_mult": 1.0,
+      "bump_stop_travel_m": 0.005,
+      "hard_stop_overtravel_m": 0.0001,
+      "wheel_bump_m": 0.025
+    }
+  },
+  "rear": {
+    "arb_ratio": 0.06,
+    "bump_stop_multiplier": 1.0,
+    "elements": {
+      "spring_rate_N_per_m": 1200000.0,
+      "spring_free_length_m": 0.25164038757661955,
+      "damper_bump_Ns_per_m": 47431.81426907967,
+      "damper_rebound_Ns_per_m": 58377.61756194421,
+      "bump_stop_mult": 1.0,
+      "bump_stop_travel_m": 0.005,
+      "hard_stop_overtravel_m": 0.0001,
+      "wheel_bump_m": 0.04
+    }
+  },
+  "bump_residual_floor_height_m": {
+    "front": 0.005,
+    "rear": 0.005
+  }
+}

@@ -1,0 +1,205 @@
+{
+  "passed": true,
+  "tests_passed": 51,
+  "test_suites": 5,
+  "dll": {
+    "passed": true,
+    "candidate": "D:\\open-formula\\rust\\target\\release\\vehicle_physics_engine.dll",
+    "sha256": "4aedab2346809729f32ed63373256d2d22457e75d4bd3c11b52c951bc5afaffb",
+    "abi_version": 7,
+    "abi_signature": "0xa91cdeba9d3fe775",
+    "accepted_steps": 2000,
+    "ride_height_m": [
+      0.03501417454753826,
+      0.039990948398010914
+    ],
+    "normal_loads_n": [
+      1335.8412645463502,
+      1335.8412779785547,
+      1667.9083640604601,
+      1667.9083776137634
+    ],
+    "stop_forces_n": [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "floor_impulse_ns": [
+      0.0,
+      0.0
+    ],
+    "source_profile_sha256": "46dc61a462c6378802d0857b87eb94f1b5c28389baf164bd7a6c08c2b5b4a824"
+  },
+  "speed_sweep": [
+    {
+      "speed_kph": "0.0",
+      "ride_front_m": "0.035014",
+      "ride_rear_m": "0.039991",
+      "min_floor_m": "0.035014",
+      "stop_fraction": "0.000000",
+      "min_normal_n": "1335.832",
+      "spring_FL": "1188.725",
+      "spring_RL": "1491.369",
+      "stop_FL": "0.000",
+      "stop_RL": "0.000"
+    },
+    {
+      "speed_kph": "100.0",
+      "ride_front_m": "0.034028",
+      "ride_rear_m": "0.038653",
+      "min_floor_m": "0.034028",
+      "stop_fraction": "0.000000",
+      "min_normal_n": "1487.028",
+      "spring_FL": "1339.882",
+      "spring_RL": "1683.427",
+      "stop_FL": "0.000",
+      "stop_RL": "0.000"
+    },
+    {
+      "speed_kph": "200.0",
+      "ride_front_m": "0.030041",
+      "ride_rear_m": "0.032222",
+      "min_floor_m": "0.030041",
+      "stop_fraction": "0.000000",
+      "min_normal_n": "2145.176",
+      "spring_FL": "1997.870",
+      "spring_RL": "2539.834",
+      "stop_FL": "0.000",
+      "stop_RL": "0.000"
+    },
+    {
+      "speed_kph": "250.0",
+      "ride_front_m": "0.027998",
+      "ride_rear_m": "0.028042",
+      "min_floor_m": "0.027998",
+      "stop_fraction": "0.000000",
+      "min_normal_n": "2515.180",
+      "spring_FL": "2367.715",
+      "spring_RL": "3043.484",
+      "stop_FL": "0.000",
+      "stop_RL": "0.000"
+    },
+    {
+      "speed_kph": "300.0",
+      "ride_front_m": "0.025952",
+      "ride_rear_m": "0.023028",
+      "min_floor_m": "0.023028",
+      "stop_fraction": "0.000000",
+      "min_normal_n": "2907.483",
+      "spring_FL": "2759.765",
+      "spring_RL": "3598.180",
+      "stop_FL": "0.000",
+      "stop_RL": "0.000"
+    }
+  ],
+  "maneuvers": [
+    {
+      "profile": "baseline",
+      "case": "straight_brake",
+      "accepted_s": "3.6120",
+      "failed": "false",
+      "min_floor_m": "0.023253",
+      "max_roll_deg": "0.0000",
+      "front_unsupported_wheel_seconds": "0.0000",
+      "rear_unsupported_wheel_seconds": "0.0000",
+      "stop_wheel_fraction": "0.123477",
+      "max_stop_n": "1214.323",
+      "final_speed_kph": "3.502"
+    },
+    {
+      "profile": "baseline",
+      "case": "trail_brake_reversal",
+      "accepted_s": "4.0000",
+      "failed": "false",
+      "min_floor_m": "0.030376",
+      "max_roll_deg": "0.5516",
+      "front_unsupported_wheel_seconds": "0.0000",
+      "rear_unsupported_wheel_seconds": "0.0000",
+      "stop_wheel_fraction": "0.033500",
+      "max_stop_n": "359.622",
+      "final_speed_kph": "126.803"
+    },
+    {
+      "profile": "baseline",
+      "case": "slalom",
+      "accepted_s": "5.0000",
+      "failed": "false",
+      "min_floor_m": "0.074582",
+      "max_roll_deg": "0.2928",
+      "front_unsupported_wheel_seconds": "0.0000",
+      "rear_unsupported_wheel_seconds": "0.0000",
+      "stop_wheel_fraction": "0.000000",
+      "max_stop_n": "0.000",
+      "final_speed_kph": "102.918"
+    },
+    {
+      "profile": "baseline",
+      "case": "one_wheel_bump",
+      "accepted_s": "3.0000",
+      "failed": "false",
+      "min_floor_m": "0.082018",
+      "max_roll_deg": "0.8303",
+      "front_unsupported_wheel_seconds": "0.1000",
+      "rear_unsupported_wheel_seconds": "0.0260",
+      "stop_wheel_fraction": "0.000000",
+      "max_stop_n": "0.000",
+      "final_speed_kph": "75.798"
+    },
+    {
+      "profile": "candidate",
+      "case": "straight_brake",
+      "accepted_s": "3.6360",
+      "failed": "false",
+      "min_floor_m": "0.026000",
+      "max_roll_deg": "0.0000",
+      "front_unsupported_wheel_seconds": "0.0000",
+      "rear_unsupported_wheel_seconds": "0.0000",
+      "stop_wheel_fraction": "0.000000",
+      "max_stop_n": "0.000",
+      "final_speed_kph": "3.562"
+    },
+    {
+      "profile": "candidate",
+      "case": "trail_brake_reversal",
+      "accepted_s": "4.0000",
+      "failed": "false",
+      "min_floor_m": "0.029194",
+      "max_roll_deg": "0.4826",
+      "front_unsupported_wheel_seconds": "0.0000",
+      "rear_unsupported_wheel_seconds": "0.0000",
+      "stop_wheel_fraction": "0.000000",
+      "max_stop_n": "0.000",
+      "final_speed_kph": "126.823"
+    },
+    {
+      "profile": "candidate",
+      "case": "slalom",
+      "accepted_s": "5.0000",
+      "failed": "false",
+      "min_floor_m": "0.033218",
+      "max_roll_deg": "0.2238",
+      "front_unsupported_wheel_seconds": "0.0000",
+      "rear_unsupported_wheel_seconds": "0.0000",
+      "stop_wheel_fraction": "0.000000",
+      "max_stop_n": "0.000",
+      "final_speed_kph": "103.076"
+    },
+    {
+      "profile": "candidate",
+      "case": "one_wheel_bump",
+      "accepted_s": "3.0000",
+      "failed": "false",
+      "min_floor_m": "0.033964",
+      "max_roll_deg": "0.6122",
+      "front_unsupported_wheel_seconds": "0.1380",
+      "rear_unsupported_wheel_seconds": "0.0360",
+      "stop_wheel_fraction": "0.000000",
+      "max_stop_n": "0.000",
+      "final_speed_kph": "75.798"
+    }
+  ],
+  "trail_max_sideslip_rad": 0.057001,
+  "manual_driving_acceptance": "pending",
+  "candidate_v1": "superseded after trail-brake reversal instability; preserved in candidate_v1/"
+}

@@ -1,0 +1,3 @@
+axle,q_m,motion_ratio,wheel_rate_n_m,bar_rate_n_m,bar_roll_share_pct
+FrontLeft,-0.005,0.829363434,151853.676075,38362.033683,33.565852
+RearLeft,0.005,0.358912863,144805.580517,9883.305825,12.010906

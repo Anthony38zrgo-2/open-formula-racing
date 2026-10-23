@@ -43,7 +43,8 @@
       "classification": "estimated",
       "domain": "suspension.json",
       "path": "suspension.front.arb_ratio and suspension.rear.arb_ratio",
-      "source": "Human-requested roll stiffness increase over the inherited base ratios: front 0.15 to 1.00 and rear 0.09 to 0.80"
+      "source": "Human-requested roll stiffness increase over the inherited base ratios: front 0.15 to 1.00 and rear 0.09 to 0.80",
+      "superseded_by": "2026-10-23-ride-35-40"
     },
     {
       "classification": "estimated",
@@ -55,7 +56,8 @@
       "classification": "estimated",
       "domain": "suspension.json",
       "path": "suspension.geometry_physical.rear.damper_bump_Ns_per_m and suspension.geometry_physical.rear.damper_rebound_Ns_per_m",
-      "source": "Rear damper coefficients increased from 7395/11305 to 14000/22000 to match the front damping ratio at the local rear motion ratio after the travel-dependent transmission correction"
+      "source": "Rear damper coefficients increased from 7395/11305 to 14000/22000 to match the front damping ratio at the local rear motion ratio after the travel-dependent transmission correction",
+      "superseded_by": "2026-10-23-ride-35-40"
     },
     {
       "classification": "estimated",
@@ -752,6 +754,16 @@
       "domain": "aerodynamics.json",
       "path": "aero.model.body.drag_coefficient_scope",
       "source": "Q70 documents Cd 0.83 with A 1.15 square metres as a whole-vehicle reference, so element drag is subtracted from the body reference area"
+    },
+    {
+      "classification": "estimated_calibrated_candidate",
+      "domain": "suspension.json",
+      "path": "suspension.front/rear arb_ratio, bump_stop_multiplier and geometry_physical axle spring/preload/damper/stop elements and rear wheel_bump_m",
+      "source": "User-requested static ride 35 mm front / 40 mm rear, last 5 mm progressive stops. Calibrated against the production Rust body/corner solver on flat ground at 7.6 kg fuel; geometry hardpoints and aero floor datum preserved. Rear geometric bump limit is 40 mm from design so full bump retains 5 mm floor clearance; useful bump from static pose is approximately 30/35 mm.",
+      "revision": "2026-10-23-ride-35-40",
+      "parameters": "tools/williams_suspension_setup_35_40.json",
+      "validation": "implementation/reports/suspension_setup_35_40_2026_10_23",
+      "human_driving_acceptance": "pending"
     }
   ],
   "questionnaire": "docs/f1_1997_williams_physical_profile_questionnaire.md",

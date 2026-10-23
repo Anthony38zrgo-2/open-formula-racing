@@ -23,7 +23,11 @@ use vehicle_physics_engine::types::Vec3;
 use vehicle_physics_engine::vehicle_config::VehicleConfig;
 
 fn simulation() -> OpenFormulaSimulation {
-    OpenFormulaSimulation::create(None, Vec3::ZERO, 0.0, None).expect("williams profile")
+    // Keep the original authority regression witness independent of later tuning.
+    // The current production candidate has its own physical-height/stop tests.
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/williams_suspension_pre_35_40.json");
+    OpenFormulaSimulation::create(Some(&path), Vec3::ZERO, 0.0, None).expect("reference profile")
 }
 
 fn effective(simulation: &OpenFormulaSimulation, axle: &str, element: &str) -> f64 {
@@ -326,7 +330,8 @@ mod translation {
     use super::*;
 
     fn design_profile() -> VehicleConfig {
-        VehicleConfig::williams_fw19_hockenheim_canonical()
+        VehicleConfig::from_json_str(include_str!("fixtures/williams_suspension_pre_35_40.json"))
+            .expect("reference authority profile")
     }
 
     fn coefficients(config: &VehicleConfig) -> (AxleEffectiveElements, AxleEffectiveElements) {

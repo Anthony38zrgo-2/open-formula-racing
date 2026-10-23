@@ -1,0 +1,19 @@
+{
+  "backup": "C:\\Users\\bill\\open-formula-backups\\2026-10-23-suspension-35-40-122847",
+  "before": {
+    "rust/data/vehicles/williams-fw19-hockenheim/suspension.json": "324c4c167053a4f548ac439f4de2f1aadd4439ce65f7783018364cc9ccfcbf1e",
+    "rust/data/vehicles/williams-fw19-hockenheim/profile_provenance.json": "09ef66a0227f301da69fd6e74ba2d8aa882728ed17c65fe2e6c71959d25b4083",
+    "rust/vehicle-physics-engine/src/suspension_geo_config.rs": "1d5ec9aac0f43e80bac37f7ed971aab945b6018146858dc8cf596e69d507ac86",
+    "rust/vehicle-physics-engine/src/suspension.rs": "33f6acb44e72268610b8c34ada608058669c6f9258249bb299fbc7c10466f807",
+    "rust/vehicle-physics-engine/src/simplified_axle_integration.rs": "70c81e46e6d205801f15e35504c44cdbb75f39b9b2c7300614aeebaff4d14000",
+    "rust/vehicle-physics-engine/src/wheel_mechanics.rs": "9d35d6c30b524cf6fafff43ed6cd3b797174e639fbd127c7dcd19c4f6f72ee2a",
+    "rust/vehicle-physics-engine/tests/setup_authority.rs": "07334da90bda8f0835a3fd69a384b13b92162baa4b5f86f88783d913b3cdeb67",
+    "rust/vehicle-physics-engine/tests/structural_contact.rs": "5f879a526d3d5abaa5e00343d65b0270f1ae95221c44100c4cf92c7b03d72245",
+    "rust/vehicle-physics-engine/src/open_formula.rs": "b3ad5fc62ad181e5568bc11ac50c82c520fd4ba78fc9a2bbd219352c38c9f08f",
+    "distribution/distribution_manifest.json": "a17bd4bd262cf104a835e567d81f4c05ec1bbe483682f04a99bcceb856e606af",
+    "distribution/user-settings/open_formula.db": "713c33324d8f3d70e2a3eb76ef90c61dc86204ae1cd0d181ef682648b13fdeda",
+    "distribution/share/games/speed-dreams-2/cars/rust/williams-fw19-hockenheim/suspension.json": "324c4c167053a4f548ac439f4de2f1aadd4439ce65f7783018364cc9ccfcbf1e",
+    "distribution/share/games/speed-dreams-2/cars/rust/williams-fw19-hockenheim/profile_provenance.json": "09ef66a0227f301da69fd6e74ba2d8aa882728ed17c65fe2e6c71959d25b4083",
+    "distribution/lib/games/speed-dreams-2/modules/simu/vehicle_physics_engine.dll": "dcc0b44437ee5746cffe2325fd6c71f01c61af97bf901658d197ad1916faee90"
+  }
+}

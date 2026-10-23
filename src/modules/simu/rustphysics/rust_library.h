@@ -36,6 +36,13 @@ public:
     typedef int (*PitTiresFn)(OfpHandle handle);
     typedef int (*VehicleGeometryFn)(const OfpHandle handle, OfpVec3* center_of_mass, OfpVec3* inertia,
                                      double* spawn_height, double* mass);
+    //! ABI v7 diagnostics entry points. Optional at load time: the callers guard on
+    //! null so the bridge stays usable if a build omits the trace backend.
+    typedef void (*TraceShutdownFn)();
+    typedef int (*TraceConfigureFn)(const char* directory);
+    typedef int (*TraceDumpFn)(const char* path);
+    typedef std::uint32_t (*TraceBufferedFn)();
+    typedef int (*EffectiveSetupFn)(const OfpHandle handle, char* buffer, std::uint32_t capacity);
 
     RustPhysicsLibrary();
     ~RustPhysicsLibrary();
@@ -68,6 +75,11 @@ public:
     PitFuelFn pitFuel;
     PitTiresFn pitTires;
     VehicleGeometryFn vehicleGeometry;
+    TraceShutdownFn traceShutdown;
+    TraceConfigureFn traceConfigure;
+    TraceDumpFn traceDump;
+    TraceBufferedFn traceBuffered;
+    EffectiveSetupFn effectiveSetup;
 
 private:
     void* _module;
