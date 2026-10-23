@@ -43,6 +43,8 @@ Gaither, A. (2021, junio). **Vehicle Dynamics on an Electric Formula SAE Racecar
 
 ## Uso de las citas en investigaciones del proyecto
 
+Material de consulta aportado: [Enciclopedia de dinámica y mecánica de monoplazas](Enciclopedia_Dinamica_Monoplazas_F1_1997_fuentes_abiertas.md). Reúne un índice temático y texto extraído de las cuatro fuentes anteriores; las ecuaciones y los valores deben cotejarse con los PDF originales. No constituye una especificación del simulador ni acredita reglajes históricos de F1 de 1997.
+
 Estado operativo: [telemetría temporalmente desactivada y comandos de reactivación](telemetry_switch.md).
 
 Investigación del proyecto: [Segunda opinión sobre muelle, barra y simulación Rust (23 de octubre de 2026)](second_opinion_spring_arb_2026-10-23.md). Incluye bancos constitutivos, contraste con la telemetría y distinción entre calibración y defectos de representación.
