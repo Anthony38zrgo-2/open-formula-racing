@@ -1,0 +1,11 @@
+{
+  "storage": "sqlite",
+  "storage_checks": "passed",
+  "database": "implementation\\reports\\melbourne_t3_extension\\storage_validation\\validation-1315aae1cf0f4360aae74f5f59a134da.db",
+  "editable_fields": 33,
+  "rust_apply": "passed",
+  "rust_edit": "passed",
+  "fixed_values_unchanged": true,
+  "rejected_transaction_unchanged": true,
+  "source_sha256": "33af96f7e95c02ef2d95a13f3288d00eb7772ae87e77b1cd6c311395a019638f"
+}

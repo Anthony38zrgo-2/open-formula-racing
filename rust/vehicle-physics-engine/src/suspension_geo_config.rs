@@ -223,6 +223,18 @@ impl Default for AntiRollConfig {
     }
 }
 
+impl AntiRollConfig {
+    /// The ratio of a `LegacyRatio` bar, or `None` for an explicit bar rate. The setup
+    /// authority uses it to keep the flat axle bar and the garage knob stating the
+    /// same hardware instead of carrying two silent bars.
+    pub fn legacy_ratio(&self) -> Option<f64> {
+        match *self {
+            Self::LegacyRatio { ratio } => Some(ratio),
+            Self::MotionRatio { .. } => None,
+        }
+    }
+}
+
 /// Resolved four-corner geometry (mirrors already expanded).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GeometricCornerSet {

@@ -21,6 +21,9 @@ use crate::open_formula_ffi::{
     OFP_FLAG_BRAKE_THERMAL, OFP_FLAG_POWERTRAIN_THERMAL, OFP_FLAG_WHEEL_THERMAL,
 };
 use crate::simulation::{default_spawn_height, VehicleSimulator, VehicleState};
+use crate::suspension_setup::{
+    adopt_antiroll_design_bar, adopt_antiroll_knob, SuspensionSetupAuthority,
+};
 use crate::types::{Mat3, SurfaceType, TriRaycastSample, Vec3, VehicleInput, WheelIndex};
 use crate::vehicle_configuration::{VehicleConfig, load_vehicle_configuration};
 
@@ -333,6 +336,48 @@ fn field_is_editable(path: &str) -> bool {
         .any(|field| field.editable && field.path == path)
 }
 
+/// One anti-roll bar, expressed twice in the same profile: the flat value the
+/// simplified and geometric axles consume, and the `geometry_physical` knob the
+/// garage writes. Both numbers are the same `LegacyRatio` quantity, so the setup
+/// transaction keeps them equal with absolute copies and never with a product.
+const ANTIROLL_AXLE_PATHS: [(&str, &str); 2] = [
+    (
+        "suspension.front.arb_ratio",
+        "suspension.geometry_physical.front_arb.ratio",
+    ),
+    (
+        "suspension.rear.arb_ratio",
+        "suspension.geometry_physical.rear_arb.ratio",
+    ),
+];
+
+fn document_number(document: &Value, path: &str) -> Option<f64> {
+    document
+        .pointer(&format!("/{}", path.replace('.', "/")))
+        .and_then(Value::as_f64)
+}
+
+/// Profile load and reset: the garage knob must read the bar the car actually runs
+/// on, otherwise the driver drags an inherited number while an unrelated flat value
+/// governs the axle. After this fold the two agree, and from then on the knob is the
+/// authority (`adopt_antiroll_knob`). Only the live document is folded: `base_document`
+/// keeps the profile bytes, so the hash a saved reglaje carries still matches.
+fn adopt_antiroll_design_knobs(document: &mut Value) {
+    for (authority, knob) in ANTIROLL_AXLE_PATHS {
+        let (Some(bar), Some(knobs)) = (
+            document_number(document, authority),
+            document_number(document, knob),
+        ) else {
+            // A `MotionRatio` bar carries no ratio knob; leave such a profile alone.
+            continue;
+        };
+        if knobs != bar && (0.0..=2.0).contains(&bar) {
+            // The knob path was just read as a number, so this cannot fail.
+            let _ = set_document_path(document, knob, Value::from(bar));
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Simulation
 // ---------------------------------------------------------------------------
@@ -356,6 +401,11 @@ pub struct OpenFormulaSimulation {
     simulator: VehicleSimulator,
     document: Value,
     base_document: Value,
+    /// Design elements and design trims of `base_document`: the single reference the
+    /// garage controls are translated against, captured once so replaying a reglaje
+    /// cannot multiply the profile against itself. `None` only for a profile that
+    /// declares no usable design trim, in which case its coefficients stay authored.
+    setup_authority: Option<SuspensionSetupAuthority>,
     floor_probes: [FloorProbe; FLOOR_PROBE_COUNT],
     base_floor_clearance: [f64; FLOOR_PROBE_COUNT],
     counters: StepCounters,
@@ -432,6 +482,13 @@ impl OpenFormulaSimulation {
         };
         validate_production_configuration(&config)?;
         let mut config = config;
+        // One anti-roll authority: the flat axle bar wins, and the garage knob is
+        // made to read that same number. `base_document` keeps the profile bytes, so
+        // the hash stored with an existing reglaje still matches.
+        adopt_antiroll_design_bar(&mut config);
+        let mut live_document = document.clone();
+        adopt_antiroll_design_knobs(&mut live_document);
+        let setup_authority = SuspensionSetupAuthority::capture(&config);
         if let Some(fuel) = fuel_kg {
             config.fuel.current_kg = fuel.clamp(0.0, config.fuel.capacity_kg);
         }
@@ -441,8 +498,9 @@ impl OpenFormulaSimulation {
         let simulator = VehicleSimulator::new(config, origin, yaw);
         let mut simulation = Self {
             simulator,
-            document: document.clone(),
+            document: live_document,
             base_document: document,
+            setup_authority,
             floor_probes: [FloorProbe {
                 origin_local: Vec3::ZERO,
                 ray_length: 0.35,
@@ -1138,8 +1196,41 @@ impl OpenFormulaSimulation {
             "document": self.document,
             "base": self.base_document,
             "fields": setup_descriptor_value(),
+            // The elements the active axle solver actually evaluates, after the setup
+            // translation. The authoring document keeps the design coefficients and
+            // the garage trims; this is what support needs to compare them.
+            "effective_suspension": self.effective_suspension_summary(),
         }))
         .unwrap_or_else(|_| "{}".to_string())
+    }
+
+    /// Suspension authority for one running car: the trim the garage asked for, the
+    /// geometric elements the active axle solver actually evaluates, and the bar both
+    /// representations state. The authoring document keeps the design coefficients, so
+    /// this is what support compares a reglaje against.
+    pub fn effective_suspension_summary(&self) -> Value {
+        let config = &self.simulator.config;
+        let axle = |front: bool| {
+            let trim = crate::suspension_setup::AxleSetupTrim::of_axle(config, front);
+            let elements = SuspensionSetupAuthority::effective_elements(config, front);
+            let geometric_bar = config
+                .suspension
+                .geometric_suspension
+                .as_ref()
+                .and_then(|geometry| geometry.arb(front).legacy_ratio());
+            serde_json::json!({
+                "damping_ratio": trim.damping_ratio,
+                "bump_damp_multiplier": trim.bump_multiplier,
+                "rebound_damp_multiplier": trim.rebound_multiplier,
+                "bump_stop_multiplier": trim.bump_stop_multiplier,
+                "damper_bump_Ns_per_m": elements.map(|elements| elements.damper_bump_Ns_per_m),
+                "damper_rebound_Ns_per_m": elements.map(|elements| elements.damper_rebound_Ns_per_m),
+                "effective_bump_stop_mult": elements.map(|elements| elements.bump_stop_mult),
+                "arb_ratio": if front { config.suspension.front_arb_ratio } else { config.suspension.rear_arb_ratio },
+                "arb_geometric_ratio": geometric_bar,
+            })
+        };
+        serde_json::json!({ "front": axle(true), "rear": axle(false) })
     }
 
     pub fn apply_setup_json(&mut self, text: &str) -> Result<(), String> {
@@ -1173,6 +1264,16 @@ impl OpenFormulaSimulation {
         validate_production_configuration(&config)?;
         let previous = self.simulator.config.clone();
         let mut config = config;
+        // The ratio knob the garage writes is the bar the axles run on, and the
+        // requested trims become the geometric coefficients the active solver
+        // evaluates. Both are absolute over the loaded profile, so replaying this
+        // transaction any number of times lands on the same numbers.
+        adopt_antiroll_knob(&mut config);
+        if let Some(authority) = &self.setup_authority {
+            if let Err(error) = authority.apply(&mut config) {
+                return Err(error);
+            }
+        }
         config.fuel.current_kg = if object.contains_key("fuel.initial_kg") {
             config.fuel.initial_kg.min(config.fuel.capacity_kg)
         } else { previous.fuel.current_kg.min(config.fuel.capacity_kg) };
@@ -1194,12 +1295,19 @@ impl OpenFormulaSimulation {
     }
 
     pub fn reset_setup(&mut self) -> Result<(), String> {
-        let text = serde_json::to_string(&self.base_document)
+        let mut restored = self.base_document.clone();
+        adopt_antiroll_design_knobs(&mut restored);
+        let text = serde_json::to_string(&restored)
             .map_err(|error| format!("cannot serialize the base setup: {error}"))?;
         let config = VehicleConfig::from_json_str(&text)
             .map_err(|error| format!("Rust rejected the base setup: {error}"))?;
         validate_production_configuration(&config)?;
         let previous = self.simulator.config.clone();
+        let mut config = config;
+        adopt_antiroll_design_bar(&mut config);
+        if let Some(authority) = &self.setup_authority {
+            authority.apply(&mut config)?;
+        }
         self.simulator.config = config;
         self.simulator
             .state
@@ -1213,7 +1321,7 @@ impl OpenFormulaSimulation {
                 .rebuild_geometric_prepared(&self.simulator.config);
             return Err(error);
         }
-        self.document = self.base_document.clone();
+        self.document = restored;
         Ok(())
     }
 

@@ -1,0 +1,534 @@
+{
+  "captured_utc": "2026-10-23T03:07:58.969305+00:00",
+  "runtime_sha256": "1556c74a47cc78cdabe657c372569ae9496e421c1a9af28eebb40237a0fe3517",
+  "runtime_size_bytes": 766045,
+  "log_session_start": "2026/10/22 21:59:03\r",
+  "sample_count": 678,
+  "installed_dll_sha256_at_capture": "7088504e89d84a0a0cd8daf884433d8557ca1d6a8ff877e75035144149ae55cd",
+  "profile_sha256_at_capture": {
+    "aerodynamics.json": "b63892829c61142a4a449efa8d91c8fbba38f76d87bc4eb3d349e4bbe9530953",
+    "audio.json": "4ac72521526db0b6cbf05ef6e53f6a9b3f13e57c6d796742e497408546bc7d0c",
+    "brakes.json": "42fc0593846d009dc8bf1f03f703b6ebebea5c3e5a0572060e4521eed5e8e100",
+    "chassis.json": "504b41b070156bffc27360b57623bdcc5c1fbe96a614d3079723e59eab0004b5",
+    "coupled_world.json": "079546b5cc16578ea90615ce6fd3a5a560739331c1ee0e9cd7cf30aed236f175",
+    "driving_assistance.json": "fbf2e5298355e4e6da4727a29ee75d6bf4317c9c57401e0213bf1be7f5e394a1",
+    "fuel.json": "6afbae1641b1a3820c1f9603e906c1705dbd371b053f87c3a15b7745706f7d5f",
+    "powertrain.json": "cdecb4cfac3feca3fbc9c4e9c734f65722caab2bf8af144d89e4d6e05f79e54e",
+    "profile_provenance.json": "09ef66a0227f301da69fd6e74ba2d8aa882728ed17c65fe2e6c71959d25b4083",
+    "steering.json": "16a83857b2159b22c4e73510e3afdd7a2ab322dd34b5246a43b044b1c228097d",
+    "suspension.json": "324c4c167053a4f548ac439f4de2f1aadd4439ce65f7783018364cc9ccfcbf1e",
+    "suspension_presentation.json": "bbea99bc9aeefea94f9b07e8fa18aa76da4574720b1185c580e720266b7d629b",
+    "tires.json": "783aa938f874cfc791dbc02b688c273869935b8d76d7fc9858d09465f0acb281",
+    "underfloor_contact.json": "6b6f9c4bb82f0e1067e3213f82def931e648bdcd5350ddeab3b204c697c5b557",
+    "vehicle.json": "33af96f7e95c02ef2d95a13f3288d00eb7772ae87e77b1cd6c311395a019638f"
+  },
+  "setup_events": [],
+  "FR_zero_support_FL_positive_sample_runs": [
+    {
+      "session_segment": 0,
+      "start_s": 17.056,
+      "last_zero_sample_s": 18.316,
+      "sample_span_s": 1.259999999999998,
+      "sample_count": 6,
+      "source_lines": [
+        1322,
+        1327,
+        1332,
+        1338,
+        1343,
+        1348
+      ],
+      "start_position_sd": [
+        1205.027,
+        1009.522,
+        1.171
+      ]
+    },
+    {
+      "session_segment": 0,
+      "start_s": 23.104,
+      "last_zero_sample_s": 23.104,
+      "sample_span_s": 0.0,
+      "sample_count": 1,
+      "source_lines": [
+        1443
+      ],
+      "start_position_sd": [
+        1424.842,
+        897.34,
+        1.792
+      ]
+    },
+    {
+      "session_segment": 0,
+      "start_s": 35.674,
+      "last_zero_sample_s": 35.674,
+      "sample_span_s": 0.0,
+      "sample_count": 1,
+      "source_lines": [
+        1741
+      ],
+      "start_position_sd": [
+        1652.789,
+        885.145,
+        1.761
+      ]
+    },
+    {
+      "session_segment": 0,
+      "start_s": 40.174,
+      "last_zero_sample_s": 40.424,
+      "sample_span_s": 0.25,
+      "sample_count": 2,
+      "source_lines": [
+        1838,
+        1843
+      ],
+      "start_position_sd": [
+        1830.093,
+        844.982,
+        1.439
+      ]
+    },
+    {
+      "session_segment": 0,
+      "start_s": 40.924,
+      "last_zero_sample_s": 40.924,
+      "sample_span_s": 0.0,
+      "sample_count": 1,
+      "source_lines": [
+        1854
+      ],
+      "start_position_sd": [
+        1856.073,
+        837.67,
+        1.502
+      ]
+    },
+    {
+      "session_segment": 0,
+      "start_s": 41.424,
+      "last_zero_sample_s": 41.674,
+      "sample_span_s": 0.25,
+      "sample_count": 2,
+      "source_lines": [
+        1865,
+        1871
+      ],
+      "start_position_sd": [
+        1868.76,
+        833.526,
+        1.563
+      ]
+    },
+    {
+      "session_segment": 0,
+      "start_s": 42.174,
+      "last_zero_sample_s": 43.174,
+      "sample_span_s": 1.0,
+      "sample_count": 5,
+      "source_lines": [
+        1881,
+        1886,
+        1892,
+        1897,
+        1902
+      ],
+      "start_position_sd": [
+        1886.306,
+        827.748,
+        1.68
+      ]
+    },
+    {
+      "session_segment": 0,
+      "start_s": 43.674,
+      "last_zero_sample_s": 43.674,
+      "sample_span_s": 0.0,
+      "sample_count": 1,
+      "source_lines": [
+        1912
+      ],
+      "start_position_sd": [
+        1899.123,
+        803.196,
+        1.728
+      ]
+    },
+    {
+      "session_segment": 0,
+      "start_s": 44.174,
+      "last_zero_sample_s": 44.674,
+      "sample_span_s": 0.5,
+      "sample_count": 3,
+      "source_lines": [
+        1923,
+        1928,
+        1933
+      ],
+      "start_position_sd": [
+        1899.341,
+        794.48,
+        1.868
+      ]
+    },
+    {
+      "session_segment": 0,
+      "start_s": 46.424,
+      "last_zero_sample_s": 46.674,
+      "sample_span_s": 0.25,
+      "sample_count": 2,
+      "source_lines": [
+        1969,
+        1974
+      ],
+      "start_position_sd": [
+        1880.935,
+        764.978,
+        1.795
+      ]
+    },
+    {
+      "session_segment": 0,
+      "start_s": 48.174,
+      "last_zero_sample_s": 48.174,
+      "sample_span_s": 0.0,
+      "sample_count": 1,
+      "source_lines": [
+        2005
+      ],
+      "start_position_sd": [
+        1863.34,
+        744.513,
+        1.683
+      ]
+    },
+    {
+      "session_segment": 0,
+      "start_s": 48.674,
+      "last_zero_sample_s": 48.674,
+      "sample_span_s": 0.0,
+      "sample_count": 1,
+      "source_lines": [
+        2016
+      ],
+      "start_position_sd": [
+        1861.081,
+        740.699,
+        1.661
+      ]
+    },
+    {
+      "session_segment": 0,
+      "start_s": 49.174,
+      "last_zero_sample_s": 49.174,
+      "sample_span_s": 0.0,
+      "sample_count": 1,
+      "source_lines": [
+        2026
+      ],
+      "start_position_sd": [
+        1858.882,
+        737.21,
+        1.643
+      ]
+    },
+    {
+      "session_segment": 0,
+      "start_s": 49.674,
+      "last_zero_sample_s": 49.674,
+      "sample_span_s": 0.0,
+      "sample_count": 1,
+      "source_lines": [
+        2036
+      ],
+      "start_position_sd": [
+        1856.713,
+        733.754,
+        1.634
+      ]
+    },
+    {
+      "session_segment": 0,
+      "start_s": 50.174,
+      "last_zero_sample_s": 50.174,
+      "sample_span_s": 0.0,
+      "sample_count": 1,
+      "source_lines": [
+        2047
+      ],
+      "start_position_sd": [
+        1854.951,
+        730.931,
+        1.608
+      ]
+    },
+    {
+      "session_segment": 0,
+      "start_s": 61.674,
+      "last_zero_sample_s": 62.424,
+      "sample_span_s": 0.75,
+      "sample_count": 4,
+      "source_lines": [
+        2350,
+        2355,
+        2361,
+        2366
+      ],
+      "start_position_sd": [
+        1979.254,
+        536.828,
+        2.512
+      ]
+    },
+    {
+      "session_segment": 0,
+      "start_s": 64.68,
+      "last_zero_sample_s": 64.68,
+      "sample_span_s": 0.0,
+      "sample_count": 1,
+      "source_lines": [
+        2413
+      ],
+      "start_position_sd": [
+        1969.099,
+        393.083,
+        2.468
+      ]
+    },
+    {
+      "session_segment": 0,
+      "start_s": 69.216,
+      "last_zero_sample_s": 69.72,
+      "sample_span_s": 0.5040000000000049,
+      "sample_count": 3,
+      "source_lines": [
+        2508,
+        2512,
+        2517
+      ],
+      "start_position_sd": [
+        1873.101,
+        137.51,
+        1.646
+      ]
+    },
+    {
+      "session_segment": 0,
+      "start_s": 95.676,
+      "last_zero_sample_s": 95.928,
+      "sample_span_s": 0.25199999999999534,
+      "sample_count": 2,
+      "source_lines": [
+        3085,
+        3089
+      ],
+      "start_position_sd": [
+        1714.617,
+        60.621,
+        2.374
+      ]
+    },
+    {
+      "session_segment": 0,
+      "start_s": 96.432,
+      "last_zero_sample_s": 96.432,
+      "sample_span_s": 0.0,
+      "sample_count": 1,
+      "source_lines": [
+        3100
+      ],
+      "start_position_sd": [
+        1679.104,
+        41.174,
+        2.45
+      ]
+    },
+    {
+      "session_segment": 0,
+      "start_s": 103.74,
+      "last_zero_sample_s": 103.992,
+      "sample_span_s": 0.25200000000000955,
+      "sample_count": 2,
+      "source_lines": [
+        3245,
+        3250
+      ],
+      "start_position_sd": [
+        1301.28,
+        192.671,
+        2.75
+      ]
+    },
+    {
+      "session_segment": 0,
+      "start_s": 104.496,
+      "last_zero_sample_s": 104.496,
+      "sample_span_s": 0.0,
+      "sample_count": 1,
+      "source_lines": [
+        3259
+      ],
+      "start_position_sd": [
+        1293.001,
+        211.566,
+        2.628
+      ]
+    },
+    {
+      "session_segment": 0,
+      "start_s": 105.0,
+      "last_zero_sample_s": 105.252,
+      "sample_span_s": 0.25199999999999534,
+      "sample_count": 2,
+      "source_lines": [
+        3269,
+        3274
+      ],
+      "start_position_sd": [
+        1293.329,
+        223.159,
+        2.621
+      ]
+    },
+    {
+      "session_segment": 0,
+      "start_s": 121.884,
+      "last_zero_sample_s": 122.388,
+      "sample_span_s": 0.5040000000000049,
+      "sample_count": 3,
+      "source_lines": [
+        3598,
+        3602,
+        3607
+      ],
+      "start_position_sd": [
+        673.251,
+        507.094,
+        2.249
+      ]
+    },
+    {
+      "session_segment": 0,
+      "start_s": 123.9,
+      "last_zero_sample_s": 123.9,
+      "sample_span_s": 0.0,
+      "sample_count": 1,
+      "source_lines": [
+        3637
+      ],
+      "start_position_sd": [
+        621.102,
+        492.503,
+        2.202
+      ]
+    },
+    {
+      "session_segment": 0,
+      "start_s": 131.432,
+      "last_zero_sample_s": 131.432,
+      "sample_span_s": 0.0,
+      "sample_count": 1,
+      "source_lines": [
+        3783
+      ],
+      "start_position_sd": [
+        556.968,
+        477.11,
+        2.467
+      ]
+    },
+    {
+      "session_segment": 0,
+      "start_s": 136.932,
+      "last_zero_sample_s": 136.932,
+      "sample_span_s": 0.0,
+      "sample_count": 1,
+      "source_lines": [
+        3901
+      ],
+      "start_position_sd": [
+        277.028,
+        506.427,
+        3.092
+      ]
+    },
+    {
+      "session_segment": 0,
+      "start_s": 141.182,
+      "last_zero_sample_s": 141.432,
+      "sample_span_s": 0.25,
+      "sample_count": 2,
+      "source_lines": [
+        3993,
+        3999
+      ],
+      "start_position_sd": [
+        41.515,
+        640.101,
+        2.355
+      ]
+    },
+    {
+      "session_segment": 0,
+      "start_s": 141.932,
+      "last_zero_sample_s": 143.182,
+      "sample_span_s": 1.25,
+      "sample_count": 6,
+      "source_lines": [
+        4009,
+        4014,
+        4019,
+        4024,
+        4030,
+        4035
+      ],
+      "start_position_sd": [
+        29.898,
+        658.491,
+        2.334
+      ]
+    },
+    {
+      "session_segment": 0,
+      "start_s": 151.682,
+      "last_zero_sample_s": 151.932,
+      "sample_span_s": 0.25,
+      "sample_count": 2,
+      "source_lines": [
+        4268,
+        4275
+      ],
+      "start_position_sd": [
+        119.072,
+        875.516,
+        1.755
+      ]
+    },
+    {
+      "session_segment": 0,
+      "start_s": 152.932,
+      "last_zero_sample_s": 153.932,
+      "sample_span_s": 1.0,
+      "sample_count": 5,
+      "source_lines": [
+        4295,
+        4300,
+        4306,
+        4311,
+        4316
+      ],
+      "start_position_sd": [
+        154.308,
+        896.518,
+        1.6
+      ]
+    }
+  ],
+  "limitations": [
+    "Log snapshots do not prove continuous loss of contact between samples.",
+    "Saved setups and installed profile are capture-time state, not a history of each live setup change.",
+    "DLL hash is measured at capture, not recorded by the historical log itself.",
+    "Wheel order in RUSTDIAG is FL, FR, RL, RR. travel is absolute suspension compression, not droop from design."
+  ]
+}

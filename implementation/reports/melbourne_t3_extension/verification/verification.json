@@ -1,0 +1,298 @@
+{
+  "rig": "480 steps at 480 Hz, drop on a 30 mm split-height step, no steering, neutral, clutch disengaged, origin (0, 0.7, 0), 20 kg fuel; front stop uses height 1.3 m to excite the stop",
+  "wheel_order_in_rows": "FL, FR, RL, RR (ABI snapshot order)",
+  "design_reference": {
+    "front": {
+      "damping_ratio": 0.74,
+      "bump": 1.0,
+      "rebound": 1.12,
+      "stop": 2.6,
+      "damper_bump": 6970.0,
+      "damper_rebound": 11475.0,
+      "arb": 1.0
+    },
+    "rear": {
+      "damping_ratio": 0.71,
+      "bump": 0.9,
+      "rebound": 1.35,
+      "stop": 2.8,
+      "damper_bump": 14000.0,
+      "damper_rebound": 22000.0,
+      "arb": 0.8
+    }
+  },
+  "saved_regraje_values": {
+    "aero.model.front_wing.incidence_deg": 17,
+    "aero.model.rear_wing.incidence_deg": 20,
+    "brakes.front_brake_bias": 0.59,
+    "brakes.max_brake_torque": 4100,
+    "fuel.initial_kg": 20,
+    "powertrain.differential.clutches": 7,
+    "powertrain.differential.coast_ramp_angle_deg": 70,
+    "powertrain.differential.power_ramp_angle_deg": 50,
+    "powertrain.differential.preload_nm": 50,
+    "powertrain.final_drive": 4.75,
+    "powertrain.max_rpm": 17000,
+    "steering.max_steering_angle": 0.285,
+    "steering.steering_speed": 7.9,
+    "suspension.front.bump_damp_multiplier": 1.1,
+    "suspension.front.bump_stop_multiplier": 0.15,
+    "suspension.front.camber": -0.053,
+    "suspension.front.damping_ratio": 0.8,
+    "suspension.front.rebound_damp_multiplier": 2.02,
+    "suspension.front.resting_ratio": 0.27142857142857146,
+    "suspension.front.toe": -0.003,
+    "suspension.geometry_physical.front_arb.ratio": 0.2,
+    "suspension.geometry_physical.rear_arb.ratio": 0.2,
+    "suspension.rear.bump_damp_multiplier": 0.9,
+    "suspension.rear.bump_stop_multiplier": 0.25,
+    "suspension.rear.camber": -0.028,
+    "suspension.rear.damping_ratio": 0.8,
+    "suspension.rear.rebound_damp_multiplier": 1.45,
+    "suspension.rear.resting_ratio": 0.305,
+    "suspension.rear.toe": 0.002,
+    "tires.pressure.cold_kpa_gauge.FL": 130,
+    "tires.pressure.cold_kpa_gauge.FR": 130,
+    "tires.pressure.cold_kpa_gauge.RL": 130,
+    "tires.pressure.cold_kpa_gauge.RR": 115
+  },
+  "dlls": {
+    "installed": {
+      "sha256": "28756170fcb0e92f3bd9e27aa9a2c3034bfc9d1a2383964ebdc7eadfd1e3ae5b",
+      "provenance": "open-formula-rust-physics abi=6 source_commit=f3efcf246c2a2abf62477037ed0243f2f9a93a9b build=9c91648 profile=williams-fw19-hockenheim"
+    },
+    "fixed": {
+      "sha256": "7088504e89d84a0a0cd8daf884433d8557ca1d6a8ff877e75035144149ae55cd",
+      "provenance": "open-formula-rust-physics abi=6 source_commit=f3efcf246c2a2abf62477037ed0243f2f9a93a9b build=5f5f04d profile=williams-fw19-hockenheim"
+    }
+  },
+  "results": {
+    "regression_design_builds_agree": {
+      "maximum_absolute_difference": 0.0,
+      "identical_numeric_trajectory": true,
+      "maximum_front_right_compression_difference_m": 0.0,
+      "maximum_front_right_damper_force_difference_n": 0.0,
+      "maximum_front_right_normal_force_difference_n": 0.0,
+      "installed_dll": "open-formula-rust-physics abi=6 source_commit=f3efcf246c2a2abf62477037ed0243f2f9a93a9b build=9c91648 profile=williams-fw19-hockenheim",
+      "fixed_dll": "open-formula-rust-physics abi=6 source_commit=f3efcf246c2a2abf62477037ed0243f2f9a93a9b build=5f5f04d profile=williams-fw19-hockenheim"
+    },
+    "front_rebound": {
+      "maximum_absolute_difference": 20553.67574184648,
+      "identical_numeric_trajectory": false,
+      "maximum_front_right_compression_difference_m": 0.03328433077172082,
+      "maximum_front_right_damper_force_difference_n": 1940.4209377082732,
+      "maximum_front_right_normal_force_difference_n": 8547.760289853071,
+      "initial_height_m": 0.7,
+      "control": "suspension.front.rebound_damp_multiplier",
+      "requested": 2.24,
+      "resolves_to": {
+        "suspension.geometry_physical.front.damper_rebound_Ns_per_m": 22950.0
+      },
+      "design_axle": "front",
+      "matches_the_equivalent_physical_element": true,
+      "front_right_unloaded_samples": {
+        "reference": 66,
+        "result": 69
+      }
+    },
+    "front_bump": {
+      "maximum_absolute_difference": 14279.516600628289,
+      "identical_numeric_trajectory": false,
+      "maximum_front_right_compression_difference_m": 0.011733682857569469,
+      "maximum_front_right_damper_force_difference_n": 1560.4259808938864,
+      "maximum_front_right_normal_force_difference_n": 9774.51694227571,
+      "initial_height_m": 0.7,
+      "control": "suspension.front.bump_damp_multiplier",
+      "requested": 2.0,
+      "resolves_to": {
+        "suspension.geometry_physical.front.damper_bump_Ns_per_m": 13940.0
+      },
+      "design_axle": "front",
+      "matches_the_equivalent_physical_element": true,
+      "front_right_unloaded_samples": {
+        "reference": 66,
+        "result": 64
+      }
+    },
+    "front_damping": {
+      "maximum_absolute_difference": 10668.420222354807,
+      "identical_numeric_trajectory": false,
+      "maximum_front_right_compression_difference_m": 0.03625834159377267,
+      "maximum_front_right_damper_force_difference_n": 1454.1250325275146,
+      "maximum_front_right_normal_force_difference_n": 6471.564410045231,
+      "initial_height_m": 0.7,
+      "control": "suspension.front.damping_ratio",
+      "requested": 0.37,
+      "resolves_to": {
+        "suspension.geometry_physical.front.damper_bump_Ns_per_m": 3485.0,
+        "suspension.geometry_physical.front.damper_rebound_Ns_per_m": 5737.5
+      },
+      "design_axle": "front",
+      "matches_the_equivalent_physical_element": true,
+      "front_right_unloaded_samples": {
+        "reference": 66,
+        "result": 68
+      }
+    },
+    "front_stop": {
+      "maximum_absolute_difference": 8856.65450351871,
+      "identical_numeric_trajectory": false,
+      "maximum_front_right_compression_difference_m": 0.006607710899168933,
+      "maximum_front_right_damper_force_difference_n": 2087.095623368164,
+      "maximum_front_right_normal_force_difference_n": 1584.7834908638506,
+      "initial_height_m": 1.3,
+      "control": "suspension.front.bump_stop_multiplier",
+      "requested": 1.3,
+      "resolves_to": {
+        "suspension.geometry_physical.front.bump_stop_mult": 1.3
+      },
+      "design_axle": "front",
+      "matches_the_equivalent_physical_element": true,
+      "front_right_unloaded_samples": {
+        "reference": 177,
+        "result": 177
+      }
+    },
+    "front_arb": {
+      "maximum_absolute_difference": 10473.734746096476,
+      "identical_numeric_trajectory": false,
+      "maximum_front_right_compression_difference_m": 0.005907500574003001,
+      "maximum_front_right_damper_force_difference_n": 534.4367571808875,
+      "maximum_front_right_normal_force_difference_n": 7965.735099839743,
+      "initial_height_m": 0.7,
+      "control": "suspension.geometry_physical.front_arb.ratio",
+      "requested": 0.2,
+      "resolves_to": {
+        "suspension.front.arb_ratio": 0.2
+      },
+      "design_axle": "front",
+      "matches_the_equivalent_physical_element": true,
+      "front_right_unloaded_samples": {
+        "reference": 66,
+        "result": 61
+      }
+    },
+    "rear_rebound": {
+      "maximum_absolute_difference": 23233.321950872476,
+      "identical_numeric_trajectory": false,
+      "maximum_front_right_compression_difference_m": 0.009896736238914558,
+      "maximum_front_right_damper_force_difference_n": 1900.123899146817,
+      "maximum_front_right_normal_force_difference_n": 6471.564410045231,
+      "initial_height_m": 0.7,
+      "control": "suspension.rear.rebound_damp_multiplier",
+      "requested": 2.7,
+      "resolves_to": {
+        "suspension.geometry_physical.rear.damper_rebound_Ns_per_m": 44000.0
+      },
+      "design_axle": "rear",
+      "matches_the_equivalent_physical_element": true,
+      "front_right_unloaded_samples": {
+        "reference": 66,
+        "result": 67
+      }
+    },
+    "rear_bump": {
+      "maximum_absolute_difference": 6916.835719525261,
+      "identical_numeric_trajectory": false,
+      "maximum_front_right_compression_difference_m": 0.005635182595315327,
+      "maximum_front_right_damper_force_difference_n": 811.4613651348376,
+      "maximum_front_right_normal_force_difference_n": 6916.835719525261,
+      "initial_height_m": 0.7,
+      "control": "suspension.rear.bump_damp_multiplier",
+      "requested": 1.8,
+      "resolves_to": {
+        "suspension.geometry_physical.rear.damper_bump_Ns_per_m": 28000.0
+      },
+      "design_axle": "rear",
+      "matches_the_equivalent_physical_element": true,
+      "front_right_unloaded_samples": {
+        "reference": 66,
+        "result": 65
+      }
+    },
+    "rear_damping": {
+      "maximum_absolute_difference": 20553.67574184648,
+      "identical_numeric_trajectory": false,
+      "maximum_front_right_compression_difference_m": 0.003379448274747336,
+      "maximum_front_right_damper_force_difference_n": 546.6721139543993,
+      "maximum_front_right_normal_force_difference_n": 6471.564410045231,
+      "initial_height_m": 0.7,
+      "control": "suspension.rear.damping_ratio",
+      "requested": 1.06,
+      "resolves_to": {
+        "suspension.geometry_physical.rear.damper_bump_Ns_per_m": 20901.408450704228,
+        "suspension.geometry_physical.rear.damper_rebound_Ns_per_m": 32845.07042253522
+      },
+      "design_axle": "rear",
+      "matches_the_equivalent_physical_element": true,
+      "front_right_unloaded_samples": {
+        "reference": 66,
+        "result": 67
+      }
+    },
+    "rear_stop": {
+      "maximum_absolute_difference": 467.2706603708607,
+      "identical_numeric_trajectory": false,
+      "maximum_front_right_compression_difference_m": 0.0012348654130582074,
+      "maximum_front_right_damper_force_difference_n": 184.47871502989193,
+      "maximum_front_right_normal_force_difference_n": 270.3427057768224,
+      "initial_height_m": 0.7,
+      "control": "suspension.rear.bump_stop_multiplier",
+      "requested": 1.4,
+      "resolves_to": {
+        "suspension.geometry_physical.rear.bump_stop_mult": 1.4
+      },
+      "design_axle": "rear",
+      "matches_the_equivalent_physical_element": true,
+      "front_right_unloaded_samples": {
+        "reference": 66,
+        "result": 66
+      }
+    },
+    "rear_arb": {
+      "maximum_absolute_difference": 639.813857046056,
+      "identical_numeric_trajectory": false,
+      "maximum_front_right_compression_difference_m": 0.00020396664857150193,
+      "maximum_front_right_damper_force_difference_n": 54.11957832421238,
+      "maximum_front_right_normal_force_difference_n": 294.61564274566354,
+      "initial_height_m": 0.7,
+      "control": "suspension.geometry_physical.rear_arb.ratio",
+      "requested": 0.4,
+      "resolves_to": {
+        "suspension.rear.arb_ratio": 0.4
+      },
+      "design_axle": "rear",
+      "matches_the_equivalent_physical_element": true,
+      "front_right_unloaded_samples": {
+        "reference": 66,
+        "result": 66
+      }
+    },
+    "replayed_saved_regraje": {
+      "maximum_absolute_difference": 0.0,
+      "identical_numeric_trajectory": true,
+      "maximum_front_right_compression_difference_m": 0.0,
+      "maximum_front_right_damper_force_difference_n": 0.0,
+      "maximum_front_right_normal_force_difference_n": 0.0,
+      "setup_name": "Reglaje 1",
+      "editable_fields": 33
+    },
+    "saved_regraje_installed_versus_fixed": {
+      "maximum_absolute_difference": 26828.667386025918,
+      "identical_numeric_trajectory": false,
+      "maximum_front_right_compression_difference_m": 0.032185055349796064,
+      "maximum_front_right_damper_force_difference_n": 2256.3692385525665,
+      "maximum_front_right_normal_force_difference_n": 11760.767756203517,
+      "front_right_unloaded_samples": {
+        "reference": 66,
+        "result": 69
+      },
+      "note": "the same stored values, before and after the connection fix"
+    }
+  },
+  "limitations": [
+    "This synthetic step is not a replay of Melbourne T3: it proves that each control now reaches its own element and how the front right wheel responds to a 30 mm side offset, not lap time or the corner itself.",
+    "Snapshots are one per accepted step; contact between samples is unknown.",
+    "The stored regraje carries the values saved before the fix, so applying it now also applies its bump stop and anti-roll requests."
+  ]
+}

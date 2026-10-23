@@ -22,6 +22,7 @@ pub mod suspension_geo_config;
 pub mod suspension_kinematics;
 pub mod suspension_kinematics_table;
 pub mod suspension_loads;
+pub mod suspension_setup;
 pub mod suspension_table;
 pub mod telemetry;
 pub mod tire;
