@@ -45,7 +45,7 @@ def main():
             output.write(f'{name} {len(triangles)}\n')
             for triangle in triangles:
                 output.write(' '.join(f'{value:.8f}' for value in triangle.flatten()) + '\n')
-    with destination.with_name('fuji_ground_collisions.txt').open('w', encoding='utf-8', newline='\n') as output:
+    with destination.with_name(destination.name.replace('_object_collisions', '_ground_collisions')).open('w', encoding='utf-8', newline='\n') as output:
         output.write(f'FORMULA_GROUND_1 {len(ground_triangles)}\n')
         for category, friction, resistance, triangle in ground_triangles:
             output.write(f'{friction:.8f} {resistance:.8f} ' + ' '.join(f'{value:.8f}' for value in triangle.flatten()) + '\n')

@@ -159,7 +159,8 @@ ADD_SUBDIRECTORY(src)
 
 add_executable(inspect_native_track tools/inspect_native_track.cpp)
 target_include_directories(inspect_native_track PRIVATE src/interfaces src/libs/tgf src/libs/portability)
-target_link_libraries(inspect_native_track PRIVATE tgf)
+target_link_libraries(inspect_native_track PRIVATE tgf robottools)
+target_include_directories(inspect_native_track PRIVATE src/libs/robottools src/libs/math)
 
 add_executable(validate_formula_pedal_controls tools/validate_formula_pedal_controls.cpp src/libs/robottools/formula_gear_controls.cpp)
 target_compile_definitions(validate_formula_pedal_controls PRIVATE FORMULA_GEAR_CONTROLS_STATIC)

@@ -85,6 +85,10 @@ def main():
     parser.add_argument('--source', required=True)
     parser.add_argument('--destination', required=True)
     parser.add_argument('--report', required=True)
+    parser.add_argument('--track-id', default='fuji-seventy-six-seventy-seven')
+    parser.add_argument('--name', default='Fuji76-77')
+    parser.add_argument('--collision-file', default='fuji76_77_collision.glb')
+    parser.add_argument('--collision-prefix', default='fuji')
     arguments = parser.parse_args()
     source_directory = pathlib.Path(arguments.source)
     destination_directory = pathlib.Path(arguments.destination)
@@ -94,14 +98,17 @@ def main():
     waypoints = waypoint_document['waypoints']
     positions = numpy.array([waypoint['pos'] for waypoint in waypoints])
     discontinuities = numpy.where(numpy.linalg.norm(numpy.diff(positions, axis=0), axis=1) > 15)[0]
-    if len(discontinuities) != 1:
+    if all('branch_id' in waypoint for waypoint in waypoints):
+        main_waypoints = sorted([w for w in waypoints if w['branch_id'] == 'main'], key=lambda w: w['lap_distance_m'])
+    elif len(discontinuities) != 1:
         raise ValueError('Main loop and pit route require an explicit unique separation')
-    main_waypoints = sorted(waypoints[:discontinuities[0] + 1], key=lambda waypoint: waypoint['lap_distance_m'])
+    else:
+        main_waypoints = sorted(waypoints[:discontinuities[0] + 1], key=lambda waypoint: waypoint['lap_distance_m'])
     distances = numpy.array([waypoint['lap_distance_m'] for waypoint in main_waypoints])
     positions = numpy.array([waypoint['pos'] for waypoint in main_waypoints])
     source_to_simulation = numpy.array([[0, 0, -1], [-1, 0, 0], [0, 1, 0]])
     positions = positions @ source_to_simulation.T
-    collision_scene = BinaryScene(source_directory / 'fuji76_77_collision.glb')
+    collision_scene = BinaryScene(source_directory / arguments.collision_file)
     road_triangles = numpy.concatenate([vertices[indices] @ source_to_simulation.T
                                        for name, material, vertices, indices, coordinates in collision_scene.primitives()
                                        if name.startswith('COLLISION__ROAD__')])
@@ -159,17 +166,17 @@ def main():
             arc.update({'source_start_distance': start_distance, 'source_end_distance': end_distance})
             segments.append(arc)
     main_width = 2.0
-    document = element_tree.Element('params', name='Fuji76-77', type='param', mode='mw')
+    document = element_tree.Element('params', name=arguments.name, type='param', mode='mw')
     header = section(document, 'Header')
     number(header, 'version', 4)
-    text(header, 'name', 'Fuji76-77')
+    text(header, 'name', arguments.name)
     text(header, 'category', 'circuit')
-    text(header, 'static collision mesh', 'tracks/circuit/fuji-seventy-six-seventy-seven/fuji_object_collisions.txt')
-    text(header, 'ground collision mesh', 'tracks/circuit/fuji-seventy-six-seventy-seven/fuji_ground_collisions.txt')
-    text(header, 'description', 'Existing Formula90s Fuji76-77 conversion')
+    text(header, 'static collision mesh', f'tracks/circuit/{arguments.track_id}/{arguments.collision_prefix}_object_collisions.txt')
+    text(header, 'ground collision mesh', f'tracks/circuit/{arguments.track_id}/{arguments.collision_prefix}_ground_collisions.txt')
+    text(header, 'description', f'Formula90s {arguments.name} conversion')
     text(header, 'author', 'Source provenance in migration manifest')
     graphics = section(document, 'Graphic')
-    text(graphics, '3d description', 'fuji-seventy-six-seventy-seven.acc')
+    text(graphics, '3d description', arguments.track_id + '.acc')
     surfaces = section(document, 'Surfaces')
     for surface_name, friction, resistance in [('asphalt', 1.0, 0.002), ('grass', 0.6, 0.08)]:
         surface = section(surfaces, surface_name)
@@ -222,7 +229,7 @@ def main():
     number(starting_grid, 'distance to start', 31.12, 'm')
     number(starting_grid, 'initial speed', 0, 'm/s')
     element_tree.indent(document)
-    element_tree.ElementTree(document).write(destination_directory / 'fuji-seventy-six-seventy-seven.xml', encoding='utf-8', xml_declaration=True)
+    element_tree.ElementTree(document).write(destination_directory / (arguments.track_id + '.xml'), encoding='utf-8', xml_declaration=True)
     report = {'main_waypoint_count': len(main_waypoints), 'excluded_pit_waypoint_count': len(waypoints) - len(main_waypoints),
               'source_lap_length': lap_length, 'candidate_lap_length': sum(segment['length'] for segment in segments),
               'segment_count': len(segments), 'source_initial_center': initial_center.tolist(),

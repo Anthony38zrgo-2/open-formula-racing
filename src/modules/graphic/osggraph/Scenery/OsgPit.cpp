@@ -48,6 +48,9 @@ void SDPit::build(const tTrack *track)
 
     std::string localDir = GfLocalDir();
     pit_root = new osg::Group();
+    // Converted tracks can supply their original garage buildings and markings.
+    if (!strcmp(GfParmGetStr(track->params, TRK_SECT_GRAPH, "native pit buildings", "yes"), "no"))
+        return;
 
     // Create the pit identification on the wall if any.
     switch (pits->type)

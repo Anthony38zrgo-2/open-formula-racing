@@ -20,6 +20,7 @@
 #include <osgDB/ReadFile>
 #include <osgDB/WriteFile>
 #include <osgDB/Registry>
+#include <osgDB/FileUtils>
 
 #include "OsgScenery.h"
 
@@ -76,6 +77,13 @@ void SDBackground::build(int X, int Y, int Z, const std::string& TrackPath)
     bgstate->setRenderBinDetails(-1, "RenderBin");
     bgstate->setMode(GL_LIGHTING, osg::StateAttribute::ON);
     bgstate->setMode(GL_FOG, osg::StateAttribute::ON);
+    // A track-provided panorama already contains atmospheric haze and lighting.
+    // Protect it from the scene's overriding material and fog states.
+    if (osgDB::fileExists(DataPath + TrackPath + "melbourne-skybox.png"))
+    {
+        bgstate->setMode(GL_LIGHTING, osg::StateAttribute::OFF | osg::StateAttribute::OVERRIDE | osg::StateAttribute::PROTECTED);
+        bgstate->setMode(GL_FOG, osg::StateAttribute::OFF | osg::StateAttribute::OVERRIDE | osg::StateAttribute::PROTECTED);
+    }
 
     _background = new osg::Group;
     _background->addChild(_backgroundTransform.get());

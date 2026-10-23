@@ -17,7 +17,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
     const std::filesystem::path libraries_directory = distribution_directory / L"lib" / L"games" / L"speed-dreams-2";
     const std::filesystem::path settings_directory = distribution_directory / L"user-settings";
     const std::filesystem::path initial_settings_directory = distribution_directory / L"initial-settings";
-    if (!std::filesystem::exists(engine_path) || !std::filesystem::exists(data_directory / L"tracks" / L"circuit" / L"fuji-seventy-six-seventy-seven" / L"fuji-seventy-six-seventy-seven.xml"))
+    if (!std::filesystem::exists(engine_path) || !std::filesystem::exists(data_directory / L"tracks" / L"circuit" / L"melbourne-nineteen-ninety-seven" / L"melbourne-nineteen-ninety-seven.xml"))
     {
         MessageBoxW(nullptr, L"The Open Formula distribution is incomplete.", L"Open Formula", MB_OK | MB_ICONERROR);
         return EXIT_FAILURE;
@@ -41,7 +41,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
     SetEnvironmentVariableW(L"OSG_LIBRARY_PATH", (distribution_directory / L"bin" / L"osgPlugins-3.6.5").c_str());
     std::wstring command = L"\"" + engine_path.wstring() + L"\" --datadir \"" + data_directory.wstring()
         + L"\" --libdir \"" + libraries_directory.wstring() + L"\" --bindir \"" + binaries_directory
-        + L"\" --localdir \"" + settings_directory.wstring() + L"\" --startrace williams-fuji-practice";
+        + L"\" --localdir \"" + settings_directory.wstring() + L"\" --startrace williams-melbourne-practice";
     STARTUPINFOW startup_information = {};
     startup_information.cb = sizeof(startup_information);
     SECURITY_ATTRIBUTES log_security = {};

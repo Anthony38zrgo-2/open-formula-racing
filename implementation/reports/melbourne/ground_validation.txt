@@ -1,0 +1,1 @@
+Ground triangles: 16601; samples: 49803; failures: 0; maximum height error: 5.73519e-12

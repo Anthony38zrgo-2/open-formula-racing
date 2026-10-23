@@ -53,7 +53,7 @@ public:
     //! Returns false and fills `error` when the patch is rejected; nothing is committed.
     bool applySetupPatch(int car_index, const std::string& patch_json, std::string& error);
     //! Serialized Rust setup document (current value, base value and field descriptor).
-    bool setupDocument(int car_index, std::string& document);
+    bool setupDocument(int car_index, std::string& document) override;
     bool resetSetup(int car_index, std::string& error);
 
     virtual ~RustPhysics();

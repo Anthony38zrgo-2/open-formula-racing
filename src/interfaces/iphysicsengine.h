@@ -68,6 +68,10 @@ public:
 
 	//! Reset => ready for a new initialize
 	virtual void shutdown() = 0;
+
+    // Internal inspection only; setup files serialize the editable whitelist,
+    // never this full document. Appended to preserve preceding vtable entries.
+    virtual bool setupDocument(int, std::string&) { return false; }
 };
 
 #endif // __IPHYSICSENGINE__H__

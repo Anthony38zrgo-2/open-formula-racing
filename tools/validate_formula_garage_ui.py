@@ -33,6 +33,10 @@ prefix = '''
 #include <igraphicsengine.h>
 #include <iphysicsengine.h>
 #include "formula_garage_music.h"
+#include "formula_setup_store.h"
+#include "formula_setup_database.h"
+#include <memory>
+#include <ctime>
 #include <guifont.h>
 #include <SDL_opengl.h>
 #include <GL/gl.h>
@@ -57,6 +61,7 @@ globals_code = source[source.index('constexpr double radiansPerDegree'):source.i
 primitives = source[source.index('void Rectangle('):source.index('std::string Number(')]
 primitives = primitives.replace('GfuiDrawString(', 'PreviewDrawString(')
 widgets = source[source.index('std::string Number('):source.index('void DrawGarage()\n{')]
+widgets = widgets.replace('"open_formula.db"', '"garage_validation_%d.db"' % os.getpid())
 mouse = source[source.index('void SetSliderFromMouse('):source.index('void MouseMotion(')]
 keyboard = source[source.index('void Keyboard('):source.index('void PollController(')]
 mouse_events = source[source.index('void MouseMotion('):source.index('void Keyboard(')]
@@ -86,6 +91,7 @@ void ApplyEditor() { ++applied; }
 void CancelEditor() { ++cancelled; }
 void OpenEditor() {}
 void BeginDriving() {}
+void ShowPit() {}
 static int previewScreenWidth=1280, previewScreenHeight=800;
 void PreviewScreenSize(int* sw,int* sh,int* vw,int* vh) {
     *sw=*vw=previewScreenWidth; *sh=*vh=previewScreenHeight;
@@ -97,7 +103,7 @@ int main(int argc, char** argv) {
     GfInit(false);
     const std::string data = std::string(argv[1]) + "/distribution/share/games/speed-dreams-2/";
     GfSetDataDir(data.c_str());
-    GfSetLocalDir((std::string(argv[1])+"/distribution/user-settings/").c_str());
+    GfSetLocalDir((std::string(argv[2])+"/").c_str());
     SDL_SetMainReady();
     if (SDL_Init(SDL_INIT_VIDEO) || TTF_Init()) return 3;
     SDL_Window* window = SDL_CreateWindow("Garage validation", 0, 0, 1280, 800,
@@ -132,7 +138,7 @@ int main(int argc, char** argv) {
     for(int i=2;i<8;++i) car.setup.gearRatio[i].value=3.4-(i-2)*.4;
     car.setup.differentialRatio[1].value=4.65;
     car.setup.heaveSpring[1].value=GfParmGetNum(car._carHandle,"Rear Heave Spring","spring",nullptr,0);
-    tTrack track{}; track.name = const_cast<char*>("Fuji Speedway"); previewRace.track=&track;
+    tTrack track{}; track.name = const_cast<char*>("Melbourne 1997"); previewRace.track=&track;
     BuildPages(); editorOpen = garageOpen = true;
     int checks=0, failures=0;
     auto check = [&](bool pass, const char* message) { ++checks; if(!pass) { ++failures; std::printf("FAIL %s\n", message); } };
@@ -199,7 +205,7 @@ int main(int argc, char** argv) {
     glViewport(0,0,1280,800); glMatrixMode(GL_PROJECTION); glLoadIdentity(); gluOrtho2D(0,1280,0,800);
     glMatrixMode(GL_MODELVIEW); glLoadIdentity(); glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
     std::vector<bool> reachable(fields.size(),false);
-    for(int tab=0; tab<4; ++tab) {
+    for(int tab=0; tab<5; ++tab) {
         selectedPage=tab; controls.clear(); BuildEditorControls();
         for(size_t i=0; i<controls.size(); ++i) {
             const auto& c=controls[i];
@@ -210,7 +216,7 @@ int main(int argc, char** argv) {
                 check(!(c.left<d.left+d.width && d.left<c.left+c.width && c.bottom<d.bottom+d.height && d.bottom<c.bottom+c.height),"hit targets do not overlap");
             }
         }
-        for(int next=0;next<4;++next) {
+        for(int next=0;next<5;++next) {
             auto action=controls[next].action; action(); check(selectedPage==next,"tab action");
         }
         selectedPage=tab;
@@ -315,6 +321,7 @@ library = ctypes.CDLL(str(root/'rust/target/release/vehicle_physics_engine.dll')
 library.ofp_create.argtypes = [ctypes.c_char_p, Vec3, ctypes.c_double, ctypes.c_double]
 library.ofp_create.restype = ctypes.c_void_p
 library.ofp_setup_fields.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint32]
+library.ofp_setup_document.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint32]
 library.ofp_destroy.argtypes = [ctypes.c_void_p]
 handle = library.ofp_create(str(root/'rust/data/vehicles/williams-fw19-hockenheim/vehicle.json').encode(), Vec3(0, 1, 0), 0, 0)
 if not handle:
@@ -324,6 +331,10 @@ try:
     buffer = ctypes.create_string_buffer(length + 1)
     library.ofp_setup_fields(handle, buffer, len(buffer))
     descriptors = buffer.value.decode().splitlines()
+    length = library.ofp_setup_document(handle, None, 0)
+    buffer = ctypes.create_string_buffer(length + 1)
+    library.ofp_setup_document(handle, buffer, len(buffer))
+    setup_document = buffer.value.decode()
 finally:
     library.ofp_destroy(handle)
 rust_test = ['fields.clear(); pages.clear(); rustGarage=true;']
@@ -334,9 +345,63 @@ for line in descriptors:
         json.dumps(path), json.dumps(label), json.dumps('deg' if unit == 'rad' else unit), scale,
         float(value)*scale, float(minimum)*scale, float(maximum)*scale, float(step)*scale,
         'true' if int(editable) else 'false'))
+rust_test.append('std::string setupDoc = %s;' % json.dumps(setup_document))
 rust_test.append(r'''
+    std::vector<PhysicsSetupField> setupDescriptors;
+    for(const auto& f:fields) {
+        PhysicsSetupField descriptor; descriptor.path=f.path; descriptor.unit=f.unit;
+        descriptor.minimum=f.minimum/f.scale; descriptor.maximum=f.maximum/f.scale;
+        descriptor.editable=f.editable; setupDescriptors.push_back(descriptor);
+    }
+    std::string setupError;
+    setupReady=FormulaSetups::context(setupDoc,setupDescriptors,"williams-fw19","melbourne-nineteen-ninety-seven",setupContext,setupError);
+    check(setupReady,"setup tab obtains the real editable profile");
+    setupDatabase.reset(new FormulaSetups::Database);
+    check(setupDatabase->open(SetupDatabasePath(),setupError),"garage opens SQLite database");
+    setupName="Carrera - equilibrado";
+    check(SaveEditorSetup(true),"setup tab saves editor values");
+    const auto firstId=activeSetupId;
+    check(!SetupDirty(),"save clears unsaved indicator");
+    const auto savedFields=EditorSetup().values;
+    int editableIndex=0;
+    while(!fields[editableIndex].editable) ++editableIndex;
+    ChangeField(editableIndex,fields[editableIndex].value+fields[editableIndex].step);
+    check(SetupDirty(),"editing marks saved setup dirty");
+    RequestSetupAction("load",std::to_string(activeSetupId));
+    check(pendingSetupAction=="load","load protects unsaved changes");
+    controls.clear(); BuildSetupConfirmation(); controls[1].action();
+    check(pendingSetupAction.empty() && EditorSetup().values==savedFields,"discard and load restores the saved editor");
+    selectedPage=3; Keyboard(SDLK_PAGEDOWN,0,0,0);
+    check(selectedPage==4,"REGLAJES is the last tab reached by controller navigation");
+    Keyboard(SDLK_PAGEDOWN,0,0,0); check(selectedPage==0,"five tabs wrap correctly");
+    selectedPage=4; editingSetupName=true;
+    const std::string oldName=setupName;
+    Keyboard(SDLK_x,0,0,0); Keyboard(SDLK_BACKSPACE,0,0,0); Keyboard(SDLK_RETURN,0,0,0);
+    check(setupName==oldName && !editingSetupName,"setup name accepts typing, backspace and enter");
+    RequestSetupAction("new"); check(pendingSetupAction=="create","new setup opens naming dialog");
+    setupName="Clasificacion - seco"; controls.clear(); BuildSetupConfirmation(); controls[1].action();
+    check(pendingSetupAction.empty() && setupRows.size()==2,"new setup dialog creates SQLite row");
+    const auto secondId=activeSetupId;
+    ChangeField(editableIndex,fields[editableIndex].value+fields[editableIndex].step);
+    for(size_t i=0;i<setupRows.size();++i) if(setupRows[i].id==firstId) selectedSetupFile=(int)i;
+    RequestSetupAction("load",std::to_string(firstId)); controls.clear(); BuildSetupConfirmation(); controls[0].action();
+    check(activeSetupId==firstId && setupRows[selectedSetupFile].id==firstId,"save and load keeps selection on the loaded record");
+    ExecuteSetupAction("load",std::to_string(secondId));
+    RequestSetupAction("delete",std::to_string(secondId)); controls.clear(); BuildSetupConfirmation(); controls.back().action();
+    check(setupRows.size()==2,"cancel deletion preserves stored setup");
+    RequestSetupAction("delete",std::to_string(secondId)); controls.clear(); BuildSetupConfirmation(); controls[0].action();
+    check(setupRows.size()==1 && !activeSetupId,"confirmed deletion removes only selected row");
+    for(int i=0;i<9;++i) { setupName="Variante "+std::to_string(i+1); check(SaveEditorSetup(true),"create scrollable list fixture"); }
+    ScrollSetupList(999); check(setupListOffset==3,"scroll list clamps at last row");
+    ScrollSetupList(-999); check(setupListOffset==0,"scroll list clamps at first row");
+    SetupMouseWheel(0,-1,SDL_MOUSEWHEEL_NORMAL); check(setupListOffset==1,"mouse wheel scrolls the list");
+    SetupMouseWheel(0,-1,SDL_MOUSEWHEEL_FLIPPED); check(setupListOffset==0,"flipped wheel direction respected");
+    selectedSetupFile=0;
+    for(int i=0;i<9;++i) Keyboard(SDLK_DOWN,0,0,0);
+    check(selectedSetupFile==9 && setupListOffset==3,"controller reaches rows beyond visible window");
+    setupListOffset=0;
     viewportWidth=1280; viewportHeight=800; viewportLeft=viewportBottom=0;
-    for(int tab=0;tab<4;++tab) {
+    for(int tab=0;tab<5;++tab) {
         selectedPage=tab; controls.clear(); BuildEditorControls();
         for(const auto& c:controls) check(c.left>=0 && c.bottom>=0 && c.left+c.width<=1280 && c.bottom+c.height<=800,"Rust control inside original canvas");
         glFinish(); std::vector<unsigned char> pixels(1280*800*3);
@@ -361,10 +426,12 @@ command = [str(args.toolchain/'bin/g++.exe'), '-std=c++11', '-DHAVE_CONFIG_H', '
            *['-I'+str(p) for p in include], str(cpp),
            str(root/'src/modules/graphic/osggraph/Car/OsgGaragePreview.cpp'),
            str(root/'src/modules/userinterface/legacymenu/racescreens/formula_garage_music.cpp'),
+           str(root/'src/modules/userinterface/legacymenu/racescreens/formula_setup_store.cpp'),
+           str(root/'src/modules/userinterface/legacymenu/racescreens/formula_setup_database.cpp'),
            *[str(loader_objects/(name+'.cpp.obj')) for name in ['OsgLoader','ReaderWriterACC','AccGeode','AccException']],
            str(args.build/'src/libs/tgf/libtgf.dll.a'),str(args.build/'src/libs/tgfclient/libtgfclient.dll.a'),
            '-losgDB','-losgUtil','-losg','-lOpenThreads',
-           '-lSDL2_ttf', '-lSDL2_mixer', '-lSDL2', '-lopengl32', '-lglu32', '-o', str(exe)]
+           '-lSDL2_ttf', '-lSDL2_mixer', '-lSDL2', '-lcjson', '-lrhash', '-lsqlite3', '-lopengl32', '-lglu32', '-o', str(exe)]
 subprocess.run(command, env=env, check=True)
 result = subprocess.run([str(exe), str(root), str(args.output.resolve()), str(args.build)], env=env, capture_output=True, text=True)
 (args.output/'validation.log').write_text(result.stdout + result.stderr)

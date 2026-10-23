@@ -29,10 +29,12 @@ def main():
     shutil.copyfile(project / 'implementation/shaders/car_material_appearance.frag',
         shader_directory / 'car_material_appearance.frag')
     shutil.copytree(project / 'implementation/candidates/fuji-seventy-six-seventy-seven', data_directory / 'tracks/circuit/fuji-seventy-six-seventy-seven', dirs_exist_ok=True)
+    shutil.copytree(project / 'implementation/candidates/melbourne-nineteen-ninety-seven', data_directory / 'tracks/circuit/melbourne-nineteen-ninety-seven', dirs_exist_ok=True)
     shutil.copytree(project / 'implementation/candidates/williams-nineteen-ninety-seven', data_directory / 'cars/models/williams-nineteen-ninety-seven', dirs_exist_ok=True)
     shutil.copytree(project / 'implementation/initial-settings', distribution / 'initial-settings', dirs_exist_ok=True)
     shutil.copytree(project / 'implementation/initial-settings/cars/categories', data_directory / 'cars/categories', dirs_exist_ok=True)
     shutil.copyfile(project / 'implementation/initial-settings/config/raceman/williams-fuji-practice.xml', data_directory / 'config/raceman/williams-fuji-practice.xml')
+    shutil.copyfile(project / 'implementation/initial-settings/config/raceman/williams-melbourne-practice.xml', data_directory / 'config/raceman/williams-melbourne-practice.xml')
     install_game_fonts(project)
     configure_formula_hud(project)
     shutil.copytree(project / "implementation/ui/monaco-grand-prix/images/color",

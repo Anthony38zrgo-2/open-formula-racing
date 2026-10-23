@@ -916,18 +916,8 @@ namespace
             return;
         }
         refreshDisplayLimits(car);
-        // Per-user overrides never overwrite the reference profile.
-        std::ifstream saved(std::string(GfLocalDir()) + "config/rust_setup_" + std::to_string(index) + ".tsv");
-        saved.imbue(std::locale::classic());
-        std::string path; double value;
-        std::vector<std::pair<std::string, double> > overrides;
-        while (saved >> path >> value) overrides.push_back({path, value});
-        if (!overrides.empty()) {
-            saved.close();
-            std::string error;
-            if (!RustPhysics::self().applyGarageFields(index, overrides, error))
-                GfLogWarning("Rust saved setup rejected: %s\n", error.c_str());
-        }
+        // Named setups are loaded explicitly in the garage. A car-index TSV
+        // cannot identify a car/track pair and must not override this profile.
         updateTrackPosition(elt);
         publishCar(car);
     }
@@ -1232,7 +1222,6 @@ bool RustPhysics::resetSetup(int car_index, std::string& error)
         return false;
     }
     car.setup_overrides.clear();
-    std::remove((std::string(GfLocalDir()) + "config/rust_setup_" + std::to_string(car_index) + ".tsv").c_str());
     rustPhysicsLibrary.snapshot(car.handle, &car.snapshot);
     refreshDisplayLimits(car);
     publishCar(car);
@@ -1287,10 +1276,6 @@ bool RustPhysics::applyGarageFields(int car_index,
     if (result) {
         RustCar& car = g_cars[car_index];
         for (const auto& value : values) car.setup_overrides[value.first] = value.second;
-        std::ofstream saved(std::string(GfLocalDir()) + "config/rust_setup_" + std::to_string(car_index) + ".tsv");
-        saved.imbue(std::locale::classic()); saved << std::setprecision(17);
-        for (const auto& value : car.setup_overrides) saved << value.first << '\t' << value.second << '\n';
-        if (!saved) GfLogWarning("Rust garage: setup applied, but could not save the user override\n");
     }
     GfLogInfo("Rust garage transaction: applied=%d fields=%u error=%s\n", result ? 1 : 0,
         (unsigned)values.size(), error.c_str());

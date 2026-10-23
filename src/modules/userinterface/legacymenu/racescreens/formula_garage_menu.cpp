@@ -1,6 +1,10 @@
 #include <glfeatures.h>
 #include "formula_garage_menu.h"
 #include "formula_garage_music.h"
+#include "formula_setup_store.h"
+#include "formula_setup_database.h"
+#include <memory>
+#include <ctime>
 #include "legacymenu.h"
 #include "racescreens.h"
 #include <tgfclient.h>
@@ -26,10 +30,10 @@
 namespace
 {
 constexpr double radiansPerDegree = 0.017453292519943295;
-constexpr double garagePositionX = 940.04363594;
-constexpr double garagePositionY = 511.07507842;
-constexpr double garageGroundHeight = 33.21259947;
-constexpr double garageHeading = -0.0066;
+double garagePositionX = 940.04363594;
+double garagePositionY = 511.07507842;
+double garageGroundHeight = 33.21259947;
+double garageHeading = -0.0066;
 // Native rendering of implementation/ui/formula-garage/reference.html.
 float turquoise[4] = {0.3765f, 0.4941f, 0.5686f, 1.0f};
 float white[4] = {0.9137f, 0.9255f, 0.9098f, 1.0f};
@@ -59,6 +63,18 @@ int viewportBottom = 0;
 int viewportWidth = 640;
 int viewportHeight = 480;
 std::string statusMessage;
+FormulaSetups::Context setupContext;
+bool setupReady = false;
+bool editingSetupName = false;
+bool setupNameSelectAll = false;
+std::string setupName, pendingSetupAction, pendingSetupFile;
+std::int64_t activeSetupId = 0;
+std::string activeSetupName;
+std::unique_ptr<FormulaSetups::Database> setupDatabase;
+std::map<std::string, double> savedSetupValues;
+std::vector<FormulaSetups::Record> setupRows;
+int setupListOffset = 0;
+int selectedSetupFile = -1;
 SDL_GameController* menuController = nullptr;
 unsigned previousControllerButtons = 0;
 unsigned lastControllerEvent = 0;
@@ -120,6 +136,8 @@ void OpenEditor();
 void BeginDriving();
 void ApplyEditor();
 void CancelEditor();
+void InitializeSetupEditor();
+void BuildSetupsPanel();
 
 void Rectangle(double left, double bottom, double width, double height, const float* color)
 {
@@ -392,7 +410,7 @@ void StyledButton(double x, double y, double width, double height,
     Rectangle(x, y, width, height, primary ? gold : panelColor);
     Outline(x, y, width, height, primary ? gold : turquoise);
     Text(label, x + width / 2, y + (height - 14) / 2, GFUI_FONT_SMALL,
-        primary ? graphite : white);
+        primary ? graphite : white, GFUI_ALIGN_HC, std::max(12.0,width-20));
     AddButton(x, y, width, height, label, action);
 }
 void Panel(double x, double y, double width, double height, const std::string& title,
@@ -404,6 +422,194 @@ void Panel(double x, double y, double width, double height, const std::string& t
     Text(title, x + 14, y + height - 28, GFUI_FONT_MEDIUM, gold, GFUI_ALIGN_HL, titleWidth);
     Text(tag, x + width - 14, y + height - 26, GFUI_FONT_SMALL_C, muted, GFUI_ALIGN_HR, (width - 28) * .40 - 10);
     Rectangle(x + 14, y + height - 40, width - 28, 1, turquoise);
+}
+std::string SetupDatabasePath() { return std::string(GfLocalDir()) + "open_formula.db"; }
+FormulaSetups::Setup EditorSetup()
+{
+    FormulaSetups::Setup setup; setup.name=setupName;
+    for (const auto& field:fields)
+        if (field.editable && !field.path.empty()) setup.values[field.path]=field.value/field.scale;
+    return setup;
+}
+bool SetupDirty()
+{
+    if (activeSetupId) return EditorSetup().values!=savedSetupValues || setupName!=activeSetupName;
+    for (const auto& field:fields) if (field.editable && field.value!=field.original) return true;
+    return false;
+}
+void RefreshSetupFiles()
+{
+    if (!setupDatabase) return;
+    const auto selected=selectedSetupFile>=0 && selectedSetupFile<(int)setupRows.size()?setupRows[selectedSetupFile].id:activeSetupId;
+    std::string error;
+    if (!setupDatabase->list(setupContext.track,setupRows,error)) { statusMessage="No se pudieron leer los reglajes: "+error; return; }
+    selectedSetupFile=-1;
+    for (size_t i=0;i<setupRows.size();++i) if (setupRows[i].id==selected) selectedSetupFile=(int)i;
+    setupListOffset=std::min(setupListOffset,std::max(0,(int)setupRows.size()-7));
+}
+void InitializeSetupEditor()
+{
+    const auto* track=LmRaceEngine().inData()->track;
+    auto* physics=LmRaceEngine().garagePhysics();
+    std::vector<PhysicsSetupField> descriptors; std::string document,error;
+    FormulaSetups::Context context;
+    setupReady=rustGarage && physics && physics->garageFields(garageCar->index,descriptors)
+        && physics->setupDocument(garageCar->index,document)
+        && FormulaSetups::context(document,descriptors,garageCar->_carName,track->internalname?track->internalname:"",context,error);
+    if (setupReady) {
+        if (setupContext.car!=context.car || setupContext.track!=context.track || setupContext.baseHash!=context.baseHash) {
+            activeSetupId=0; activeSetupName.clear(); savedSetupValues.clear();
+            const char* carName=GfParmGetName(garageCar->_carHandle);
+            setupName=std::string(track->name?track->name:context.track)+" - "+(carName?carName:garageCar->_carName);
+            if (setupName.size()>90) setupName.resize(90);
+        }
+        setupContext=context;
+        if (!setupDatabase) {
+            setupDatabase.reset(new FormulaSetups::Database);
+            if (!setupDatabase->open(SetupDatabasePath(),error)) { setupDatabase.reset(); setupReady=false; }
+        }
+        for (auto& field:fields)
+            if (field.path=="fuel.initial_kg") field.value=field.original=context.rules.at(field.path).current*field.scale;
+    }
+    if (!error.empty()) statusMessage="No se pudieron preparar los reglajes: "+error;
+    pendingSetupAction.clear(); pendingSetupFile.clear(); editingSetupName=false;
+    RefreshSetupFiles();
+}
+bool SaveEditorSetup(bool createNew)
+{
+    if (!setupReady || !setupDatabase) return false;
+    auto setup=EditorSetup(); std::string error;
+    if (!createNew) {
+        if (selectedSetupFile<0 || selectedSetupFile>=(int)setupRows.size()) { statusMessage="Selecciona el reglaje que quieres guardar"; return false; }
+        const auto& selected=setupRows[selectedSetupFile];
+        setup.name=selected.name;
+        if (!setupDatabase->update(selected.id,setupContext,setup,error)) { statusMessage=error; return false; }
+        activeSetupId=selected.id;
+    } else {
+        const std::string team=setupContext.car.find("williams")!=std::string::npos?"williams":"";
+        if (!setupDatabase->create(setupContext,setup,team,activeSetupId,error)) { statusMessage=error; return false; }
+    }
+    setupName=activeSetupName=setup.name; savedSetupValues=setup.values;
+    selectedSetupFile=-1; RefreshSetupFiles();
+    for (size_t i=0;i<setupRows.size();++i) if (setupRows[i].id==activeSetupId) selectedSetupFile=(int)i;
+    statusMessage="Reglaje guardado: "+setupName;
+    GfLogInfo("Formula reglaje saved: id=%lld fields=%u\n",(long long)activeSetupId,(unsigned)setup.values.size());
+    return true;
+}
+void ExecuteSetupAction(const std::string& action,const std::string& value)
+{
+    if (action=="cancel") { fields.clear(); pages.clear(); replaceTires=false; statusMessage="Cambios descartados"; ShowPit(); return; }
+    if (action=="new") {
+        setupName="Reglaje "+std::to_string(setupRows.size()+1);
+        pendingSetupAction="create"; editingSetupName=true; setupNameSelectAll=true; selectedControl=0; return;
+    }
+    const auto id=std::strtoll(value.c_str(),nullptr,10);
+    std::string error;
+    if (action=="delete") {
+        if (!setupDatabase->remove(id,setupContext.track,error)) { statusMessage=error; return; }
+        if (activeSetupId==id) { activeSetupId=0; activeSetupName.clear(); savedSetupValues.clear(); }
+        RefreshSetupFiles(); statusMessage="Reglaje eliminado; los ajustes del editor se conservan"; return;
+    }
+    FormulaSetups::Setup loaded;
+    if (!setupDatabase->load(id,setupContext,loaded,error)) { statusMessage=error; return; }
+    for (auto& field:fields) if (field.editable) field.value=loaded.values.at(field.path)*field.scale;
+    setupName=activeSetupName=loaded.name; activeSetupId=id; savedSetupValues=EditorSetup().values;
+    for (size_t i=0;i<setupRows.size();++i) if (setupRows[i].id==id) selectedSetupFile=(int)i;
+    if (selectedSetupFile>=0) setupListOffset=std::max(0,std::min(selectedSetupFile,std::max(0,(int)setupRows.size()-7)));
+    replaceTires=false; statusMessage="Reglaje cargado; pulsa Aplicar para usarlo en el coche";
+}
+void RequestSetupAction(const std::string& action,const std::string& value="")
+{
+    editingSetupName=false;
+    if (action=="delete" || (action!="new" && SetupDirty())) {
+        pendingSetupAction=action; pendingSetupFile=value; selectedPage=4; selectedControl=0;
+    } else ExecuteSetupAction(action,value);
+}
+void ScrollSetupList(int delta)
+{
+    setupListOffset=std::max(0,std::min(std::max(0,(int)setupRows.size()-7),setupListOffset+delta));
+}
+std::string SetupDate(const std::string& utc)
+{
+    std::tm value={};
+    if (std::sscanf(utc.c_str(),"%d-%d-%dT%d:%d:%d",&value.tm_year,&value.tm_mon,&value.tm_mday,&value.tm_hour,&value.tm_min,&value.tm_sec)!=6) return utc;
+    value.tm_year-=1900; --value.tm_mon;
+#ifdef _WIN32
+    const std::time_t seconds=_mkgmtime(&value);
+#else
+    const std::time_t seconds=timegm(&value);
+#endif
+    const auto* local=std::localtime(&seconds); char output[32];
+    if (!local || !std::strftime(output,sizeof(output),"%d/%m/%Y %H:%M",local)) return utc;
+    return output;
+}
+void BuildSetupsPanel()
+{
+    Panel(20,108,1240,500,"REGLAJES","");
+    if (!setupReady) { Text("Los reglajes no estan disponibles para este coche",48,500,GFUI_FONT_MEDIUM,white,GFUI_ALIGN_HL); return; }
+    Text("NOMBRE DEL REGLAJE",42,535,GFUI_FONT_SMALL,muted,GFUI_ALIGN_HL);
+    Text("EQUIPO",730,535,GFUI_FONT_SMALL,muted,GFUI_ALIGN_HL);
+    Text("ULTIMA MODIFICACION",1220,535,GFUI_FONT_SMALL,muted,GFUI_ALIGN_HR);
+    for (int row=0;row<7 && setupListOffset+row<(int)setupRows.size();++row) {
+        const int index=setupListOffset+row; const auto& record=setupRows[index]; const double y=475-row*42;
+        Rectangle(34,y,1196,38,selectedSetupFile==index?turquoise:graphite);
+        Outline(34,y,1196,38,selectedSetupFile==index?gold:turquoise);
+        Text(record.name,46,y+12,GFUI_FONT_SMALL,white,GFUI_ALIGN_HL,650);
+        Text(record.team,730,y+12,GFUI_FONT_SMALL,white,GFUI_ALIGN_HL,190);
+        Text(SetupDate(record.modified),1218,y+12,GFUI_FONT_SMALL,white,GFUI_ALIGN_HR,260);
+        AddButton(34,y,1196,38,record.name,[index]() { selectedSetupFile=index; });
+    }
+    if (setupRows.empty()) Text("Todavia no hay reglajes para este circuito",640,390,GFUI_FONT_MEDIUM,muted);
+    if (setupRows.size()>7) {
+        Rectangle(1238,223,6,290,turquoise);
+        const double height=std::max(24.0,290.0*7/setupRows.size());
+        Rectangle(1238,223+(290-height)*(1.0-double(setupListOffset)/(setupRows.size()-7)),6,height,gold);
+    }
+    Text(activeSetupId?"En el editor: "+activeSetupName:"Ajustes actuales del coche",42,198,GFUI_FONT_SMALL,white,GFUI_ALIGN_HL,760);
+    Text(SetupDirty()?"Cambios sin guardar":"",1220,198,GFUI_FONT_SMALL,gold,GFUI_ALIGN_HR);
+    StyledButton(34,129,284,44,"CREAR NUEVO REGLAJE",[]() { RequestSetupAction("new"); });
+    StyledButton(338,129,284,44,"GUARDAR",[]() { SaveEditorSetup(false); },true);
+    StyledButton(642,129,284,44,"CARGAR",[]() {
+        if (selectedSetupFile>=0 && selectedSetupFile<(int)setupRows.size()) RequestSetupAction("load",std::to_string(setupRows[selectedSetupFile].id));
+        else statusMessage="Selecciona un reglaje de la lista";
+    });
+    StyledButton(946,129,284,44,"ELIMINAR",[]() {
+        if (selectedSetupFile>=0 && selectedSetupFile<(int)setupRows.size()) RequestSetupAction("delete",std::to_string(setupRows[selectedSetupFile].id));
+        else statusMessage="Selecciona un reglaje de la lista";
+    });
+}
+void BuildSetupConfirmation()
+{
+    controls.clear(); Rectangle(220,245,840,300,graphite); Outline(220,245,840,300,gold);
+    const bool create=pendingSetupAction=="create", deleting=pendingSetupAction=="delete";
+    Text(create?"NUEVO REGLAJE":deleting?"ELIMINAR REGLAJE":"CAMBIOS SIN GUARDAR",640,495,GFUI_FONT_MEDIUM,gold);
+    if (create) {
+        StyledButton(260,418,760,48,setupName+(editingSetupName?"_":""),[]() { editingSetupName=true; setupNameSelectAll=true; });
+        StyledButton(364,330,260,44,"CREAR",[]() {
+            if (SaveEditorSetup(true)) { pendingSetupAction.clear(); editingSetupName=false; }
+        },true);
+    } else if (deleting) {
+        Text("Se eliminara el reglaje seleccionado.",640,435,GFUI_FONT_SMALL,white);
+        StyledButton(364,330,260,44,"ELIMINAR",[]() {
+            const auto id=pendingSetupFile; pendingSetupAction.clear(); ExecuteSetupAction("delete",id);
+        },true);
+    } else {
+        Text("Los cambios del editor no se han guardado.",640,435,GFUI_FONT_SMALL,white);
+        StyledButton(248,330,240,44,"GUARDAR Y SEGUIR",[]() {
+            const auto action=pendingSetupAction,value=pendingSetupFile;
+            if (!activeSetupId) { statusMessage="Crea un nuevo reglaje para conservar estos ajustes"; pendingSetupAction.clear(); ExecuteSetupAction("new",""); return; }
+            // Save the edited active record, even when another row is selected for loading.
+            for (size_t i=0;i<setupRows.size();++i) if (setupRows[i].id==activeSetupId) selectedSetupFile=(int)i;
+            if (!SaveEditorSetup(false)) return;
+            pendingSetupAction.clear(); ExecuteSetupAction(action,value);
+        },true);
+        StyledButton(520,330,240,44,"DESCARTAR Y SEGUIR",[]() {
+            const auto action=pendingSetupAction,value=pendingSetupFile; pendingSetupAction.clear(); ExecuteSetupAction(action,value);
+        });
+    }
+    StyledButton(792,330,240,44,"CANCELAR",[]() {
+        pendingSetupAction.clear(); pendingSetupFile.clear(); editingSetupName=false; setupName=activeSetupName;
+    });
 }
 void Parameter(int index, const std::string& label, double x, double y, double width)
 {
@@ -575,22 +781,30 @@ void BuildEditorControls()
     glEnd();
     Rectangle(20, 706, 7, 74, gold);
     Rectangle(20, 706, 1240, 2, gold);
-    Text("OPEN FORMULA", 44, 740, GFUI_FONT_BIG, white, GFUI_ALIGN_HL);
-    Text("SIMULATION / GARAGE", 46, 719, GFUI_FONT_SMALL, graphite, GFUI_ALIGN_HL);
+    Text("OPEN FORMULA SIMULATION", 44, 740, GFUI_FONT_BIG, white, GFUI_ALIGN_HL, 820);
+    Text("GARAGE", 46, 719, GFUI_FONT_SMALL, graphite, GFUI_ALIGN_HL);
     const tRmInfo* race = LmRaceEngine().inData();
     Text(race->track->name ? race->track->name : "PRACTICE", 1238, 746, GFUI_FONT_MEDIUM, white, GFUI_ALIGN_HR);
     Text(garageCar->_name, 1238, 723, GFUI_FONT_SMALL_C, muted, GFUI_ALIGN_HR);
-    const char* tabs[] = {"SUSPENSION", "AERO / RUEDAS", "MOTOR / TRANSMISION", "ESTRATEGIA / BOXES"};
-    for (int tab = 0; tab < 4; ++tab)
+    const char* tabs[] = {"SUSPENSION", "AERO / RUEDAS", "MOTOR / TRANSMISION", "ESTRATEGIA / BOXES", "REGLAJES"};
+    for (int tab = 0; tab < 5; ++tab)
     {
-        const double x = 20 + tab * 312;
-        Rectangle(x, 644, 304, 46, selectedPage == tab ? turquoise : panelColor);
-        Outline(x, 644, 304, 46, turquoise);
-        if (selectedPage == tab) Rectangle(x, 644, 304, 3, gold);
-        Text(tabs[tab], x + 152, 660, GFUI_FONT_SMALL, white);
-        AddButton(x, 644, 304, 46, tabs[tab], [tab]() {
-            selectedPage = tab; selectedControl = 0; draggedControl = -1;
+        const double x = 20 + tab * 250;
+        Rectangle(x, 644, 240, 46, selectedPage == tab ? turquoise : panelColor);
+        Outline(x, 644, 240, 46, turquoise);
+        if (selectedPage == tab) Rectangle(x, 644, 240, 3, gold);
+        Text(tabs[tab], x + 120, 660, GFUI_FONT_SMALL, white);
+        AddButton(x, 644, 240, 46, tabs[tab], [tab]() {
+            selectedPage = tab; selectedControl = 0; draggedControl = -1; editingSetupName=false;
         });
+    }
+    if (selectedPage==4) {
+        BuildSetupsPanel();
+        Text(statusMessage,24,83,GFUI_FONT_SMALL_C,gold,GFUI_ALIGN_HL,1220);
+        StyledButton(875,37,154,42,"CANCELAR",CancelEditor);
+        StyledButton(1043,37,217,42,"APLICAR Y VOLVER",ApplyEditor,true);
+        if (!pendingSetupAction.empty()) BuildSetupConfirmation();
+        return;
     }
     if (rustGarage) {
         BuildRustPanels();
@@ -816,17 +1030,44 @@ void MouseButton(int button, int state, int horizontal, int vertical)
         return;
     }
 }
-void Keyboard(int key, int, int, int)
+void SetupMouseWheel(int, int delta, unsigned int direction)
+{
+    if (editorOpen && selectedPage==4 && pendingSetupAction.empty()) ScrollSetupList(direction==SDL_MOUSEWHEEL_FLIPPED?delta:-delta);
+}
+void Keyboard(int key, int modifier, int, int)
 {
     if (!garageOpen) return;
+    if (editorOpen && editingSetupName) {
+        if (key==SDLK_a && (modifier & KMOD_CTRL)) { setupNameSelectAll=true; return; }
+        if (key==SDLK_ESCAPE || key==SDLK_RETURN || key==SDLK_KP_ENTER) { editingSetupName=false; return; }
+        if (key==SDLK_BACKSPACE) { if (setupNameSelectAll) setupName.clear(); else if (!setupName.empty()) setupName.pop_back(); setupNameSelectAll=false; return; }
+        if ((setupNameSelectAll || setupName.size()<100) && ((key>='a' && key<='z') || (key>='0' && key<='9') || key==' ' || key=='-' || key=='_')) {
+            if (setupNameSelectAll) { setupName.clear(); setupNameSelectAll=false; }
+            char c=static_cast<char>(key);
+            if ((modifier & KMOD_SHIFT) && c>='a' && c<='z') c-=32;
+            if ((modifier & KMOD_SHIFT) && c=='-') c='_';
+            setupName+=c;
+        }
+        return;
+    }
+    if (!pendingSetupAction.empty()) {
+        if (key==SDLK_ESCAPE) { pendingSetupAction.clear(); pendingSetupFile.clear(); return; }
+        if (key==SDLK_F5 || key==SDLK_PAGEUP || key==SDLK_PAGEDOWN || key==SDLK_BACKSPACE) return;
+    }
     if (key == SDLK_ESCAPE || key == SDLK_BACKSPACE) { if (editorOpen) CancelEditor(); return; }
     if (key == SDLK_g && !editorOpen) { OpenEditor(); return; }
     if (key == SDLK_PAGEUP || key == SDLK_PAGEDOWN)
     {
-        if (editorOpen) { selectedPage = (selectedPage + (key == SDLK_PAGEUP ? 3 : 1)) % 4; selectedControl = 0; draggedControl = -1; }
+        if (editorOpen) { selectedPage = (selectedPage + (key == SDLK_PAGEUP ? 4 : 1)) % 5; selectedControl = 0; draggedControl = -1; }
         return;
     }
     if (key == SDLK_F5 && editorOpen) { ApplyEditor(); return; }
+    if (editorOpen && selectedPage==4 && pendingSetupAction.empty() && (key==SDLK_UP || key==SDLK_DOWN) && !setupRows.empty()) {
+        selectedSetupFile=std::max(0,std::min((int)setupRows.size()-1,selectedSetupFile+(key==SDLK_UP?-1:1)));
+        if (selectedSetupFile<setupListOffset) setupListOffset=selectedSetupFile;
+        if (selectedSetupFile>=setupListOffset+7) setupListOffset=selectedSetupFile-6;
+        return;
+    }
     if (key == SDLK_TAB || key == SDLK_DOWN || key == SDLK_UP)
     {
         if (!controls.empty()) selectedControl = (selectedControl + (key == SDLK_UP ? controls.size() - 1 : 1)) % controls.size();
@@ -881,6 +1122,7 @@ void ActivateGarageScreen()
     GfuiApp().eventLoop().setKeyboardDownCB(Keyboard);
     GfuiApp().eventLoop().setKeyboardUpCB(nullptr);
     GfuiApp().eventLoop().setMouseButtonCB(MouseButton);
+    GfuiApp().eventLoop().setMouseWheelCB(SetupMouseWheel);
     GfuiApp().eventLoop().setMouseMotionCB(MouseMotion);
     GfuiApp().eventLoop().setMousePassiveMotionCB(MouseMotion);
     GfuiApp().eventLoop().setRedisplayCB(DrawGarage);
@@ -933,6 +1175,7 @@ void OpenEditor()
     if (auto* preview = dynamic_cast<ICarPreviewRenderer*>(LegacyMenu::self().graphicsEngine()))
         preview->resetGarageCarPreview();
     BuildPages(); replaceTires = false;
+    InitializeSetupEditor();
     editorOpen = true; selectedPage = 0; selectedControl = 0; draggedControl = -1;
     statusMessage.clear();
     GfLogInfo("Formula garage state: GARAGE, reading current live setup\n");
@@ -957,6 +1200,7 @@ void ApplyEditor()
         }
         ResetPhysics(false);
         BuildPages();
+        InitializeSetupEditor();
         statusMessage = "Rust setup applied";
         ShowPit();
         return;
@@ -994,6 +1238,7 @@ void ApplyEditor()
 }
 void CancelEditor()
 {
+    if (setupReady && SetupDirty()) { RequestSetupAction("cancel"); return; }
     fields.clear(); pages.clear(); replaceTires = false; statusMessage = "Changes discarded"; ShowPit();
 }
 void BeginDriving()
@@ -1013,12 +1258,21 @@ bool FormulaGarageAvailable()
 {
     const tRmInfo* information = LmRaceEngine().inData();
     return information && information->track && information->s && information->s->_raceType == RM_TYPE_PRACTICE
-        && information->track->internalname && std::strcmp(information->track->internalname, "fuji-seventy-six-seventy-seven") == 0
+        && information->track->internalname
+        && (std::strcmp(information->track->internalname, "fuji-seventy-six-seventy-seven") == 0
+            || GfParmGetNum(information->track->params, "Formula Garage", "enabled", nullptr, 0.0) > 0.0)
         && information->s->_ncars == 1 && information->s->cars[0]->_driverType == RM_DRV_HUMAN;
 }
 void FormulaGarageSessionStart()
 {
     FormulaGarageShutdown();
+    setupContext = {}; setupReady=false; activeSetupId=0; activeSetupName.clear(); setupDatabase.reset(); setupRows.clear(); setupName.clear(); savedSetupValues.clear();
+    pendingSetupAction.clear(); pendingSetupFile.clear(); editingSetupName=false;
+    const tTrack* track = LmRaceEngine().inData()->track;
+    garagePositionX = GfParmGetNum(track->params, "Formula Garage", "x", nullptr, 940.04363594);
+    garagePositionY = GfParmGetNum(track->params, "Formula Garage", "y", nullptr, 511.07507842);
+    garageGroundHeight = GfParmGetNum(track->params, "Formula Garage", "ground height", nullptr, 33.21259947);
+    garageHeading = GfParmGetNum(track->params, "Formula Garage", "heading", nullptr, -0.0066);
     // Scripted sessions can start directly on the track: the pit garage is then only
     // opened on demand, not on the initial arrival check.
     bool openOnStart = true;
@@ -1030,6 +1284,7 @@ void FormulaGarageSessionStart()
                                    nullptr, 1.0) > 0.0;
         GfParmReleaseHandle(configuration);
     }
+    openOnStart = GfParmGetNum(track->params, "Formula Garage", "open on start", nullptr, openOnStart ? 1.0 : 0.0) > 0.0;
     initialArrivalPending = openOnStart && FormulaGarageAvailable();
     arrivalArmed = false;
 }
@@ -1059,6 +1314,7 @@ void FormulaGarageReturnToPit(void*)
 void FormulaGarageShutdown()
 {
     garageMusic.shutdown();
+    setupDatabase.reset();
     garageOpen = editorOpen = initialArrivalPending = arrivalArmed = false;
     garageCar = nullptr;
     fields.clear(); pages.clear(); controls.clear();

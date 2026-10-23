@@ -3,6 +3,7 @@
 #include <iomanip>
 #include <tgf.hpp>
 #include <itrackloader.h>
+#include <robottools.h>
 
 int main(int argument_count, char** argument_values)
 {
@@ -43,7 +44,18 @@ int main(int argument_count, char** argument_values)
         output << ",\"road_right\":[" << right_border->vertex[TR_SR].x << ',' << right_border->vertex[TR_SR].y << ',' << right_border->vertex[TR_SR].z << "]}";
         segment = segment->next;
     }
-    output << "]}";
+    output << "],\"pits\":{\"type\":" << track->pits.type << ",\"max\":" << track->pits.nMaxPits
+           << ",\"slots\":" << track->pits.nPitSeg << ",\"positions\":[";
+    for (int index = 0; index < track->pits.nMaxPits; ++index)
+    {
+        auto position = track->pits.driversPits[index].pos;
+        tdble x, y;
+        RtTrackLocal2Global(&position, &x, &y, TR_TORIGHT);
+        if (index) output << ',';
+        output << "{\"x\":" << x << ",\"y\":" << y << ",\"distance\":" << position.seg->lgfromstart + (position.seg->type == TR_STR ? position.toStart : position.toStart * position.seg->radius)
+               << ",\"to_right\":" << position.toRight << '}';
+    }
+    output << "]}}";
     track_loader->unload();
     GfModule::unload(track_module);
     return output.good() ? EXIT_SUCCESS : EXIT_FAILURE;

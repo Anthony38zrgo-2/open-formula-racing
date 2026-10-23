@@ -15,8 +15,23 @@ __pycache__/
 # Etapa 1 audio: bancos stageados localmente (19 MB) + reparación ACL; no versionar bytes ni backups.
 /sounds/
 /.acl-repair-out/
+/implementation/reports/melbourne/staging/
+/implementation/reports/melbourne/smoke-settings/
+/implementation/reports/melbourne/candidate.json
+/implementation/reports/melbourne/native.json
+/implementation/reports/melbourne/visual.json
+/implementation/reports/melbourne/*.log
 /rust/vehicle-audio-engine/target/
 /rust/v10-engine-synth/target/
 /rust/open-formula-audio/target/
 # Etapa 2 audio: WAVs offline como evidencia local (manifiesto + informe sí se versionan).
 /implementation/reports/audio_etapa2/*.wav
+# SQLite garage validation artifacts; keep summaries and reviewed PNGs.
+/implementation/reports/garage_reglajes_sqlite/*.bmp
+/implementation/reports/garage_reglajes_sqlite/*.exe
+/implementation/reports/garage_reglajes_sqlite/garage_ui_bench.cpp
+/implementation/reports/garage_reglajes_sqlite/garage_validation_*.db
+/implementation/reports/reglajes_sqlite/validation-*.db
+/implementation/reports/reglajes_sqlite/profile_document.json
+/implementation/reports/reglajes_sqlite/reference-syntax.js
+/implementation/reports/reglajes_validation_*.db

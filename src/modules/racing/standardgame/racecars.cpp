@@ -201,6 +201,9 @@ static double penaltyFactor(tCarPenalty *penalty) {
 static void
 reCarsApplyRaceRules(tCarElt *car, double deltaTime)
 {
+    if (!strcmp(GfParmGetStr(ReInfo->params, ReInfo->_reRaceName, RM_ATTR_PENALTIES, RM_VAL_YES), RM_VAL_NO))
+        return;
+
     char msg[64];
     tCarPenalty		*penalty;
     tTrack          *track = ReInfo->track;

@@ -49,7 +49,7 @@
     .header-sub {font-family:var(--display);font-size:clamp(13px,1.3vw,21px);font-weight:600;font-style:italic;letter-spacing:.8px;}
     .event {margin-left:auto;position:relative;text-align:right;color:color-mix(in srgb, var(--steel) 17%, var(--smoke));text-transform:uppercase;letter-spacing:1px;font-size:13px;line-height:1.13;white-space:nowrap;}
     .event strong {display:block;color:var(--smoke);font-size:20px;font-weight:700;letter-spacing:1.6px;}
-    .nav {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:14px 0 13px;}
+    .nav {display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;margin:14px 0 13px;}
     .tab {min-width:0;min-height:64px;display:flex;align-items:center;justify-content:center;gap:12px;border-radius:8px 8px 2px 2px;
       border:1px solid color-mix(in srgb, var(--gray) 45%, var(--steel));border-bottom:3px solid color-mix(in srgb, var(--gray) 45%, var(--steel));color:color-mix(in srgb, var(--steel) 35%, var(--smoke));background:linear-gradient(145deg,color-mix(in srgb, var(--gray) 82%, var(--steel)),var(--gray) 75%);
       text-transform:uppercase;font:700 16px var(--font);letter-spacing:1px;transform:skew(-6deg);transition:background .2s,color .2s,box-shadow .2s;}
@@ -511,16 +511,25 @@
     <nav class="nav" id="nav" aria-label="Categorías del garaje"></nav>
     <div class="utility" id="symmetry-row"><label class="switchline"><input type="checkbox" id="symmetry" checked /> Ajustes simétricos L/R</label></div>
     <div id="workspace" class="workspace" aria-live="off"></div>
+    <section id="setups-workspace" class="hidden" aria-label="Reglajes">
+      <div class="panel-head"><span class="panel-title">REGLAJES · MELBOURNE</span></div>
+      <div style="max-height:360px;overflow-y:auto;margin:16px 0">
+        <table style="width:100%;text-align:left;border-spacing:0 8px">
+          <thead><tr><th>Nombre del reglaje</th><th>Equipo</th><th>Última modificación</th></tr></thead>
+          <tbody id="reglajes-list"></tbody>
+        </table>
+      </div>
+      <button class="action" id="create-reglaje">Crear nuevo reglaje</button>
+      <button class="action primary" id="save">Guardar</button>
+      <button class="action" id="load-reglaje">Cargar</button>
+      <button class="action" id="delete-reglaje">Eliminar</button>
+    </section>
     <footer class="global-footer">
       <div class="footleft">
         <button class="action" id="reset">↺ Restaurar pestaña</button>
-        <button class="action" id="export">↓ Exportar JSON</button>
-        <button class="action" id="import">↑ Importar JSON</button>
-        <input type="file" id="import-file" accept=".json,application/json" class="hidden" aria-label="Importar configuración JSON" />
       </div>
       <div class="footright">
         <span class="saved" id="save-state">Configuración guardada</span>
-        <button class="action primary" id="save">Guardar</button>
         <button class="action action-exit" id="exit">Salir de Garaje</button>
       </div>
     </footer>
@@ -540,7 +549,8 @@
       {id:'aeroWheels',label:'Aero y Ruedas',icon:'aero'},
       {id:'suspension',label:'Suspensión',icon:'suspension'},
       {id:'power',label:'Motor y Caja',icon:'power'},
-      {id:'strategy',label:'Estrategia de Pits',icon:'pits'}
+      {id:'strategy',label:'Estrategia de Pits',icon:'pits'},
+      {id:'setups',label:'Reglajes',icon:'pits'}
     ];
     const defaults={
       suspension:{
@@ -801,7 +811,11 @@
       const utility=document.querySelector('#symmetry-row');utility.style.display=current==='suspension'||current==='aeroWheels'?'flex':'none';
       document.querySelector('#symmetry').checked=symmetry;
       const workspace=document.querySelector('#workspace');
-      if(current==='strategy'){
+      document.querySelector('#setups-workspace').classList.toggle('hidden',current!=='setups');
+      document.querySelector('#reset').disabled=current==='setups';
+      if(current==='setups'){
+        workspace.className='hidden';workspace.innerHTML='';renderReglajes();
+      }else if(current==='strategy'){
         workspace.className='strategy-workspace';workspace.innerHTML=renderStrategy();requestAnimationFrame(drawWearChart);
       }else{
         workspace.className='workspace';
@@ -889,43 +903,32 @@
       if(current==='strategy'){data.pitStrategy=deepCopy(defaults.pitStrategy);data.tires.compound=data.pitStrategy.initialCompound;}
       changed=true;render();showToast('Valores de esta pestaña restaurados');
     });
+    // Browser design reference only. The native game persists these actions in SQLite.
+    let demoReglajes=[],selectedReglaje=-1;
+    try {const rows=JSON.parse(localStorage.getItem('open-formula-garage-reglajes-demo-v1')||'[]');if(Array.isArray(rows))demoReglajes=rows;}catch(e){}
+    function persistReglajes(){try{localStorage.setItem('open-formula-garage-reglajes-demo-v1',JSON.stringify(demoReglajes));}catch(e){showToast('No se pudo guardar el reglaje');}}
+    function renderReglajes(){
+      const body=document.querySelector('#reglajes-list');body.replaceChildren();
+      demoReglajes.forEach((r,i)=>{const row=document.createElement('tr');row.style.cursor='pointer';if(i===selectedReglaje)row.style.background='var(--steel)';
+        [r.name,'Williams',new Date(r.modified).toLocaleString('es-CO')].forEach(value=>{const cell=document.createElement('td');cell.textContent=value;cell.style.padding='12px';row.append(cell);});
+        row.addEventListener('click',()=>{selectedReglaje=i;renderReglajes();});body.append(row);
+      });
+    }
+    document.querySelector('#create-reglaje').addEventListener('click',()=>{
+      const name=prompt('Nombre del reglaje','Reglaje '+(demoReglajes.length+1));if(!name?.trim())return;
+      const now=new Date().toISOString();demoReglajes.push({name:name.trim(),created:now,modified:now,values:deepCopy(data)});selectedReglaje=demoReglajes.length-1;persistReglajes();renderReglajes();showToast('Reglaje creado');
+    });
     document.querySelector('#save').addEventListener('click',()=>{
-      saved=deepCopy(data);changed=false;
-      try{localStorage.setItem('open-formula-garage-demo-v1',JSON.stringify(saved));}catch(e){}
-      render();showToast('Configuración guardada localmente');
+      if(selectedReglaje<0){showToast('Selecciona un reglaje');return;}
+      demoReglajes[selectedReglaje].values=deepCopy(data);demoReglajes[selectedReglaje].modified=new Date().toISOString();saved=deepCopy(data);changed=false;persistReglajes();render();showToast('Reglaje guardado');
     });
-    document.querySelector('#export').addEventListener('click',()=>{
-      const contents={format:'open-formula-setup-demo',version:2,track:'Australia',units:{spring:'lb/in',antiRoll:'lb/in',fuel:'L',rideHeight:'mm',pressure:'psi',pitTime:'s',refueling:'L/s'},setup:data};
-      const blob=new Blob([JSON.stringify(contents,null,2)],{type:'application/json'});
-      const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='open-formula-australia-setup.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);showToast('Archivo JSON exportado');
+    document.querySelector('#load-reglaje').addEventListener('click',()=>{
+      if(selectedReglaje<0){showToast('Selecciona un reglaje');return;}
+      data=deepCopy(demoReglajes[selectedReglaje].values);changed=true;render();showToast('Reglaje cargado en el editor');
     });
-    document.querySelector('#import').addEventListener('click',()=>document.querySelector('#import-file').click());
-    document.querySelector('#import-file').addEventListener('change',async e=>{
-      const file=e.target.files?.[0];if(!file)return;
-      try{
-        const raw=JSON.parse(await file.text()),original=raw.setup??raw,candidate=normalizeSetup(original);
-        if(!candidate.suspension||!candidate.antiRoll||!candidate.wheels||!candidate.brakes||!candidate.power||!candidate.aero||!candidate.tires)throw Error('Secciones incompletas');
-        for(const [group,keys] of Object.entries(defaults))if(!Object.prototype.hasOwnProperty.call(candidate,group)||typeof candidate[group]!=='object')throw Error('Falta '+group);
-        for(const cat of ['suspension','wheels'])for(const corner of ['FL','FR','RL','RR']){
-          if(!candidate[cat][corner])throw Error('Falta '+cat+'.'+corner);
-          for(const [key,d] of Object.entries(defaults[cat][corner])){
-            let v=candidate[cat][corner][key],s=spec[key];if(typeof v!=='number'||!Number.isFinite(v)||v<s.min||v>s.max)throw Error('Valor no válido: '+cat+'.'+corner+'.'+key);
-          }
-        }
-        for(const [group,def] of Object.entries({antiRoll:defaults.antiRoll,aero:defaults.aero,brakes:defaults.brakes,power:defaults.power}))for(const [key] of Object.entries(def)){
-          const type=key.startsWith('ratio')?'ratio':key,s=spec[type],v=candidate[group][key];
-          if(typeof v!=='number'||!s||!Number.isFinite(v)||v<s.min||v>s.max)throw Error('Valor no válido: '+group+'.'+key);
-        }
-        if(!['Hard','Soft','Medium','Rain'].includes(candidate.tires.compound))throw Error('Compuesto no válido');
-        if(!Array.isArray(candidate.pitStrategy.stops)||candidate.pitStrategy.stops.length>4)throw Error('Paradas inválidas');
-        const limits={totalLaps:[2,200],initialFuel:[0,120],fuelPerLap:[.1,10],refuelRate:[1,20],tireChangeTime:[1,30]};
-        for(const [k,[min,max]] of Object.entries(limits)){const v=candidate.pitStrategy[k];if(typeof v!=='number'||!Number.isFinite(v)||v<min||v>max)throw Error('Valor de estrategia inválido: '+k);}
-        if(!COMPOUNDS[candidate.pitStrategy.initialCompound])throw Error('Compuesto inicial inválido');
-        for(const stop of candidate.pitStrategy.stops){
-          if(!Number.isInteger(stop.lap)||stop.lap<1||stop.lap>=candidate.pitStrategy.totalLaps||!Number.isFinite(stop.fuelAfter)||stop.fuelAfter<0||stop.fuelAfter>120||!COMPOUNDS[stop.compound])throw Error('Parada inválida');
-        }
-        data=deepCopy(candidate);tidyStops();changed=true;render();showToast('Setup JSON importado');
-      }catch(error){showToast('No se pudo importar: '+error.message);}finally{e.target.value='';}
+    document.querySelector('#delete-reglaje').addEventListener('click',()=>{
+      if(selectedReglaje<0||!confirm('¿Eliminar el reglaje seleccionado?'))return;
+      demoReglajes.splice(selectedReglaje,1);selectedReglaje=-1;persistReglajes();renderReglajes();showToast('Reglaje eliminado');
     });
     document.querySelector('#exit').addEventListener('click',()=>{if(window.history.length>1)window.history.back();else showToast('No hay una página anterior a la que volver');});
     render();

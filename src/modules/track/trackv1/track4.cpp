@@ -1214,38 +1214,35 @@ static void AddPitDoors(tTrack *theTrack, void *TrackHandle, bool found)
                 // TODO(kilo)
                 // Proper handling of this should enable non-linear pitlanes.
                 // Postponed after 2.0
-#if 0
-                        tdble pitCenter = toStart + pits->len / 2.0f;
-                        switch(mSeg->type) {
-                            case TR_STR:
-                                pits->driversPits[i].pos.toStart = pitCenter;
-                                break;
-
-                            case TR_LFT:
-                            case TR_RGT:
-                                pits->driversPits[i].pos.toStart = pitCenter / mSeg->radius;
-                                break;
-                        }
-#endif
-                // TODO(kilo) get rid of following 3 lines when above feature is ready
-                pits->driversPits[i].pos.seg = mSeg;
-                pits->driversPits[i].pos.toStart = (tdble)(toStart + pits->len / 2.0);
+                tdble pitCenter = toStart + pits->len / 2.0;
+                tTrackSeg* centerSeg = mSeg;
+                while (pitCenter >= centerSeg->length)
+                {
+                    pitCenter -= centerSeg->length;
+                    centerSeg = centerSeg->next;
+                }
+                pits->driversPits[i].pos.seg = centerSeg;
+                pits->driversPits[i].pos.toStart = centerSeg->type == TR_STR ? pitCenter : pitCenter / centerSeg->radius;
+                curPitSeg = pits->side == TR_RGT ? centerSeg->rside : centerSeg->lside;
+                tTrackSeg* outerSide = pits->side == TR_RGT ? curPitSeg->rside : curPitSeg->lside;
+                offset = outerSide ? curPitSeg->width : 0;
+                if (outerSide) curPitSeg = outerSide;
                 GfLogDebug("toStart: %s %.2f ", mSeg->name, pits->driversPits[i].pos.toStart);
 
                 switch (pits->side)
                 {
                 case TR_RGT:
                     pits->driversPits[i].pos.toRight =
-                        -offset - RtTrackGetWidth(curPitSeg, toStart) + pits->width / 2.0f;
-                    pits->driversPits[i].pos.toLeft = mSeg->width - pits->driversPits[i].pos.toRight;
-                    pits->driversPits[i].pos.toMiddle = mSeg->width / 2.0f - pits->driversPits[i].pos.toRight;
+                        -offset - RtTrackGetWidth(curPitSeg, pitCenter) + pits->width / 2.0f;
+                    pits->driversPits[i].pos.toLeft = centerSeg->width - pits->driversPits[i].pos.toRight;
+                    pits->driversPits[i].pos.toMiddle = centerSeg->width / 2.0f - pits->driversPits[i].pos.toRight;
                     break;
 
                 case TR_LFT:
                     pits->driversPits[i].pos.toLeft =
-                        -offset - RtTrackGetWidth(curPitSeg, toStart) + pits->width / 2.0f;
-                    pits->driversPits[i].pos.toRight = mSeg->width - pits->driversPits[i].pos.toLeft;
-                    pits->driversPits[i].pos.toMiddle = mSeg->width / 2.0f - pits->driversPits[i].pos.toLeft;
+                        -offset - RtTrackGetWidth(curPitSeg, pitCenter) + pits->width / 2.0f;
+                    pits->driversPits[i].pos.toRight = centerSeg->width - pits->driversPits[i].pos.toLeft;
+                    pits->driversPits[i].pos.toMiddle = centerSeg->width / 2.0f - pits->driversPits[i].pos.toLeft;
                     break;
                 } // switch pits->side
 
