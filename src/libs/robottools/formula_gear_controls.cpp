@@ -29,6 +29,22 @@ bool formulaGearControlsEnabled(tCarElt* car)
     return std::strcmp(GfParmGetStr(car->_carHandle, "Formula Controls", "simultaneous gear controls", "no"), "yes") == 0;
 }
 
+double shapeFormulaPedalInput(double input, double curve)
+{
+    const double normalized_input = std::max(0.0, std::min(1.0, input));
+    return std::pow(normalized_input, std::max(1.0, curve));
+}
+
+double advanceFormulaPedal(double current, double target, double delta_time,
+                           double application_rate, double release_rate)
+{
+    const double rate = target > current ? application_rate : release_rate;
+    const double step = std::max(0.0, delta_time) * std::max(0.0, rate);
+    if (target > current)
+        return std::min(target, current + step);
+    return std::max(target, current - step);
+}
+
 void discoverFormulaGameController(tCarElt* car)
 {
     if (formula_game_controller && !SDL_GameControllerGetAttached(formula_game_controller))
@@ -100,11 +116,21 @@ void applyFormulaPedalControls(tCarElt* car, bool keyboard_throttle, bool keyboa
         SDL_GameControllerUpdate();
     const double throttle_trigger = formula_game_controller ? std::max(0, static_cast<int>(SDL_GameControllerGetAxis(formula_game_controller, SDL_CONTROLLER_AXIS_TRIGGERRIGHT))) / 32767.0 : 0.0;
     const double brake_trigger = formula_game_controller ? std::max(0, static_cast<int>(SDL_GameControllerGetAxis(formula_game_controller, SDL_CONTROLLER_AXIS_TRIGGERLEFT))) / 32767.0 : 0.0;
-    const double throttle_target = keyboard_throttle ? 1.0 : std::max(0.0, (throttle_trigger - 0.05) / 0.95);
-    const double brake_target = keyboard_brake ? 1.0 : std::max(0.0, (brake_trigger - 0.05) / 0.95);
+    const double throttle_input = std::max(0.0, std::min(1.0, (throttle_trigger - 0.05) / 0.95));
+    const double brake_input = std::max(0.0, std::min(1.0, (brake_trigger - 0.05) / 0.95));
+    const double throttle_target = keyboard_throttle ? 1.0 : shapeFormulaPedalInput(throttle_input,
+        GfParmGetNum(car->_carHandle, "Formula Controls", "throttle response curve", nullptr, 1.35));
+    const double brake_target = keyboard_brake ? 1.0 : shapeFormulaPedalInput(brake_input,
+        GfParmGetNum(car->_carHandle, "Formula Controls", "brake response curve", nullptr, 1.25));
     FormulaGearControlState& state = formula_gear_control_states[car->index];
-    state.previous_throttle = throttle_target > 0.0 ? throttle_target : std::max(0.0, state.previous_throttle - std::max(0.0, delta_time) * 3.0);
-    state.previous_brake = brake_target > 0.0 ? brake_target : std::max(0.0, state.previous_brake - std::max(0.0, delta_time) * 6.0);
+    const double throttle_application_rate = GfParmGetNum(car->_carHandle, "Formula Controls", "throttle application rate", nullptr, 2.8);
+    const double throttle_release_rate = GfParmGetNum(car->_carHandle, "Formula Controls", "throttle release rate", nullptr, 1.8);
+    const double brake_application_rate = GfParmGetNum(car->_carHandle, "Formula Controls", "brake application rate", nullptr, 4.0);
+    const double brake_release_rate = GfParmGetNum(car->_carHandle, "Formula Controls", "brake release rate", nullptr, 2.0);
+    state.previous_throttle = advanceFormulaPedal(state.previous_throttle, throttle_target, delta_time,
+                                                 throttle_application_rate, throttle_release_rate);
+    state.previous_brake = advanceFormulaPedal(state.previous_brake, brake_target, delta_time,
+                                               brake_application_rate, brake_release_rate);
     car->_accelCmd = static_cast<float>(state.previous_throttle);
     car->_brakeCmd = static_cast<float>(state.previous_brake);
 }

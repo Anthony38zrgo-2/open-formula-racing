@@ -1082,7 +1082,9 @@ void Keyboard(int key, int modifier, int, int)
 }
 void PollController()
 {
-    if (!garageOpen) return;
+    // Poll while driving too so the controller's Start button can reopen the
+    // Formula Garage PIT screen. Other controls remain scoped to the overlay.
+    if (!garageOpen && !FormulaGarageAvailable()) return;
     if (!menuController)
         for (int index = 0; index < SDL_NumJoysticks(); ++index)
             if (SDL_IsGameController(index)) { menuController = SDL_GameControllerOpen(index); break; }
@@ -1093,6 +1095,15 @@ void PollController()
         if (SDL_GameControllerGetButton(menuController, (SDL_GameControllerButton)button)) buttons |= 1u << button;
     const unsigned pressed = buttons & ~previousControllerButtons;
     previousControllerButtons = buttons;
+    if (!garageOpen)
+    {
+        if (pressed & (1u << SDL_CONTROLLER_BUTTON_START))
+        {
+            GfLogInfo("Formula garage input: controller START opened PIT\n");
+            FormulaGarageReturnToPit(nullptr);
+        }
+        return;
+    }
     const struct { int button, key; } mappings[] = {
         {SDL_CONTROLLER_BUTTON_A, SDLK_RETURN}, {SDL_CONTROLLER_BUTTON_B, SDLK_ESCAPE},
         {SDL_CONTROLLER_BUTTON_DPAD_UP, SDLK_UP}, {SDL_CONTROLLER_BUTTON_DPAD_DOWN, SDLK_DOWN},
@@ -1291,6 +1302,8 @@ void FormulaGarageSessionStart()
 bool FormulaGarageCheckArrival()
 {
     if (!FormulaGarageAvailable() || garageOpen) return false;
+    PollController();
+    if (garageOpen) return true;
     tCarElt* car = LmRaceEngine().inData()->s->cars[0];
     const double distance = std::hypot(car->_pos_X - garagePositionX, car->_pos_Y - garagePositionY);
     if (distance > 8.0) arrivalArmed = true;

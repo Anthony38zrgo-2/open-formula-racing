@@ -74,13 +74,28 @@ int main(int argument_count, char** arguments)
         std::cout << label << ": throttle=" << car._accelCmd << " brake=" << car._brakeCmd << (passed ? " PASS" : " FAIL") << '\n';
         failures += !passed;
     };
+    resetFormulaGearControls(&car);
     verify("released triggers", -32768, -32768, false, false, 0.02, 0.0, 0.0);
-    verify("right trigger only", 32767, -32768, false, false, 0.02, 1.0, 0.0);
-    verify("both triggers independent", 32767, 32767, false, false, 0.02, 1.0, 1.0);
-    verify("partial throttle and full brake", 0, 32767, false, false, 0.02, (0.5 - 0.05) / 0.95, 1.0);
-    verify("release smoothing", -32768, -32768, false, false, 0.02, (0.5 - 0.05) / 0.95 - 0.06, 0.88);
-    verify("keyboard fallback", -32768, -32768, true, true, 0.02, 1.0, 1.0);
+    resetFormulaGearControls(&car);
+    verify("throttle application ramp", 32767, -32768, false, false, 0.02, 0.056, 0.0);
+    resetFormulaGearControls(&car);
+    verify("brake application ramp", -32768, 32767, false, false, 0.02, 0.0, 0.08);
+    resetFormulaGearControls(&car);
+    verify("both pedals ramp independently", 32767, 32767, false, false, 0.02, 0.056, 0.08);
+    resetFormulaGearControls(&car);
+    SDL_JoystickSetVirtualAxis(joystick, SDL_CONTROLLER_AXIS_TRIGGERRIGHT, 0);
+    SDL_JoystickSetVirtualAxis(joystick, SDL_CONTROLLER_AXIS_TRIGGERLEFT, 0);
+    for (int step_index = 0; step_index < 20; ++step_index)
+        applyFormulaPedalControls(&car, false, false, 0.02);
+    const double partial_throttle_target = std::pow((0.5 - 0.05) / 0.95, 1.35);
+    const double partial_brake_target = std::pow((0.5 - 0.05) / 0.95, 1.25);
+    verify("partial pedal curves", 0, 0, false, false, 0.02, partial_throttle_target, partial_brake_target);
+    resetFormulaGearControls(&car);
+    verify("full pedal application", 32767, 32767, false, false, 1.0, 1.0, 1.0);
+    verify("progressive pedal release", -32768, -32768, false, false, 0.02, 0.964, 0.96);
     verify("full release", -32768, -32768, false, false, 1.0, 0.0, 0.0);
+    resetFormulaGearControls(&car);
+    verify("keyboard pedal application ramp", -32768, -32768, true, true, 0.02, 0.056, 0.08);
     auto verify_steering = [&](const char* label, Sint16 axis, bool left, bool right, double delta_time, double expected)
     {
         SDL_JoystickSetVirtualAxis(joystick, SDL_CONTROLLER_AXIS_LEFTX, axis);
@@ -133,7 +148,39 @@ int main(int argument_count, char** arguments)
         if (!profile_car._carHandle)
             return EXIT_FAILURE;
         GfParmSetStr(profile_car._carHandle, "Formula Controls", "controller name", descriptor.name);
-        failures += GfParmGetNum(profile_car._carHandle, "Gearbox/gears/r", "ratio", nullptr, 0.0) >= 0.0;
+        GfParmSetNum(profile_car._carHandle, "Formula Controls", "diagnostic telemetry", nullptr, 0.0);
+        const struct { const char* name; double expected; } pedal_settings[] = {
+            {"throttle application rate", 2.8}, {"throttle release rate", 1.8}, {"throttle response curve", 1.35},
+            {"brake application rate", 4.0}, {"brake release rate", 2.0}, {"brake response curve", 1.25}
+        };
+        for (const auto& setting : pedal_settings)
+        {
+            const double actual = GfParmGetNum(profile_car._carHandle, "Formula Controls", setting.name, nullptr, 0.0);
+            const bool passed = std::abs(actual - setting.expected) <= 0.001;
+            std::cout << "profile " << setting.name << "=" << actual << (passed ? " PASS" : " FAIL") << '\n';
+            failures += !passed;
+        }
+        const double reverse_ratio = GfParmGetNum(profile_car._carHandle, "Gearbox/gears/r", "ratio", nullptr, 0.0);
+        std::cout << "profile reverse ratio=" << reverse_ratio << (reverse_ratio < 0.0 ? " PASS" : " FAIL") << '\n';
+        failures += reverse_ratio >= 0.0;
+        resetFormulaGearControls(&profile_car);
+        SDL_JoystickSetVirtualAxis(joystick, SDL_CONTROLLER_AXIS_TRIGGERRIGHT, 32767);
+        SDL_JoystickSetVirtualAxis(joystick, SDL_CONTROLLER_AXIS_TRIGGERLEFT, 32767);
+        SDL_JoystickUpdate();
+        applyFormulaPedalControls(&profile_car, false, false, 1.0);
+        applyFormulaPedalControls(&profile_car, false, false, 0.02);
+        const bool profile_application_passed = std::abs(profile_car._accelCmd - 1.0) <= 0.001 && std::abs(profile_car._brakeCmd - 1.0) <= 0.001;
+        std::cout << "profile pedal application throttle=" << profile_car._accelCmd << " brake=" << profile_car._brakeCmd
+                  << (profile_application_passed ? " PASS" : " FAIL") << '\n';
+        failures += !profile_application_passed;
+        SDL_JoystickSetVirtualAxis(joystick, SDL_CONTROLLER_AXIS_TRIGGERRIGHT, -32768);
+        SDL_JoystickSetVirtualAxis(joystick, SDL_CONTROLLER_AXIS_TRIGGERLEFT, -32768);
+        SDL_JoystickUpdate();
+        applyFormulaPedalControls(&profile_car, false, false, 0.02);
+        const bool profile_release_passed = std::abs(profile_car._accelCmd - 0.964) <= 0.001 && std::abs(profile_car._brakeCmd - 0.96) <= 0.001;
+        std::cout << "profile pedal release throttle=" << profile_car._accelCmd << " brake=" << profile_car._brakeCmd
+                  << (profile_release_passed ? " PASS" : " FAIL") << '\n';
+        failures += !profile_release_passed;
         for (double speed_kilometers_per_hour : {0.0, 100.0, 200.0, 300.0})
         {
             resetFormulaGearControls(&profile_car);
@@ -141,7 +188,10 @@ int main(int argument_count, char** arguments)
             SDL_JoystickSetVirtualAxis(joystick, SDL_CONTROLLER_AXIS_LEFTX, -32768);
             SDL_JoystickUpdate();
             applyFormulaSteeringControls(&profile_car, false, false, 0.02);
-            failures += profile_car._steerCmd <= 0.0 || profile_car._steerCmd > 0.03001;
+            const bool initial_steering_passed = profile_car._steerCmd > 0.0 && profile_car._steerCmd <= 0.03001;
+            std::cout << "installed profile initial steering speed=" << speed_kilometers_per_hour << " command=" << profile_car._steerCmd
+                      << (initial_steering_passed ? " PASS" : " FAIL") << '\n';
+            failures += !initial_steering_passed;
             for (int step_index = 0; step_index < 150; ++step_index)
                 applyFormulaSteeringControls(&profile_car, false, false, 0.02);
             const double expected_command = 1.0 / (1.0 + 0.018 * speed_kilometers_per_hour / 3.6);
@@ -150,14 +200,23 @@ int main(int argument_count, char** arguments)
                       << " expected=" << expected_command << (passed ? " PASS" : " FAIL") << '\n';
             failures += !passed;
             applyFormulaSteeringControls(&profile_car, true, false, 0.02);
-            failures += std::abs(profile_car._steerCmd - 1.0) > 0.001;
+            for (int step_index = 0; step_index < 300; ++step_index)
+                applyFormulaSteeringControls(&profile_car, true, false, 0.02);
+            const bool keyboard_steering_passed = std::abs(profile_car._steerCmd - 1.0) <= 0.001;
+            std::cout << "installed profile keyboard steering speed=" << speed_kilometers_per_hour << " command=" << profile_car._steerCmd
+                      << (keyboard_steering_passed ? " PASS" : " FAIL") << '\n';
+            failures += !keyboard_steering_passed;
         }
     }
     SDL_JoystickClose(joystick);
     SDL_JoystickDetachVirtual(controller_index);
     applyFormulaSteeringControls(&car, false, false, 1.0);
-    failures += std::abs(car._steerCmd) > 0.001;
+    const bool centered_after_detach = std::abs(car._steerCmd) <= 0.001;
+    std::cout << "centered after controller detaches: steering=" << car._steerCmd << (centered_after_detach ? " PASS" : " FAIL") << '\n';
+    failures += !centered_after_detach;
     applyFormulaSteeringControls(&car, true, false, 0.02);
-    failures += std::abs(car._steerCmd - 1.0) > 0.001;
+    const bool keyboard_after_detach = std::abs(car._steerCmd - 1.0) <= 0.001;
+    std::cout << "keyboard after controller detaches: steering=" << car._steerCmd << (keyboard_after_detach ? " PASS" : " FAIL") << '\n';
+    failures += !keyboard_after_detach;
     return failures ? EXIT_FAILURE : EXIT_SUCCESS;
 }

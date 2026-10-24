@@ -350,6 +350,9 @@ def main():
                                              ('steering centering rate', 3.0), ('steering speed sensitivity', 0.018),
                                              ('steering response time', 0.16),
                                              ('steering speed response', arguments.steering_speed_response),
+                                             ('throttle application rate', 2.8), ('throttle release rate', 1.8),
+                                             ('throttle response curve', 1.35), ('brake application rate', 4.0),
+                                             ('brake release rate', 2.0), ('brake response curve', 1.25),
                                              ('diagnostic telemetry', arguments.diagnostic_telemetry),
                                              ('correct thermal camber units', 1.0)]:
         set_number(find_section(document, 'Formula Controls'), parameter_name, parameter_value)
