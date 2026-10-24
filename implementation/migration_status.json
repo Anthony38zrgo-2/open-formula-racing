@@ -794,5 +794,19 @@
     "driving_acceptance": "pending: no new driving session performed",
     "evidence_directory": "D:/open-formula-migration-evidence/toe-heave-20261021",
     "report": "implementation/reports/williams_wheel_local_toe_and_heave_2026-10-21.md"
+  },
+  "collision_unification_2026_10_24": {
+    "implementation": "E1 session world + E2 wheel-centre contact; follow-up fixes carry triangle friction/rolling resistance through to the tire model, orient the ray strip by wheel steer/toe/camber, and correct perpendicular-gap test geometry; E3 contact review partial; E4 not executed",
+    "technical_validation": "16 gate C integration tests, 51 inherited integration tests, and the new material-weighting unit test pass; full unit suite 156 pass / 27 same pre-existing failures; Rust release candidate SHA-256 1C0DE8C7CDEBD2825A7F41BAC56F113A866BC63BD0F3C98B5350ABA7FA2B219F; 2 existing MSVC pure harnesses pass",
+    "host_module_built": false,
+    "installation": "none (distribution still HEAD dll 4AEDAB23)",
+    "human_driving_acceptance": "pending",
+    "reports": [
+      "implementation/reports/collision_architecture_audit.md",
+      "implementation/reports/collision_world_unification.md",
+      "implementation/reports/wheel_center_contact_migration.md",
+      "implementation/reports/contact_integration_validation.md",
+      "implementation/reports/collision_refactor_comparison.csv"
+    ]
   }
 }

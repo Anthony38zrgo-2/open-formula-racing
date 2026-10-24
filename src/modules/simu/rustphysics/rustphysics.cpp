@@ -24,6 +24,7 @@
 #include <track.h>
 
 #include "rust_library.h"
+#include "frame_transform.h"
 #include "../../interfaces/ofp_audio_presentation.h"
 
 namespace
@@ -43,19 +44,42 @@ namespace
     }
 
     // Open Formula / Speed Dreams (X forward, Y left, Z up) -> Rust (X right,
-    // Y up, -Z forward).
+    // Y up, -Z forward). One definition for the whole adapter: `frame_transform.h`,
+    // which is verified on its own by the MSVC harness in
+    // implementation/reports/collision_unification_2026_10_24/_tools.
     inline void sdToRust(double x, double y, double z, OfpVec3& out)
     {
-        out.x = -y;
-        out.y = z;
-        out.z = -x;
+        const ofp::frame::Vec3 mapped = ofp::frame::sd_to_rust(ofp::frame::make(x, y, z));
+        out.x = mapped.x;
+        out.y = mapped.y;
+        out.z = mapped.z;
+    }
+
+    inline ofp::frame::Vec3 toFrame(const OfpVec3& in)
+    {
+        return ofp::frame::make(in.x, in.y, in.z);
+    }
+
+    inline ofp::frame::Vec3 sdToRustOf(double x, double y, double z)
+    {
+        return ofp::frame::sd_to_rust(ofp::frame::make(x, y, z));
+    }
+
+    inline OfpVec3 toOfp(const ofp::frame::Vec3& in)
+    {
+        OfpVec3 out;
+        out.x = in.x;
+        out.y = in.y;
+        out.z = in.z;
+        return out;
     }
 
     inline void rustToSd(const OfpVec3& in, double& x, double& y, double& z)
     {
-        x = -in.z;
-        y = -in.x;
-        z = in.y;
+        const ofp::frame::Vec3 mapped = ofp::frame::rust_to_sd(toFrame(in));
+        x = mapped.x;
+        y = mapped.y;
+        z = mapped.z;
     }
 
     inline double dot3(const double a[3], const double b[3])
@@ -69,9 +93,10 @@ namespace
     //! velocities mix both frames.
     inline void mapRustDirectionToSd(const OfpVec3& in, double out[3])
     {
-        out[0] = -in.z;
-        out[1] = -in.x;
-        out[2] = in.y;
+        const ofp::frame::Vec3 mapped = ofp::frame::rust_to_sd(toFrame(in));
+        out[0] = mapped.x;
+        out[1] = mapped.y;
+        out[2] = mapped.z;
     }
 
     void basisFromSnapshot(const OfpSnapshot& snapshot,
@@ -245,15 +270,93 @@ namespace
     //! so the verbose block is never written in a plain race.
     bool garageDiagnosticsEnabled() { return g_diagnostics; }
 
-    std::string trackGroundMeshPath(tTrack* track)
+    //! Where the session ground geometry comes from, and how to identify it.
+    struct TrackWorldSource
     {
+        std::string path;
+        std::string circuit_id;
+        unsigned revision = 0;
+        bool declared = false;
+    };
+
+    TrackWorldSource trackGroundSource(tTrack* track)
+    {
+        TrackWorldSource source;
         if (!track)
-            return std::string();
+            return source;
         const char* relative =
             GfParmGetStr(track->params, "Header", "ground collision mesh", "");
         if (!relative || !*relative)
-            return std::string();
-        return std::string(GfDataDir()) + relative;
+            return source;
+        source.declared = true;
+        source.path = std::string(GfDataDir()) + relative;
+        // The circuit identity the session reports is the track's own name, never the
+        // file name: two circuits may ship a document with the same file name.
+        const char* name = GfParmGetStr(track->params, "Header", "name", "");
+        source.circuit_id = (name && *name) ? name : std::string();
+        if (source.circuit_id.empty())
+        {
+            const std::string path = source.path;
+            const size_t separator = path.find_last_of("/\\");
+            source.circuit_id = separator == std::string::npos ? path : path.substr(separator + 1);
+        }
+        const double version = GfParmGetNum(track->params, "Header", "version", nullptr, 0.0);
+        source.revision = version > 0.0 ? static_cast<unsigned>(version) : 1u;
+        return source;
+    }
+
+    //! Installs the circuit geometry as the single session world, replacing any previous
+    //! one. Returns the triangle count, or -1 when the session has no usable geometry.
+    //! A previous session's world is never reused: that was the stale-track path.
+    int installTrackWorld(const TrackWorldSource& source)
+    {
+        if (!rustPhysicsLibrary.isLoaded())
+            return -1;
+        if (!source.declared)
+        {
+            GfLogError("Rust physics: the circuit declares no 'ground collision mesh'; "
+                       "the session has no authoritative ground geometry\n");
+            return -1;
+        }
+        int triangles = -1;
+        if (rustPhysicsLibrary.loadTrackGroundMeshV2)
+        {
+            triangles = rustPhysicsLibrary.loadTrackGroundMeshV2(
+                source.path.c_str(), source.circuit_id.c_str(),
+                static_cast<std::uint32_t>(source.revision));
+        }
+        else if (rustPhysicsLibrary.loadTrackGroundMesh)
+        {
+            triangles = rustPhysicsLibrary.loadTrackGroundMesh(source.path.c_str());
+        }
+        if (triangles <= 0)
+        {
+            char error[1024] = { 0 };
+            if (rustPhysicsLibrary.worldLastError)
+                rustPhysicsLibrary.worldLastError(error, sizeof(error));
+            GfLogError("Rust physics: cannot install the ground world %s (%s): %s\n",
+                       source.path.c_str(), source.circuit_id.c_str(),
+                       error[0] ? error : "unknown cause");
+            return -1;
+        }
+        return triangles;
+    }
+
+    //! One-line identity of the installed world: circuit, revision, payload hash,
+    //! triangle count and AABB. Written to the log so two sessions can be compared.
+    void logTrackWorldIdentity(const char* reason)
+    {
+        if (!rustPhysicsLibrary.worldIdentityJson)
+            return;
+        static char buffer[2048];
+        buffer[0] = '\0';
+        const int length = rustPhysicsLibrary.worldIdentityJson(buffer, sizeof(buffer));
+        const unsigned long long generation =
+            rustPhysicsLibrary.worldGeneration ? rustPhysicsLibrary.worldGeneration() : 0ull;
+        const unsigned long long installs =
+            rustPhysicsLibrary.worldInstallCount ? rustPhysicsLibrary.worldInstallCount() : 0ull;
+        GfLogInfo("RUSTWORLD reason=%s generation=%llu installs=%llu bytes=%d identity=%s\n",
+                  reason, generation, installs, length, buffer);
     }
 
     void publishCar(RustCar& car)
@@ -263,21 +366,18 @@ namespace
             return;
         const OfpSnapshot& s = car.snapshot;
 
-        const double origin[3] = { s.position.x, s.position.y, s.position.z };
-        const double com[3] = {
-            origin[0] + s.basis_x.x * car.center_of_mass_local.x
-                + s.basis_y.x * car.center_of_mass_local.y
-                + s.basis_z.x * car.center_of_mass_local.z,
-            origin[1] + s.basis_x.y * car.center_of_mass_local.x
-                + s.basis_y.y * car.center_of_mass_local.y
-                + s.basis_z.y * car.center_of_mass_local.z,
-            origin[2] + s.basis_x.z * car.center_of_mass_local.x
-                + s.basis_y.z * car.center_of_mass_local.y
-                + s.basis_z.z * car.center_of_mass_local.z,
+        // Published centre of gravity, from the single conversion in frame_transform.h.
+        // Speed Dreams publishes `DynGCg.pos` as the CG, not as the body origin; the
+        // inverse direction lives in `RustPhysics::setCar`.
+        const ofp::frame::Basis body_basis = {
+            toFrame(s.basis_x), toFrame(s.basis_y), toFrame(s.basis_z)
         };
+        const ofp::frame::Vec3 com_rust =
+            ofp::frame::com_from_origin(toFrame(s.position), body_basis,
+                                        toFrame(car.center_of_mass_local));
 
         double com_x, com_y, com_z;
-        rustToSd(OfpVec3{ com[0], com[1], com[2] }, com_x, com_y, com_z);
+        rustToSd(toOfp(com_rust), com_x, com_y, com_z);
         double vel_x, vel_y, vel_z;
         rustToSd(s.linear_velocity, vel_x, vel_y, vel_z);
         double acc_x, acc_y, acc_z;
@@ -745,6 +845,20 @@ namespace
                       s.wheels[wheel].contact_point.x, s.wheels[wheel].contact_point.y, s.wheels[wheel].contact_point.z,
                       s.wheels[wheel].contact_normal.x, s.wheels[wheel].contact_normal.y, s.wheels[wheel].contact_normal.z);
         }
+        // Full contact telemetry: one JSON document per sample with the wheel-centre
+        // geometry, the three rays, the gaps, the applied impulses, the energy ledger
+        // and the identity of the collision world that produced them. Diagnostics only.
+        if (rustPhysicsLibrary.contactReport && car.handle)
+        {
+            static char report[8192];
+            report[0] = '\0';
+            const int length = rustPhysicsLibrary.contactReport(car.handle, report, sizeof(report));
+            if (length > 0)
+            {
+                GfLogInfo("RUSTCONTACT time=%.4f car=%d bytes=%d report=%s\n",
+                          s.sim_time_s, car.index, length, report);
+            }
+        }
         // Per-axle solve quality and the bar load: the coupling that can hold a
         // corner while the other one is free.
         for (int axle = 0; axle < 2; ++axle)
@@ -1049,7 +1163,6 @@ namespace
         OfpVec3 origin;
         // Rust body origin = COM - basis * cg_local; at spawn the basis is yaw only.
         const double yaw = (double)elt->_yaw;
-        const double cos_yaw = std::cos(yaw);
 
         // Speed Dreams basis: forward = (cos, sin, 0), left = (-sin, cos, 0), up = (0,0,1).
         const double com_x = (double)elt->_pos_X;
@@ -1070,14 +1183,14 @@ namespace
         }
         rustPhysicsLibrary.vehicleGeometry(car.handle, &car.center_of_mass_local, &car.inertia,
                                            &car.spawn_height, &car.mass);
-        // Reposition so that the published COM matches the placement.
-        OfpVec3 cg_offset{
-            car.center_of_mass_local.x * cos_yaw,
-            car.center_of_mass_local.y,
-            car.center_of_mass_local.z * cos_yaw };
-        origin.x -= cg_offset.x;
-        origin.y -= cg_offset.y;
-        origin.z -= cg_offset.z;
+        // Reposition so that the published centre of gravity matches the placement.
+        // The previous implementation rotated only the cosine terms of the offset, so a
+        // car spawned on a yawed heading was displaced by up to |com_local| * sin(yaw).
+        const ofp::frame::Basis spawn_basis = ofp::frame::basis_from_sd_euler(0.0, 0.0, yaw);
+        const ofp::frame::Vec3 com_rust = sdToRustOf(com_x, com_y, com_z);
+        const ofp::frame::Vec3 body_origin =
+            ofp::frame::origin_from_com(com_rust, spawn_basis, toFrame(car.center_of_mass_local));
+        origin = toOfp(body_origin);
         rustPhysicsLibrary.reset(car.handle, origin, yaw);
         car.ready = true;
         car.failed = false;
@@ -1190,21 +1303,28 @@ void RustPhysics::initialize(int nCars, struct Track* pTrack)
         : "cars/rust/williams-fw19-hockenheim/vehicle.json";
     g_profile_path = std::string(GfDataDir()) + profile;
 
-    g_ground_mesh_path = trackGroundMeshPath(pTrack);
-    if (!g_track_ready && rustPhysicsLibrary.isLoaded())
+    // One world per session. The install replaces any previous circuit inside the same
+    // process; the Rust registry bumps its generation, so vehicles of the previous
+    // session refuse to step instead of querying the old triangles.
+    const TrackWorldSource world_source = trackGroundSource(pTrack);
+    g_ground_mesh_path = world_source.path;
+    g_track_ready = false;
+    if (rustPhysicsLibrary.isLoaded())
     {
-        const int triangles = rustPhysicsLibrary.loadTrackGroundMesh(g_ground_mesh_path.c_str());
-        if (triangles < 0)
+        const int triangles = installTrackWorld(world_source);
+        if (triangles > 0)
         {
-            GfLogError("Rust physics: cannot load the ground mesh %s\n",
-                       g_ground_mesh_path.c_str());
+            g_track_ready = true;
+            GfLogInfo("Rust physics: ground world %s circuit=%s revision=%u (%d triangles)\n",
+                      world_source.path.c_str(), world_source.circuit_id.c_str(),
+                      world_source.revision, triangles);
+            logTrackWorldIdentity("initialize");
         }
         else
         {
-            GfLogInfo("Rust physics: ground mesh %s (%d triangles)\n",
-                      g_ground_mesh_path.c_str(), triangles);
+            GfLogError("Rust physics: the session runs without authoritative ground "
+                       "geometry; car creation will be refused\n");
         }
-        g_track_ready = true;
     }
     GfLogInfo("Rust physics: profile %s\n", g_profile_path.c_str());
     if (configuration)
@@ -1323,14 +1443,26 @@ void RustPhysics::setCar(const struct DynPt& dynGCG, int nCarIndex)
     if (!car.car || !car.handle)
         return;
     car.car->pub.DynGCg = dynGCG;
-    OfpVec3 origin;
-    sdToRust((double)dynGCG.pos.x, (double)dynGCG.pos.y, (double)dynGCG.pos.z, origin);
-    // Rust basis columns for a Speed Dreams yaw: right = (cos, 0, -sin),
-    // up = (0, 1, 0), back = (sin, 0, cos).
-    OfpVec3 bx{ std::cos(dynGCG.pos.az), 0.0, -std::sin(dynGCG.pos.az) };
-    OfpVec3 by{ 0.0, 1.0, 0.0 };
-    OfpVec3 bz{ std::sin(dynGCG.pos.az), 0.0, std::cos(dynGCG.pos.az) };
-    rustPhysicsLibrary.setPose(car.handle, origin, bx, by, bz);
+    // `DynGCg.pos` is the centre of gravity. Rust owns the body origin, so the CG must
+    // be converted back with the inverse of `publishCar`: origin = com - basis * cg.
+    // The previous implementation forwarded the CG as the origin (a displacement of
+    // |com_local|, ~0.3 m) and rebuilt the basis from the yaw alone, discarding pitch
+    // and roll; a rolled or banked car was therefore re-seated level.
+    const ofp::frame::Basis basis = ofp::frame::basis_from_sd_euler(
+        (double)dynGCG.pos.ax, (double)dynGCG.pos.ay, (double)dynGCG.pos.az);
+    if (ofp::frame::orthonormality_error(basis) > 1.0e-6)
+    {
+        GfLogWarning("Rust physics: setCar received a non-orthonormal attitude for car %d "
+                     "(yaw=%.6f pitch=%.6f roll=%.6f); the pose is normalised by Rust\n",
+                     nCarIndex, (double)dynGCG.pos.az, (double)dynGCG.pos.ay,
+                     (double)dynGCG.pos.ax);
+    }
+    const ofp::frame::Vec3 com_rust =
+        sdToRustOf((double)dynGCG.pos.x, (double)dynGCG.pos.y, (double)dynGCG.pos.z);
+    const ofp::frame::Vec3 body_origin = ofp::frame::origin_from_com(
+        com_rust, basis, toFrame(car.center_of_mass_local));
+    rustPhysicsLibrary.setPose(car.handle, toOfp(body_origin),
+                               toOfp(basis.x), toOfp(basis.y), toOfp(basis.z));
 }
 
 struct DynPt* RustPhysics::getCar(int nCarIndex)
@@ -1349,6 +1481,12 @@ void RustPhysics::shutdown()
     g_cars.clear();
     g_track = nullptr;
     g_track_ready = false;
+    g_ground_mesh_path.clear();
+    if (rustPhysicsLibrary.releaseTrackGroundMesh)
+    {
+        const int released = rustPhysicsLibrary.releaseTrackGroundMesh();
+        GfLogInfo("Rust physics: ground world released=%d\n", released);
+    }
 }
 
 bool RustPhysics::applySetupPatch(int car_index, const std::string& patch_json, std::string& error)

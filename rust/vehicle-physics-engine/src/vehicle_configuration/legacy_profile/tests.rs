@@ -48,6 +48,8 @@ fn round_trip_preserves_all_fields() {
     );
 }
 
+#[cfg(feature = "retired-f1-2030-fixtures")]
+#[cfg(feature = "retired-f1-2030-fixtures")]
 #[test]
 fn golden_json_matches_canonical() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))

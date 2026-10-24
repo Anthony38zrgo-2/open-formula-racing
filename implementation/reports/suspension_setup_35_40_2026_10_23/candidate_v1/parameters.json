@@ -1,0 +1,7 @@
+{
+  "front_spring_n_m": 200000,
+  "rear_spring_n_m": 1200000,
+  "front_bar_ratio": 0.15,
+  "rear_bar_ratio": 0.12,
+  "result": "platform passes; trail-brake reversal loses directional stability, candidate superseded"
+}

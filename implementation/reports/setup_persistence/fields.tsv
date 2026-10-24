@@ -1,0 +1,38 @@
+suspension.front.resting_ratio	Front ride height ratio	ratio	0.27142857142857146	0.2	0.8	0.005	1
+suspension.rear.resting_ratio	Rear ride height ratio	ratio	0.3366153846153846	0.2	0.8	0.005	1
+suspension.front.damping_ratio	Front damper ratio	ratio	0.74	0.05	1.2	0.01	1
+suspension.rear.damping_ratio	Rear damper ratio	ratio	0.71	0.05	1.2	0.01	1
+suspension.front.bump_damp_multiplier	Front bump multiplier	ratio	1	0.2	3	0.01	1
+suspension.rear.bump_damp_multiplier	Rear bump multiplier	ratio	0.9	0.2	3	0.01	1
+suspension.front.rebound_damp_multiplier	Front rebound multiplier	ratio	1.12	0.2	3	0.01	1
+suspension.rear.rebound_damp_multiplier	Rear rebound multiplier	ratio	1.35	0.2	3	0.01	1
+suspension.geometry_physical.front_arb.ratio	Front anti-roll ratio	ratio	0.15	0	2	0.01	1
+suspension.geometry_physical.rear_arb.ratio	Rear anti-roll ratio	ratio	0.09	0	2	0.01	1
+suspension.front.toe	Front toe (local)	rad	-0.001745329252	-0.05	0.05	0.001	1
+suspension.rear.toe	Rear toe (local)	rad	0	-0.05	0.05	0.001	1
+suspension.front.camber	Front camber	rad	-0.06981317008	-0.1	0.05	0.001	1
+suspension.rear.camber	Rear camber	rad	-0.02617993878	-0.1	0.05	0.001	1
+suspension.front.bump_stop_multiplier	Front bump stop	ratio	2.6	0	4	0.05	1
+suspension.rear.bump_stop_multiplier	Rear bump stop	ratio	2.8	0	4	0.05	1
+brakes.front_brake_bias	Front brake bias	fraction	0.59	0.3	0.8	0.005	1
+brakes.max_brake_torque	Maximum brake torque	N m	4000	500	8000	50	1
+powertrain.differential.preload_nm	Differential preload	N m	90	0	120	1	1
+powertrain.differential.power_ramp_angle_deg	Differential power ramp	deg	65	5	80	1	1
+powertrain.differential.coast_ramp_angle_deg	Differential coast ramp	deg	60	5	80	1	1
+powertrain.differential.clutches	Differential clutches	count	6	1	8	1	1
+powertrain.final_drive	Final drive	ratio	4.65	2	6	0.01	1
+powertrain.max_rpm	Rev limiter	rpm	17500	6000	22000	100	1
+aero.model.front_wing.incidence_deg	Front wing incidence	deg	18	0	20	0.5	1
+aero.model.rear_wing.incidence_deg	Rear wing incidence	deg	16	0	20	0.5	1
+steering.max_steering_angle	Maximum steering angle	rad	0.314	0.15	0.7	0.005	1
+steering.steering_speed	Steering speed	1/s	8	1	12	0.05	1
+fuel.initial_kg	Fuel load	kg	7.6	0	120	0.5	1
+fuel.density_kg_per_litre	Fuel density (conversion)	kg/L	0.75	0	0	0	0
+tires.pressure.cold_kpa_gauge.FL	Front left cold pressure	kPa gauge	130	80	220	1	1
+tires.pressure.cold_kpa_gauge.FR	Front right cold pressure	kPa gauge	130	80	220	1	1
+tires.pressure.cold_kpa_gauge.RL	Rear left cold pressure	kPa gauge	120	80	220	1	1
+tires.pressure.cold_kpa_gauge.RR	Rear right cold pressure	kPa gauge	120	80	220	1	1
+suspension.front.spring_length	Front spring length (design)	m	0.35	0	0	0	0
+suspension.rear.spring_length	Rear spring length (design)	m	0.325	0	0	0	0
+tires.front.radius	Front tire radius (design)	m	0.311949	0	0	0	0
+tires.rear.radius	Rear tire radius (design)	m	0.322016	0	0	0	0

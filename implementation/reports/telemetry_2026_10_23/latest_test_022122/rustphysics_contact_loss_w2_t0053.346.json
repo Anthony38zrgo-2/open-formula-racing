@@ -1,0 +1,25 @@
+{
+  "reason": "contact_loss",
+  "trigger_time_s": 53.346000,
+  "wheel": 2,
+  "window_pre_s": 3,
+  "window_post_s": 1,
+  "window_from_s": 50.346000,
+  "rows": 20480,
+  "csv": "D:/open-formula/distribution/user-settings/rustphysics/rustphysics_contact_loss_w2_t0053.346.csv",
+  "failure_code": 0,
+  "failure_label": "none",
+  "failure_axle": 0,
+  "failure_wheel": 0,
+  "failure_iteration": 0,
+  "failure_subdivisions": 0,
+  "failure_demand_m": 0.000000000,
+  "failure_limit_m": 0.000000000,
+  "failure_excess_m": 0.000000000,
+  "failure_limit_velocity_m_s": 0.000000,
+  "failure_residual_m_s": 0.000000000
+,
+  "oldest_retained_time_s": 52.8320000000186,
+  "overwritten_records": 738849,
+  "history_truncated": true
+}

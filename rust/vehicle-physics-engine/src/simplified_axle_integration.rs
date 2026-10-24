@@ -40,7 +40,9 @@ pub(super) struct AxleSolveDiagnostics {
     pub corner_residual_m_s: [f64; 2],
 }
 
-fn ground_gap(compression: f64, limit: f64) -> f64 { compression - limit }
+fn ground_gap(compression: f64, limit: f64) -> f64 {
+    compression - limit
+}
 
 /// One corner of one axle substep, expressed in the units the host log reports.
 #[allow(clippy::too_many_arguments)]
@@ -346,14 +348,29 @@ fn integrate_implicit_axle(
             let left = 0.5 * (low + high);
             let right = corner_step(1, left).velocity_metres_per_second;
             next_velocities = [left, right];
-            if projected_norm(next_velocities) <= tolerance { converged = true; break; }
-            if residual_at(0, next_velocities) > 0.0 { high = left; } else { low = left; }
+            if projected_norm(next_velocities) <= tolerance {
+                converged = true;
+                break;
+            }
+            if residual_at(0, next_velocities) > 0.0 {
+                high = left;
+            } else {
+                low = left;
+            }
         }
     }
-    let steps = [corner_step(0, next_velocities[1]), corner_step(1, next_velocities[0])];
+    let steps = [
+        corner_step(0, next_velocities[1]),
+        corner_step(1, next_velocities[0]),
+    ];
     let accepted = steps.map(|step| step.velocity_metres_per_second);
-    let corner_residual_m_s = [projected_residual(0, accepted), projected_residual(1, accepted)];
-    let residual_m_s = corner_residual_m_s[0].abs().max(corner_residual_m_s[1].abs());
+    let corner_residual_m_s = [
+        projected_residual(0, accepted),
+        projected_residual(1, accepted),
+    ];
+    let residual_m_s = corner_residual_m_s[0]
+        .abs()
+        .max(corner_residual_m_s[1].abs());
     converged &= residual_m_s <= 1e-7;
     (
         steps,
@@ -440,11 +457,16 @@ impl SuspensionSystem {
                 counts[1].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             }
         }
-        let (spring_compression_metres, motion_ratio, _) = prepared_pose
-            .expect("Equivalent suspension parameters and travel must be valid");
+        let (spring_compression_metres, motion_ratio, _) =
+            prepared_pose.expect("Equivalent suspension parameters and travel must be valid");
         let geometry_invalid = false;
         let tuning = WheelMechanicalTuning::for_wheel(configuration, wheel);
-        let contact = if state.contact_fraction > 0.0 {
+        // Unilateral contact: enforce the ground limit only while the tyre is touching
+        // or penetrating it. A floating corner keeps the constraint inactive, so the
+        // solver never produces a normal impulse for a wheel that is in the air.
+        let contact = if state.contact_fraction > 0.0
+            && state.ground_gap_m <= crate::suspension::CONTACT_GAP_TOLERANCE_M
+        {
             SimplifiedNormalContact {
                 road_compression_metres: state.normal_road_compression_metres,
                 road_velocity_metres_per_second: state.normal_road_velocity_metres_per_second,
@@ -552,7 +574,9 @@ impl SuspensionSystem {
             AnchorKinematics {
                 mount_position: com_world + mount_arm,
                 mount_velocity: body_velocity + omega.cross(mount_arm),
-                mount_acceleration: body_acceleration + alpha.cross(mount_arm) + omega.cross(omega.cross(mount_arm)),
+                mount_acceleration: body_acceleration
+                    + alpha.cross(mount_arm)
+                    + omega.cross(omega.cross(mount_arm)),
                 position: com_world + arm,
                 velocity: body_velocity + omega.cross(arm),
             }
@@ -564,9 +588,10 @@ impl SuspensionSystem {
                 + omega.cross(omega.cross(arm))
                 + omega.cross(body_up) * (2.0 * corners[index].initial_velocity_metres_per_second)
         });
-        let axial_gravity = anchor_acceleration.map(|acceleration|
+        let axial_gravity = anchor_acceleration.map(|acceleration| {
             crate::wheel_mechanics::GRAVITY_M_S2 * body_orientation.y.dot(Vec3::UP)
-            + acceleration.dot(body_orientation.y));
+                + acceleration.dot(body_orientation.y)
+        });
         let target_duration_seconds = corners
             .iter()
             .map(|corner| corner.tuning.mechanical_substep_s.max(1e-5))
@@ -604,14 +629,16 @@ impl SuspensionSystem {
                 // The road limit must use that SAME endpoint, not the old velocity.
                 let normal = self.wheels[corners[index].wheel as usize].effective_normal;
                 let projection = normal.dot(body_orientation.y).max(1e-3);
-                contact.limit_velocity_metres_per_second -= normal.dot(anchor_acceleration[index])
-                    / projection * substep_duration_seconds;
+                contact.limit_velocity_metres_per_second -=
+                    normal.dot(anchor_acceleration[index]) / projection * substep_duration_seconds;
                 contact
             });
             last_ground_contacts = ground_contacts;
             for index in 0..2 {
-                if ground_contacts[index].active && ground_contacts[index].limit_at(substep_duration_seconds)
-                    > corners[index].compression_bounds_metres().1 + 1e-9 {
+                if ground_contacts[index].active
+                    && ground_contacts[index].limit_at(substep_duration_seconds)
+                        > corners[index].compression_bounds_metres().1 + 1e-9
+                {
                     let demand_m = ground_contacts[index].limit_at(substep_duration_seconds);
                     let limit_m = corners[index].compression_bounds_metres().1;
                     let failure = FailureDiagnostics {
@@ -623,8 +650,7 @@ impl SuspensionSystem {
                         demand_m,
                         limit_m,
                         excess_m: demand_m - limit_m,
-                        limit_velocity_m_s: ground_contacts[index]
-                            .limit_velocity_metres_per_second,
+                        limit_velocity_m_s: ground_contacts[index].limit_velocity_metres_per_second,
                         residual_m_s: 0.0,
                         axle_wheels: [corners[0].wheel as i32, corners[1].wheel as i32],
                     };
@@ -736,7 +762,9 @@ impl SuspensionSystem {
                 // Remove weight and moving-frame inertia: only internal elements
                 // and the opposite hard-stop impulse belong on the body.
                 result.suspension_impulse_newton_seconds += step.suspension_impulse_newton_seconds
-                    - corner.tuning.physical_unsprung_mass_kg * axial_gravity[index] * substep_duration_seconds;
+                    - corner.tuning.physical_unsprung_mass_kg
+                        * axial_gravity[index]
+                        * substep_duration_seconds;
                 result.travel_limit_impulse_newton_seconds +=
                     step.travel_limit_impulse_newton_seconds;
                 let (_, damping_force, spring_compression, motion_ratio, motion_ratio_rate) =
@@ -878,9 +906,7 @@ mod tests {
             |_, _, _| 0.0,
         );
         let momentum_change = mass * (steps[0].velocity_metres_per_second + 2.0);
-        assert!(
-            (momentum_change - steps[0].normal_contact_impulse_newton_seconds).abs() < 1e-9
-        );
+        assert!((momentum_change - steps[0].normal_contact_impulse_newton_seconds).abs() < 1e-9);
         assert!(steps[0].compression_metres >= 0.019 - 1e-12);
         assert_eq!(steps[1].normal_contact_impulse_newton_seconds, 0.0);
     }

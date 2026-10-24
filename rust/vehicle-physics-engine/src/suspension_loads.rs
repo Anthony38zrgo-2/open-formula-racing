@@ -916,6 +916,8 @@ mod tests {
         assert!(!paths.singular);
     }
 
+    #[cfg(feature = "retired-f1-2030-fixtures")]
+    #[cfg(feature = "retired-f1-2030-fixtures")]
     #[test]
     fn f1_2030_symmetric_rear_load_has_no_net_yaw_or_roll() {
         let cfg = crate::vehicle_config::VehicleConfig::from_json_str(include_str!(

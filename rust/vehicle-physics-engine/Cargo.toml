@@ -11,6 +11,12 @@ name = "vehicle_physics_engine"
 path = "src/lib.rs"
 crate-type = ["rlib", "cdylib"]
 
+[features]
+# Upstream F1 2030 fixtures that the Open Formula port does not ship. The affected
+# tests are compiled only when this feature is enabled; enabling it without the
+# profile documents is a deliberate compile error, never a silent skip.
+retired-f1-2030-fixtures = []
+
 [dependencies]
 parry3d-f64 = "=0.23.0"
 serde = { version = "1", features = ["derive"] }

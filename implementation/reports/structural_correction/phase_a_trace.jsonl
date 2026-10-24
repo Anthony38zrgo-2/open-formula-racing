@@ -1,0 +1,18 @@
+{"bank":"mass_contract","total_kg":612.600000,"corner_kg":[15.0, 15.0, 18.0, 18.0],"unsprung_kg":66.000000,"sprung_kg":546.600000,"inertia_total":[396.030473,462.181143,104.899730],"inertia_sprung":[254.968532,281.500842,56.605893]}
+{"bank":"p0_airborne_arb","fl_arb_n":412.180194,"fr_arb_n":-412.180194,"fr_arb_lifted_n":-633.229005,"fr_element_n":1964.672310,"fr_element_lifted_n":355.260205,"torque_both_z":-2481.302483,"torque_lifted_z":-4013.020250}
+{"bank":"free_fall","body_a_y":-4.069038,"corner_mass_kg":66.000000,"com_a_y":-9.805539,"total_mass_kg":612.600000}
+{"bank":"p0_airborne_wheel","fr_chassis_suspension_force_n":1193.108681,"fr_airborne_force_n":785.533020,"body_vertical_force_delta_n":379.773259,"element_force_delta_n":379.786115,"total_mass_kg":612.600000,"fr_normal_force_n":1339.643579}
+{"bank":"axle_fallback_usage","fallbacks_both_grounded":0,"fallbacks_fr_airborne":0,"max_iterations":4}
+{"bank":"coarse_frame_subdivision","dt_s":0.008333333,"y":0.052536,"speed":2.056562,"grounded":4,"fallbacks":0}
+{"bank":"inclined_plane","roll_rad":0.050000,"loads":[1348.7644017255495, 1262.3892703689655, 1723.7973844687513, 1707.105000054032],"total_n":6042.056057,"expected_n":6000.045912,"compressions":[0.04058455195557527, 0.04022903483619556, 0.061749565936544376, 0.0614089454292744],"grounded":4}
+{"bank":"coarse_frame_subdivision","dt_s":0.008333333,"y":0.052536,"speed":2.056562,"grounded":4,"fallbacks":0}
+{"bank":"published_normal_impulse","worst_impulse_error_ns":0.000000000,"compression_before":[0.04034911899576267, 0.04034907240946932, 0.060303317118871665, 0.060303272484602315],"compression_after":[0.040350365936198215, 0.04035032176492776, 0.06029786829772642, 0.060297825977287424]}
+{"bank":"partial_contact","fraction":0.250000,"load_n":1338.855728,"grounded":true,"compression_m":0.040343}
+{"bank":"temporal_sweep","dt_s":0.004166667,"y":0.052536,"speed":2.056562,"grounded":4,"fallbacks":0}
+{"bank":"inclined_plane","roll_rad":-0.050000,"loads":[1258.917358934029, 1345.637799187434, 1709.1927798628956, 1728.4714741570597],"total_n":6042.219412,"expected_n":6000.045912,"compressions":[0.04017664112215725, 0.04052351300376091, 0.06144648532419698, 0.06177882283997013],"grounded":4}
+{"bank":"ray_loss","fr_element_n":-146.475243,"grounded":3,"y":0.027160}
+{"bank":"geometry_envelope","detail":"FrontLeft: q [-0.0850, 0.0250] m, rest 0.0950 m, comp 0.0382 m, k_wheel 103040 N/m; FrontRight: q [-0.0850, 0.0250] m, rest 0.0950 m, comp 0.0381 m, k_wheel 103040 N/m; RearLeft: q [-0.0900, 0.0300] m, rest 0.1094 m, comp 0.0664 m, k_wheel 19602 N/m; RearRight: q [-0.0900, 0.0300] m, rest 0.1094 m, comp 0.0663 m, k_wheel 19602 N/m; "}
+{"bank":"flat_ground_drive","settled_y":0.052630,"final_y":0.050983,"speed":5.677120,"grounded":4,"fallbacks":0,"max_iterations":1}
+{"bank":"kerb_step","speed_before":6.016460,"peak_load_n":75189.948022,"y_before":0.052418,"final_y":0.051294,"grounded":4,"fallbacks":0,"max_iterations":4}
+{"bank":"reset","y_before":0.052630,"y_after":0.052630,"comp_before":[0.04034116479390819, 0.04034105050319177, 0.05985135245247754, 0.05985124295068516],"comp_after":[0.040342298580989505, 0.04034250475912529, 0.05985109989268589, 0.05985129743169986]}
+{"bank":"temporal_sweep","dt_s":0.002083333,"y":0.052545,"speed":2.051641,"grounded":4,"fallbacks":0}

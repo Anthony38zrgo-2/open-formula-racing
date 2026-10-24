@@ -1,0 +1,6 @@
+[1/6] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/validate_formula_setups.dir/__/__/__/__/tools/validate_formula_setups.cpp.obj
+[2/6] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/validate_formula_setups.dir/racescreens/formula_setup_store.cpp.obj
+[3/6] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/racescreens/formula_setup_store.cpp.obj
+[4/6] Linking CXX executable src\modules\userinterface\legacymenu\validate_formula_setups.exe
+[5/6] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/racescreens/formula_garage_menu.cpp.obj
+[6/6] Linking CXX shared module lib\games\speed-dreams-2\modules\userinterface\legacymenu.dll

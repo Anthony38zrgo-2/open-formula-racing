@@ -1,0 +1,34 @@
+{
+  "dll": "D:\\open-formula\\distribution\\lib\\games\\speed-dreams-2\\modules\\simu\\vehicle_physics_engine.dll",
+  "sha256": "ba4dc5a73277bb13b4f86f9fb54790ae9cb3d99530bf423ca3f2dc813edbead7",
+  "abi_signature": "0xeebdad2292b2359d",
+  "actual_Melbourne_spawn": [
+    {
+      "setup": "base",
+      "accepted_steps": 240,
+      "simulated_seconds": 0.9999999999999977,
+      "wall_seconds": 0.1249777000011818,
+      "normal_loads_n": [
+        1327.5694648147075,
+        1344.162704137067,
+        1676.7370999519098,
+        1658.7435553727616
+      ],
+      "mean_wall_ms_per_step": 0.5207404166715908
+    },
+    {
+      "setup": "Reglaje 1",
+      "accepted_steps": 240,
+      "simulated_seconds": 0.9999999999999977,
+      "wall_seconds": 0.1400415999996767,
+      "normal_loads_n": [
+        1327.6026928471808,
+        1344.1992393214487,
+        1676.808067003711,
+        1658.8098555023698
+      ],
+      "mean_wall_ms_per_step": 0.5835066666653196
+    }
+  ],
+  "manual_T3": "pending_user"
+}

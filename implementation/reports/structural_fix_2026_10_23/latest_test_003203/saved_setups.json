@@ -1,0 +1,15 @@
+[
+  {
+    "id": 1,
+    "name": "Reglaje 1",
+    "circuit_id": "melbourne-nineteen-ninety-seven",
+    "team_id": "williams",
+    "car_id": "williams-nineteen-ninety-seven",
+    "physics_backend": "rustphysics",
+    "base_profile_sha256": "f694d542599c117927cdb034e7c25544f3ad6813b0a7c0c398d658afcd62c069",
+    "schema_version": 1,
+    "values_json": "{\"aero.model.front_wing.incidence_deg\":18,\"aero.model.rear_wing.incidence_deg\":20,\"brakes.front_brake_bias\":0.59,\"brakes.max_brake_torque\":4000,\"fuel.initial_kg\":7.6,\"powertrain.differential.clutches\":6,\"powertrain.differential.coast_ramp_angle_deg\":60,\"powertrain.differential.power_ramp_angle_deg\":65,\"powertrain.differential.preload_nm\":90,\"powertrain.final_drive\":4.65,\"powertrain.max_rpm\":17500,\"steering.max_steering_angle\":0.314,\"steering.steering_speed\":8,\"suspension.front.bump_damp_multiplier\":1.99,\"suspension.front.bump_stop_multiplier\":1,\"suspension.front.camber\":-0.06981317008,\"suspension.front.damping_ratio\":0.74,\"suspension.front.rebound_damp_multiplier\":0.2,\"suspension.front.resting_ratio\":0.37,\"suspension.front.toe\":-0.001745329252,\"suspension.geometry_physical.front_arb.ratio\":1,\"suspension.geometry_physical.rear_arb.ratio\":0.8,\"suspension.rear.bump_damp_multiplier\":1.9,\"suspension.rear.bump_stop_multiplier\":1,\"suspension.rear.camber\":-0.02617993878,\"suspension.rear.damping_ratio\":0.71,\"suspension.rear.rebound_damp_multiplier\":0.2,\"suspension.rear.resting_ratio\":0.4,\"suspension.rear.toe\":0,\"tires.pressure.cold_kpa_gauge.FL\":130,\"tires.pressure.cold_kpa_gauge.FR\":130,\"tires.pressure.cold_kpa_gauge.RL\":120,\"tires.pressure.cold_kpa_gauge.RR\":120}",
+    "created_at": "2026-10-23T00:54:25.011Z",
+    "modified_at": "2026-10-23T02:58:57.944Z"
+  }
+]

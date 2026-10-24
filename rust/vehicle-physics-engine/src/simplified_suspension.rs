@@ -287,6 +287,7 @@ mod tests {
                 inner: hit,
                 center: hit,
                 outer: hit,
+                ..TriRaycastSample::default()
             }
         });
         crate::suspension_kinematics::counters::reset();

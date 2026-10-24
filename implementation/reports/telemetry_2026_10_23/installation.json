@@ -1,0 +1,62 @@
+{
+  "installed": {
+    "lib/games/speed-dreams-2/modules/simu/vehicle_physics_engine.dll": {
+      "sha256": "dcc0b44437ee5746cffe2325fd6c71f01c61af97bf901658d197ad1916faee90",
+      "size": 5175808
+    },
+    "lib/games/speed-dreams-2/modules/simu/rustphysics.dll": {
+      "sha256": "00ec1ad1ca057b623bb69d189dff555e9464257d76c13086629a61c12087eddb",
+      "size": 174857
+    }
+  },
+  "previous_sha256": {
+    "lib/games/speed-dreams-2/modules/simu/vehicle_physics_engine.dll": "e76faab4b13139b0dc48c4ea20766d705ce9b268a71c0001787ededb76c212b7",
+    "lib/games/speed-dreams-2/modules/simu/rustphysics.dll": "5d4ee69fa9361619edde7cef28f424382bb33b436fded8ea7825ae739e928c26"
+  },
+  "backup": "C:\\Users\\bill\\open-formula-backups\\2026-10-23-telemetry-6cd97aab",
+  "rollback": "C:\\Users\\bill\\open-formula-backups\\2026-10-23-telemetry-6cd97aab\\rollback.ps1",
+  "abi_version": 7,
+  "abi_signature": "0xa91cdeba9d3fe775",
+  "verification": {
+    "passed": 48,
+    "failed": 0,
+    "report": "D:\\open-formula\\implementation\\reports\\telemetry_2026_10_23\\telemetry_validation\\telemetry_validation.json"
+  },
+  "protected_sha256": {
+    "D:\\open-formula\\distribution\\user-settings\\open_formula.db": "713c33324d8f3d70e2a3eb76ef90c61dc86204ae1cd0d181ef682648b13fdeda",
+    "D:\\open-formula\\distribution\\share\\games\\speed-dreams-2\\cars\\rust\\williams-fw19-hockenheim\\aerodynamics.json": "b63892829c61142a4a449efa8d91c8fbba38f76d87bc4eb3d349e4bbe9530953",
+    "D:\\open-formula\\distribution\\share\\games\\speed-dreams-2\\cars\\rust\\williams-fw19-hockenheim\\audio.json": "4ac72521526db0b6cbf05ef6e53f6a9b3f13e57c6d796742e497408546bc7d0c",
+    "D:\\open-formula\\distribution\\share\\games\\speed-dreams-2\\cars\\rust\\williams-fw19-hockenheim\\brakes.json": "42fc0593846d009dc8bf1f03f703b6ebebea5c3e5a0572060e4521eed5e8e100",
+    "D:\\open-formula\\distribution\\share\\games\\speed-dreams-2\\cars\\rust\\williams-fw19-hockenheim\\chassis.json": "504b41b070156bffc27360b57623bdcc5c1fbe96a614d3079723e59eab0004b5",
+    "D:\\open-formula\\distribution\\share\\games\\speed-dreams-2\\cars\\rust\\williams-fw19-hockenheim\\coupled_world.json": "079546b5cc16578ea90615ce6fd3a5a560739331c1ee0e9cd7cf30aed236f175",
+    "D:\\open-formula\\distribution\\share\\games\\speed-dreams-2\\cars\\rust\\williams-fw19-hockenheim\\driving_assistance.json": "fbf2e5298355e4e6da4727a29ee75d6bf4317c9c57401e0213bf1be7f5e394a1",
+    "D:\\open-formula\\distribution\\share\\games\\speed-dreams-2\\cars\\rust\\williams-fw19-hockenheim\\fuel.json": "6afbae1641b1a3820c1f9603e906c1705dbd371b053f87c3a15b7745706f7d5f",
+    "D:\\open-formula\\distribution\\share\\games\\speed-dreams-2\\cars\\rust\\williams-fw19-hockenheim\\powertrain.json": "cdecb4cfac3feca3fbc9c4e9c734f65722caab2bf8af144d89e4d6e05f79e54e",
+    "D:\\open-formula\\distribution\\share\\games\\speed-dreams-2\\cars\\rust\\williams-fw19-hockenheim\\profile_provenance.json": "09ef66a0227f301da69fd6e74ba2d8aa882728ed17c65fe2e6c71959d25b4083",
+    "D:\\open-formula\\distribution\\share\\games\\speed-dreams-2\\cars\\rust\\williams-fw19-hockenheim\\steering.json": "16a83857b2159b22c4e73510e3afdd7a2ab322dd34b5246a43b044b1c228097d",
+    "D:\\open-formula\\distribution\\share\\games\\speed-dreams-2\\cars\\rust\\williams-fw19-hockenheim\\suspension.json": "324c4c167053a4f548ac439f4de2f1aadd4439ce65f7783018364cc9ccfcbf1e",
+    "D:\\open-formula\\distribution\\share\\games\\speed-dreams-2\\cars\\rust\\williams-fw19-hockenheim\\suspension_presentation.json": "bbea99bc9aeefea94f9b07e8fa18aa76da4574720b1185c580e720266b7d629b",
+    "D:\\open-formula\\distribution\\share\\games\\speed-dreams-2\\cars\\rust\\williams-fw19-hockenheim\\tires.json": "783aa938f874cfc791dbc02b688c273869935b8d76d7fc9858d09465f0acb281",
+    "D:\\open-formula\\distribution\\share\\games\\speed-dreams-2\\cars\\rust\\williams-fw19-hockenheim\\underfloor_contact.json": "6b6f9c4bb82f0e1067e3213f82def931e648bdcd5350ddeab3b204c697c5b557",
+    "D:\\open-formula\\distribution\\share\\games\\speed-dreams-2\\cars\\rust\\williams-fw19-hockenheim\\vehicle.json": "33af96f7e95c02ef2d95a13f3288d00eb7772ae87e77b1cd6c311395a019638f",
+    "D:\\open-formula\\distribution\\user-settings\\config\\rust_physics.xml": "a7ffac1682caaee5fd8bab79d98fcb57a49139241ac5bb49fd7a6dc11c4e5913"
+  },
+  "source_sha256": {
+    "rust/vehicle-physics-engine/src/vertical_diagnostics.rs": "d5e871b56f8dd71ae71961c30a68977c5779668f2baa5f751d0007d31c322187",
+    "rust/vehicle-physics-engine/src/simplified_axle_integration.rs": "70c81e46e6d205801f15e35504c44cdbb75f39b9b2c7300614aeebaff4d14000",
+    "rust/vehicle-physics-engine/src/simulation.rs": "4775998c801fe676aa5ee8abbfca22b6db1310259d8d8fbfed28d0718f36c912",
+    "rust/vehicle-physics-engine/src/suspension.rs": "33f6acb44e72268610b8c34ada608058669c6f9258249bb299fbc7c10466f807",
+    "rust/vehicle-physics-engine/src/open_formula.rs": "b3ad5fc62ad181e5568bc11ac50c82c520fd4ba78fc9a2bbd219352c38c9f08f",
+    "rust/vehicle-physics-engine/src/open_formula_ffi.rs": "f6e5d6db7bf948b20aafad5b456c825f6983952ae799014c345ce1a32f1ae16f",
+    "src/modules/simu/rustphysics/rustphysics.cpp": "f69a5f567fcbbe343d407d08ba7478fb5bfab1b22123ea8c408475e7ebabecfc",
+    "src/modules/simu/rustphysics/rust_abi.h": "19beda95af6270c6a7b37c2b0df729a445ff791a872a59f1273548bf2c61fd2e",
+    "src/modules/simu/rustphysics/rust_library.h": "9b3e1ae5579004ecba416a2ab2062e43397cc2424f27edee470efea3257b8a5b",
+    "src/modules/simu/rustphysics/rust_library.cpp": "cc794f07cf9d03d712b57adaf9a9ace044777be19aba32a12066c635b786e568"
+  },
+  "configuration": {
+    "summary_hz": "25 (diagnostic interval seconds = 0.04)",
+    "trace": "enabled in user-settings/config/rust_physics.xml; requests 3 s pre / 1 s post; metadata reports overwritten history",
+    "trace_directory": "user-settings/rustphysics/"
+  },
+  "manual_T3_acceptance": "pending_user"
+}

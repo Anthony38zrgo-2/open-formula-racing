@@ -4,29 +4,34 @@
 //! Ownership summary:
 //! * Rust owns pose, velocities, orientation, suspension, wheel spin, transmission,
 //!   fuel, thermal state and contact state.
-//! * The host supplies the track ground collision mesh (the same `FORMULA_GROUND_1`
-//!   document the retired C++ ground sampler used) and reports body/barrier contacts.
-//! * All ray queries (3 per wheel + 2 underfloor) are performed here, once per step.
+//! * The host installs one `crate::collision_world::CollisionWorld` per session (the
+//!   circuit's ground collision geometry) and reports barrier contacts. The world is a
+//!   static query structure: no integrator, no mass, no impulse. Every reaction is
+//!   applied here, once.
+//! * All ray queries (3 per wheel + 2 underfloor) are performed here, once per step,
+//!   from the physical wheel centre and from the declared underfloor probes.
 
 use std::path::Path;
-use std::sync::OnceLock;
+use std::sync::Arc;
 
-use parry3d_f64::na::{Isometry3, Point3, Vector3};
-use parry3d_f64::query::Ray;
-use parry3d_f64::shape::{SharedShape, TriMesh};
 use serde_json::Value;
 
+use crate::collision_world::{CollisionWorld, GroundHit};
 use crate::open_formula_ffi::{
     OfpAxleDiagnostics, OfpBodyContact, OfpControlInput, OfpFailureDiagnostics, OfpSnapshot,
     OfpVec3, OfpWheelDiagnostics, OfpWheelState, OFP_ABI_VERSION, OFP_FLAG_BRAKE_THERMAL,
     OFP_FLAG_POWERTRAIN_THERMAL, OFP_FLAG_WHEEL_THERMAL, OFP_WHEELS,
 };
 use crate::simulation::{default_spawn_height, VehicleSimulator, VehicleState};
+use crate::suspension::weighted_gap;
 use crate::suspension_setup::{
     adopt_antiroll_design_bar, adopt_antiroll_knob, SuspensionSetupAuthority,
 };
-use crate::types::{Mat3, SurfaceType, TriRaycastSample, Vec3, VehicleInput, WheelIndex};
-use crate::vehicle_configuration::{VehicleConfig, load_vehicle_configuration};
+use crate::types::{
+    wheel_name, Mat3, RaycastHit, SurfaceType, TriRaycastSample, Vec3, VehicleInput, WheelIndex,
+    WheelRayContext,
+};
+use crate::vehicle_configuration::{load_vehicle_configuration, VehicleConfig};
 
 /// Number of transverse wheel rays (inner / center / outer).
 pub const WHEEL_RAYS_PER_WHEEL: usize = 3;
@@ -35,207 +40,59 @@ pub const FLOOR_PROBE_COUNT: usize = 2;
 /// Probe mask carried by the two underfloor sensors: slots 0 (front centre) and 3 (throat).
 pub const FLOOR_PROBE_MASK: u32 = (1 << 0) | (1 << 3);
 
+/// Numeric look-ahead added to the wheel ray so a surface exactly at the geometric
+/// reach is not lost to rounding or to a triangle edge. 5 mm is two orders of
+/// magnitude below the smallest suspension travel of interest and far below any
+/// physically meaningful penetration.
+pub const WHEEL_RAY_MARGIN_M: f64 = 0.005;
+
 // ---------------------------------------------------------------------------
-// Ground world
+// Session collision world
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Copy)]
-struct GroundTriangleMaterial {
-    friction: f64,
-    rolling_resistance: f64,
+/// Loads the circuit ground collision document and installs it as the session world.
+/// Any previously installed world is replaced (and its generation invalidated), so a
+/// circuit change inside one process can never keep the previous geometry alive.
+///
+/// Returns the installed identity together with the triangle count. A document that
+/// cannot be read, is empty, or declares no triangles is an error: the session must
+/// not run with a silently absent ground.
+pub fn install_track_ground_mesh(
+    path: &str,
+    circuit_id: Option<&str>,
+    revision: Option<u32>,
+) -> Result<(crate::collision_world::WorldIdentity, u64), String> {
+    let world = CollisionWorld::load_transfer_file(path, circuit_id, revision)?;
+    let (generation, identity) = crate::collision_world::install_world(world);
+    Ok((identity, generation))
 }
 
-#[derive(Debug)]
-pub struct GroundWorld {
-    mesh: Option<SharedShape>,
-    materials: Vec<GroundTriangleMaterial>,
-    triangle_count: usize,
+/// Drops the session world. The generation advances, so a simulation created for the
+/// previous session refuses to step instead of querying stale geometry.
+pub fn release_track_ground_mesh() -> bool {
+    crate::collision_world::uninstall_world()
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct GroundHit {
-    pub distance: f64,
-    pub point: Vec3,
-    pub normal: Vec3,
-    pub surface: SurfaceType,
+/// Identity of the geometry the installed world is using, if any.
+pub fn installed_world_identity() -> Option<crate::collision_world::WorldIdentity> {
+    crate::collision_world::installed_world().map(|(_, world)| world.identity().clone())
 }
 
-impl GroundWorld {
-    pub fn empty() -> Self {
-        Self {
-            mesh: None,
-            materials: Vec::new(),
-            triangle_count: 0,
-        }
-    }
-
-    /// Loads the `FORMULA_GROUND_1` collision document produced by the track exporter:
-    /// friction, rolling resistance and nine coordinates per triangle. Triangles and
-    /// materials are imported into a Parry `TriMesh` whose acceleration structure is
-    /// built once, at load time.
-    pub fn load(path: &Path) -> Result<Self, String> {
-        let text = std::fs::read_to_string(path)
-            .map_err(|error| format!("cannot read ground mesh {}: {error}", path.display()))?;
-        let mut tokens = text.split_whitespace();
-        let signature = tokens.next().unwrap_or("");
-        if signature != "FORMULA_GROUND_1" {
-            return Err(format!(
-                "unsupported ground mesh signature in {}: {signature}",
-                path.display()
-            ));
-        }
-        let count: usize = tokens
-            .next()
-            .ok_or_else(|| "ground mesh is missing its triangle count".to_string())?
-            .parse()
-            .map_err(|error| format!("invalid ground mesh triangle count: {error}"))?;
-        if count == 0 || count > 1_000_000 {
-            return Err(format!("ground mesh triangle count out of range: {count}"));
-        }
-        let mut vertices: Vec<Point3<f64>> = Vec::with_capacity(count * 3);
-        let mut indices: Vec<[u32; 3]> = Vec::with_capacity(count);
-        let mut materials: Vec<GroundTriangleMaterial> = Vec::with_capacity(count);
-        for triangle_index in 0..count {
-            let friction: f64 = tokens
-                .next()
-                .ok_or_else(|| format!("ground mesh truncated at triangle {triangle_index}"))?
-                .parse()
-                .map_err(|error| format!("invalid triangle friction: {error}"))?;
-            let rolling: f64 = tokens
-                .next()
-                .ok_or_else(|| format!("ground mesh truncated at triangle {triangle_index}"))?
-                .parse()
-                .map_err(|error| format!("invalid triangle rolling resistance: {error}"))?;
-            let mut coordinates = [0.0f64; 9];
-            for coordinate in coordinates.iter_mut() {
-                *coordinate = tokens
-                    .next()
-                    .ok_or_else(|| format!("ground mesh truncated at triangle {triangle_index}"))?
-                    .parse()
-                    .map_err(|error| format!("invalid triangle coordinate: {error}"))?;
-                if !coordinate.is_finite() {
-                    return Err(format!("non-finite triangle coordinate at {triangle_index}"));
-                }
-            }
-            let base = (triangle_index * 3) as u32;
-            // The exporter stores Speed Dreams world coordinates (X forward, Y left,
-            // Z up). The Rust world is X right, Y up, -Z forward, so the track is
-            // imported once through the same rigid mapping the host uses.
-            for corner in 0..3 {
-                let offset = corner * 3;
-                vertices.push(Point3::new(
-                    -coordinates[offset + 1],
-                    coordinates[offset + 2],
-                    -coordinates[offset],
-                ));
-            }
-            indices.push([base, base + 1, base + 2]);
-            materials.push(GroundTriangleMaterial {
-                friction,
-                rolling_resistance: rolling,
-            });
-        }
-        let mesh = TriMesh::new(vertices, indices)
-            .map_err(|error| format!("cannot build the ground acceleration structure: {error:?}"))?;
-        Ok(Self {
-            mesh: Some(SharedShape::new(mesh)),
-            materials,
-            triangle_count: count,
-        })
-    }
-
-    pub fn triangle_count(&self) -> usize {
-        self.triangle_count
-    }
-
-    pub fn is_loaded(&self) -> bool {
-        self.mesh.is_some()
-    }
-
-    /// Casts one segment and returns the closest hit. The direction is normalized here
-    /// so callers cannot distort the returned distance.
-    pub fn raycast(&self, origin: Vec3, direction: Vec3, max_distance: f64) -> Option<GroundHit> {
-        let mesh = self.mesh.as_ref()?;
-        let length = direction.length();
-        if !length.is_finite() || length <= 1e-9 || !max_distance.is_finite() || max_distance <= 0.0 {
-            return None;
-        }
-        let unit = direction * (1.0 / length);
-        let ray = Ray::new(
-            Point3::new(origin.x, origin.y, origin.z),
-            Vector3::new(unit.x, unit.y, unit.z),
-        );
-        let intersection =
-            mesh.cast_ray_and_get_normal(&Isometry3::identity(), &ray, max_distance, true)?;
-        let distance = intersection.time_of_impact;
-        if !distance.is_finite() || !(0.0..=max_distance).contains(&distance) {
-            return None;
-        }
-        let normal = Vec3::new(
-            intersection.normal.x,
-            intersection.normal.y,
-            intersection.normal.z,
-        );
-        let normal = if normal.length() > 1e-9 {
-            normal.normalized()
-        } else {
-            Vec3::UP
-        };
-        let point = origin + unit * distance;
-        let surface = match intersection.feature {
-            parry3d_f64::shape::FeatureId::Face(index) => self
-                .materials
-                .get(index as usize)
-                .map(|material| classify_surface(material.friction, material.rolling_resistance))
-                .unwrap_or(SurfaceType::Road),
-            _ => SurfaceType::Road,
-        };
-        Some(GroundHit {
-            distance,
-            point,
-            normal,
-            surface,
-        })
-    }
+/// Installed world and the generation it belongs to.
+pub fn installed_world() -> Option<(u64, Arc<CollisionWorld>)> {
+    crate::collision_world::installed_world()
 }
 
-fn classify_surface(_friction: f64, rolling_resistance: f64) -> SurfaceType {
-    if rolling_resistance <= 0.0025 {
-        SurfaceType::Road
-    } else if rolling_resistance <= 0.0035 {
-        SurfaceType::Curb
-    } else if rolling_resistance <= 0.005 {
-        SurfaceType::Metal
-    } else if rolling_resistance <= 0.09 {
-        SurfaceType::Grass
-    } else if rolling_resistance <= 0.13 {
-        SurfaceType::Gravel
-    } else {
-        SurfaceType::Sand
-    }
+/// `ground.raycast` equivalent used by the sampling code. Kept as a free function so a
+/// caller without a world cannot accidentally query a global.
+fn cast_ground(
+    world: Option<&CollisionWorld>,
+    origin: Vec3,
+    direction: Vec3,
+    max: f64,
+) -> Option<GroundHit> {
+    world.and_then(|world| world.raycast(origin, direction, max))
 }
-
-static TRACK_GROUND: OnceLock<GroundWorld> = OnceLock::new();
-
-/// Loads the session ground mesh once. Returns the triangle count.
-pub fn set_track_ground_mesh(path: &str) -> Result<usize, String> {
-    if TRACK_GROUND.get().is_some() {
-        return Ok(TRACK_GROUND.get().map(|g| g.triangle_count()).unwrap_or(0));
-    }
-    let world = if path.is_empty() {
-        GroundWorld::empty()
-    } else {
-        GroundWorld::load(Path::new(path))?
-    };
-    let count = world.triangle_count();
-    let _ = TRACK_GROUND.set(world);
-    Ok(count)
-}
-
-pub fn track_ground() -> Option<&'static GroundWorld> {
-    TRACK_GROUND.get()
-}
-
 // ---------------------------------------------------------------------------
 // Setup descriptor and transaction
 // ---------------------------------------------------------------------------
@@ -252,44 +109,348 @@ struct SetupField {
 }
 
 const SETUP_FIELDS: &[SetupField] = &[
-    SetupField { path: "suspension.front.resting_ratio", label: "Front ride height ratio", unit: "ratio", minimum: 0.20, maximum: 0.80, step: 0.005, editable: true },
-    SetupField { path: "suspension.rear.resting_ratio", label: "Rear ride height ratio", unit: "ratio", minimum: 0.20, maximum: 0.80, step: 0.005, editable: true },
-    SetupField { path: "suspension.front.damping_ratio", label: "Front damper ratio", unit: "ratio", minimum: 0.05, maximum: 1.20, step: 0.01, editable: true },
-    SetupField { path: "suspension.rear.damping_ratio", label: "Rear damper ratio", unit: "ratio", minimum: 0.05, maximum: 1.20, step: 0.01, editable: true },
-    SetupField { path: "suspension.front.bump_damp_multiplier", label: "Front bump multiplier", unit: "ratio", minimum: 0.20, maximum: 3.00, step: 0.01, editable: true },
-    SetupField { path: "suspension.rear.bump_damp_multiplier", label: "Rear bump multiplier", unit: "ratio", minimum: 0.20, maximum: 3.00, step: 0.01, editable: true },
-    SetupField { path: "suspension.front.rebound_damp_multiplier", label: "Front rebound multiplier", unit: "ratio", minimum: 0.20, maximum: 3.00, step: 0.01, editable: true },
-    SetupField { path: "suspension.rear.rebound_damp_multiplier", label: "Rear rebound multiplier", unit: "ratio", minimum: 0.20, maximum: 3.00, step: 0.01, editable: true },
-    SetupField { path: "suspension.geometry_physical.front_arb.ratio", label: "Front anti-roll ratio", unit: "ratio", minimum: 0.0, maximum: 2.0, step: 0.01, editable: true },
-    SetupField { path: "suspension.geometry_physical.rear_arb.ratio", label: "Rear anti-roll ratio", unit: "ratio", minimum: 0.0, maximum: 2.0, step: 0.01, editable: true },
-    SetupField { path: "suspension.front.toe", label: "Front toe (local)", unit: "rad", minimum: -0.05, maximum: 0.05, step: 0.001, editable: true },
-    SetupField { path: "suspension.rear.toe", label: "Rear toe (local)", unit: "rad", minimum: -0.05, maximum: 0.05, step: 0.001, editable: true },
-    SetupField { path: "suspension.front.camber", label: "Front camber", unit: "rad", minimum: -0.10, maximum: 0.05, step: 0.001, editable: true },
-    SetupField { path: "suspension.rear.camber", label: "Rear camber", unit: "rad", minimum: -0.10, maximum: 0.05, step: 0.001, editable: true },
-    SetupField { path: "suspension.front.bump_stop_multiplier", label: "Front bump stop", unit: "ratio", minimum: 0.0, maximum: 4.0, step: 0.05, editable: true },
-    SetupField { path: "suspension.rear.bump_stop_multiplier", label: "Rear bump stop", unit: "ratio", minimum: 0.0, maximum: 4.0, step: 0.05, editable: true },
-    SetupField { path: "brakes.front_brake_bias", label: "Front brake bias", unit: "fraction", minimum: 0.30, maximum: 0.80, step: 0.005, editable: true },
-    SetupField { path: "brakes.max_brake_torque", label: "Maximum brake torque", unit: "N m", minimum: 500.0, maximum: 8000.0, step: 50.0, editable: true },
-    SetupField { path: "powertrain.differential.preload_nm", label: "Differential preload", unit: "N m", minimum: 0.0, maximum: 120.0, step: 1.0, editable: true },
-    SetupField { path: "powertrain.differential.power_ramp_angle_deg", label: "Differential power ramp", unit: "deg", minimum: 5.0, maximum: 80.0, step: 1.0, editable: true },
-    SetupField { path: "powertrain.differential.coast_ramp_angle_deg", label: "Differential coast ramp", unit: "deg", minimum: 5.0, maximum: 80.0, step: 1.0, editable: true },
-    SetupField { path: "powertrain.differential.clutches", label: "Differential clutches", unit: "count", minimum: 1.0, maximum: 8.0, step: 1.0, editable: true },
-    SetupField { path: "powertrain.final_drive", label: "Final drive", unit: "ratio", minimum: 2.0, maximum: 6.0, step: 0.01, editable: true },
-    SetupField { path: "powertrain.max_rpm", label: "Rev limiter", unit: "rpm", minimum: 6000.0, maximum: 22000.0, step: 100.0, editable: true },
-    SetupField { path: "aero.model.front_wing.incidence_deg", label: "Front wing incidence", unit: "deg", minimum: 0.0, maximum: 20.0, step: 0.5, editable: true },
-    SetupField { path: "aero.model.rear_wing.incidence_deg", label: "Rear wing incidence", unit: "deg", minimum: 0.0, maximum: 20.0, step: 0.5, editable: true },
-    SetupField { path: "steering.max_steering_angle", label: "Maximum steering angle", unit: "rad", minimum: 0.15, maximum: 0.70, step: 0.005, editable: true },
-    SetupField { path: "steering.steering_speed", label: "Steering speed", unit: "1/s", minimum: 1.0, maximum: 12.0, step: 0.05, editable: true },
-    SetupField { path: "fuel.initial_kg", label: "Fuel load", unit: "kg", minimum: 0.0, maximum: 120.0, step: 0.5, editable: true },
-    SetupField { path: "fuel.density_kg_per_litre", label: "Fuel density (conversion)", unit: "kg/L", minimum: 0.0, maximum: 0.0, step: 0.0, editable: false },
-    SetupField { path: "tires.pressure.cold_kpa_gauge.FL", label: "Front left cold pressure", unit: "kPa gauge", minimum: 80.0, maximum: 220.0, step: 1.0, editable: true },
-    SetupField { path: "tires.pressure.cold_kpa_gauge.FR", label: "Front right cold pressure", unit: "kPa gauge", minimum: 80.0, maximum: 220.0, step: 1.0, editable: true },
-    SetupField { path: "tires.pressure.cold_kpa_gauge.RL", label: "Rear left cold pressure", unit: "kPa gauge", minimum: 80.0, maximum: 220.0, step: 1.0, editable: true },
-    SetupField { path: "tires.pressure.cold_kpa_gauge.RR", label: "Rear right cold pressure", unit: "kPa gauge", minimum: 80.0, maximum: 220.0, step: 1.0, editable: true },
-    SetupField { path: "suspension.front.spring_length", label: "Front spring length (design)", unit: "m", minimum: 0.0, maximum: 0.0, step: 0.0, editable: false },
-    SetupField { path: "suspension.rear.spring_length", label: "Rear spring length (design)", unit: "m", minimum: 0.0, maximum: 0.0, step: 0.0, editable: false },
-    SetupField { path: "tires.front.radius", label: "Front tire radius (design)", unit: "m", minimum: 0.0, maximum: 0.0, step: 0.0, editable: false },
-    SetupField { path: "tires.rear.radius", label: "Rear tire radius (design)", unit: "m", minimum: 0.0, maximum: 0.0, step: 0.0, editable: false },
+    SetupField {
+        path: "suspension.front.resting_ratio",
+        label: "Front ride height ratio",
+        unit: "ratio",
+        minimum: 0.20,
+        maximum: 0.80,
+        step: 0.005,
+        editable: true,
+    },
+    SetupField {
+        path: "suspension.rear.resting_ratio",
+        label: "Rear ride height ratio",
+        unit: "ratio",
+        minimum: 0.20,
+        maximum: 0.80,
+        step: 0.005,
+        editable: true,
+    },
+    SetupField {
+        path: "suspension.front.damping_ratio",
+        label: "Front damper ratio",
+        unit: "ratio",
+        minimum: 0.05,
+        maximum: 1.20,
+        step: 0.01,
+        editable: true,
+    },
+    SetupField {
+        path: "suspension.rear.damping_ratio",
+        label: "Rear damper ratio",
+        unit: "ratio",
+        minimum: 0.05,
+        maximum: 1.20,
+        step: 0.01,
+        editable: true,
+    },
+    SetupField {
+        path: "suspension.front.bump_damp_multiplier",
+        label: "Front bump multiplier",
+        unit: "ratio",
+        minimum: 0.20,
+        maximum: 3.00,
+        step: 0.01,
+        editable: true,
+    },
+    SetupField {
+        path: "suspension.rear.bump_damp_multiplier",
+        label: "Rear bump multiplier",
+        unit: "ratio",
+        minimum: 0.20,
+        maximum: 3.00,
+        step: 0.01,
+        editable: true,
+    },
+    SetupField {
+        path: "suspension.front.rebound_damp_multiplier",
+        label: "Front rebound multiplier",
+        unit: "ratio",
+        minimum: 0.20,
+        maximum: 3.00,
+        step: 0.01,
+        editable: true,
+    },
+    SetupField {
+        path: "suspension.rear.rebound_damp_multiplier",
+        label: "Rear rebound multiplier",
+        unit: "ratio",
+        minimum: 0.20,
+        maximum: 3.00,
+        step: 0.01,
+        editable: true,
+    },
+    SetupField {
+        path: "suspension.geometry_physical.front_arb.ratio",
+        label: "Front anti-roll ratio",
+        unit: "ratio",
+        minimum: 0.0,
+        maximum: 2.0,
+        step: 0.01,
+        editable: true,
+    },
+    SetupField {
+        path: "suspension.geometry_physical.rear_arb.ratio",
+        label: "Rear anti-roll ratio",
+        unit: "ratio",
+        minimum: 0.0,
+        maximum: 2.0,
+        step: 0.01,
+        editable: true,
+    },
+    SetupField {
+        path: "suspension.front.toe",
+        label: "Front toe (local)",
+        unit: "rad",
+        minimum: -0.05,
+        maximum: 0.05,
+        step: 0.001,
+        editable: true,
+    },
+    SetupField {
+        path: "suspension.rear.toe",
+        label: "Rear toe (local)",
+        unit: "rad",
+        minimum: -0.05,
+        maximum: 0.05,
+        step: 0.001,
+        editable: true,
+    },
+    SetupField {
+        path: "suspension.front.camber",
+        label: "Front camber",
+        unit: "rad",
+        minimum: -0.10,
+        maximum: 0.05,
+        step: 0.001,
+        editable: true,
+    },
+    SetupField {
+        path: "suspension.rear.camber",
+        label: "Rear camber",
+        unit: "rad",
+        minimum: -0.10,
+        maximum: 0.05,
+        step: 0.001,
+        editable: true,
+    },
+    SetupField {
+        path: "suspension.front.bump_stop_multiplier",
+        label: "Front bump stop",
+        unit: "ratio",
+        minimum: 0.0,
+        maximum: 4.0,
+        step: 0.05,
+        editable: true,
+    },
+    SetupField {
+        path: "suspension.rear.bump_stop_multiplier",
+        label: "Rear bump stop",
+        unit: "ratio",
+        minimum: 0.0,
+        maximum: 4.0,
+        step: 0.05,
+        editable: true,
+    },
+    SetupField {
+        path: "brakes.front_brake_bias",
+        label: "Front brake bias",
+        unit: "fraction",
+        minimum: 0.30,
+        maximum: 0.80,
+        step: 0.005,
+        editable: true,
+    },
+    SetupField {
+        path: "brakes.max_brake_torque",
+        label: "Maximum brake torque",
+        unit: "N m",
+        minimum: 500.0,
+        maximum: 8000.0,
+        step: 50.0,
+        editable: true,
+    },
+    SetupField {
+        path: "powertrain.differential.preload_nm",
+        label: "Differential preload",
+        unit: "N m",
+        minimum: 0.0,
+        maximum: 120.0,
+        step: 1.0,
+        editable: true,
+    },
+    SetupField {
+        path: "powertrain.differential.power_ramp_angle_deg",
+        label: "Differential power ramp",
+        unit: "deg",
+        minimum: 5.0,
+        maximum: 80.0,
+        step: 1.0,
+        editable: true,
+    },
+    SetupField {
+        path: "powertrain.differential.coast_ramp_angle_deg",
+        label: "Differential coast ramp",
+        unit: "deg",
+        minimum: 5.0,
+        maximum: 80.0,
+        step: 1.0,
+        editable: true,
+    },
+    SetupField {
+        path: "powertrain.differential.clutches",
+        label: "Differential clutches",
+        unit: "count",
+        minimum: 1.0,
+        maximum: 8.0,
+        step: 1.0,
+        editable: true,
+    },
+    SetupField {
+        path: "powertrain.final_drive",
+        label: "Final drive",
+        unit: "ratio",
+        minimum: 2.0,
+        maximum: 6.0,
+        step: 0.01,
+        editable: true,
+    },
+    SetupField {
+        path: "powertrain.max_rpm",
+        label: "Rev limiter",
+        unit: "rpm",
+        minimum: 6000.0,
+        maximum: 22000.0,
+        step: 100.0,
+        editable: true,
+    },
+    SetupField {
+        path: "aero.model.front_wing.incidence_deg",
+        label: "Front wing incidence",
+        unit: "deg",
+        minimum: 0.0,
+        maximum: 20.0,
+        step: 0.5,
+        editable: true,
+    },
+    SetupField {
+        path: "aero.model.rear_wing.incidence_deg",
+        label: "Rear wing incidence",
+        unit: "deg",
+        minimum: 0.0,
+        maximum: 20.0,
+        step: 0.5,
+        editable: true,
+    },
+    SetupField {
+        path: "steering.max_steering_angle",
+        label: "Maximum steering angle",
+        unit: "rad",
+        minimum: 0.15,
+        maximum: 0.70,
+        step: 0.005,
+        editable: true,
+    },
+    SetupField {
+        path: "steering.steering_speed",
+        label: "Steering speed",
+        unit: "1/s",
+        minimum: 1.0,
+        maximum: 12.0,
+        step: 0.05,
+        editable: true,
+    },
+    SetupField {
+        path: "fuel.initial_kg",
+        label: "Fuel load",
+        unit: "kg",
+        minimum: 0.0,
+        maximum: 120.0,
+        step: 0.5,
+        editable: true,
+    },
+    SetupField {
+        path: "fuel.density_kg_per_litre",
+        label: "Fuel density (conversion)",
+        unit: "kg/L",
+        minimum: 0.0,
+        maximum: 0.0,
+        step: 0.0,
+        editable: false,
+    },
+    SetupField {
+        path: "tires.pressure.cold_kpa_gauge.FL",
+        label: "Front left cold pressure",
+        unit: "kPa gauge",
+        minimum: 80.0,
+        maximum: 220.0,
+        step: 1.0,
+        editable: true,
+    },
+    SetupField {
+        path: "tires.pressure.cold_kpa_gauge.FR",
+        label: "Front right cold pressure",
+        unit: "kPa gauge",
+        minimum: 80.0,
+        maximum: 220.0,
+        step: 1.0,
+        editable: true,
+    },
+    SetupField {
+        path: "tires.pressure.cold_kpa_gauge.RL",
+        label: "Rear left cold pressure",
+        unit: "kPa gauge",
+        minimum: 80.0,
+        maximum: 220.0,
+        step: 1.0,
+        editable: true,
+    },
+    SetupField {
+        path: "tires.pressure.cold_kpa_gauge.RR",
+        label: "Rear right cold pressure",
+        unit: "kPa gauge",
+        minimum: 80.0,
+        maximum: 220.0,
+        step: 1.0,
+        editable: true,
+    },
+    SetupField {
+        path: "suspension.front.spring_length",
+        label: "Front spring length (design)",
+        unit: "m",
+        minimum: 0.0,
+        maximum: 0.0,
+        step: 0.0,
+        editable: false,
+    },
+    SetupField {
+        path: "suspension.rear.spring_length",
+        label: "Rear spring length (design)",
+        unit: "m",
+        minimum: 0.0,
+        maximum: 0.0,
+        step: 0.0,
+        editable: false,
+    },
+    SetupField {
+        path: "tires.front.radius",
+        label: "Front tire radius (design)",
+        unit: "m",
+        minimum: 0.0,
+        maximum: 0.0,
+        step: 0.0,
+        editable: false,
+    },
+    SetupField {
+        path: "tires.rear.radius",
+        label: "Rear tire radius (design)",
+        unit: "m",
+        minimum: 0.0,
+        maximum: 0.0,
+        step: 0.0,
+        editable: false,
+    },
 ];
 
 fn setup_descriptor_value() -> Value {
@@ -314,9 +475,9 @@ fn set_document_path(document: &mut Value, path: &str, value: Value) -> Result<(
     let segments: Vec<&str> = path.split('.').collect();
     let mut cursor = document;
     for (index, segment) in segments.iter().enumerate() {
-        let object = cursor
-            .as_object_mut()
-            .ok_or_else(|| format!("setup path {path} does not address an object at '{segment}'"))?;
+        let object = cursor.as_object_mut().ok_or_else(|| {
+            format!("setup path {path} does not address an object at '{segment}'")
+        })?;
         if index + 1 == segments.len() {
             if !object.contains_key(*segment) {
                 return Err(format!("setup path {path} is not part of the profile"));
@@ -429,6 +590,26 @@ pub struct OpenFormulaSimulation {
     // packet ordering; `last_step_dt` is the real accepted-step duration.
     sequence: u64,
     last_step_dt: f64,
+    /// Session collision geometry. `None` only for a simulation created without a
+    /// world (unit tests, or the retired host-supplied-sample contract): every wheel
+    /// ray then misses, which is reported as airborne instead of inventing ground.
+    world: Option<Arc<CollisionWorld>>,
+    /// Registry generation captured when this vehicle bound its world. A different
+    /// installed generation means the session changed and this vehicle must be
+    /// re-created; it is never allowed to query the previous circuit.
+    world_generation: u64,
+    /// Wheel samples of the last accepted step. Diagnostics only: the contact report
+    /// reads them, no force is ever derived from a published report.
+    last_wheel_samples: [TriRaycastSample; 4],
+    /// Body impulses actually applied in the last accepted step, per source. The two
+    /// sources are resolved once each; these arrays are the audit trail that proves no
+    /// impulse is applied twice.
+    last_barrier_impulse_ns: f64,
+    /// Kinetic energy of the rigid body at the start and at the end of the last
+    /// accepted step (J). External work is not inferred from these; they are the
+    /// passivity evidence the contact report publishes.
+    last_kinetic_energy_before_j: f64,
+    last_kinetic_energy_after_j: f64,
 }
 
 const BACKEND_SUSPENSION_SIMPLIFIED: u32 = 1 << 0;
@@ -449,13 +630,20 @@ pub fn validate_production_configuration(config: &VehicleConfig) -> Result<(), S
     ) {
         return Err("the profile does not declare the geometric suspension model".into());
     }
-    if config.chassis.total_vehicle_mass(&config.tires, &config.fuel) <= 1.0 {
+    if config
+        .chassis
+        .total_vehicle_mass(&config.tires, &config.fuel)
+        <= 1.0
+    {
         return Err("the profile declares a non-positive vehicle mass".into());
     }
     if config.tires.front_tire_radius <= 0.0 || config.tires.rear_tire_radius <= 0.0 {
         return Err("the profile declares a non-positive tire radius".into());
     }
-    if config.powertrain.gear_ratios.is_empty() || config.powertrain.gear_ratios.len() > 8 || config.powertrain.final_drive <= 0.0 {
+    if config.powertrain.gear_ratios.is_empty()
+        || config.powertrain.gear_ratios.len() > 8
+        || config.powertrain.final_drive <= 0.0
+    {
         return Err("the profile declares an unusable transmission".into());
     }
     if let Some(underfloor) = &config.underfloor_contact {
@@ -465,11 +653,31 @@ pub fn validate_production_configuration(config: &VehicleConfig) -> Result<(), S
 }
 
 impl OpenFormulaSimulation {
+    /// Creates a vehicle bound to the currently installed session world, when there is
+    /// one. This is the entry point used by unit tests and by any caller that manages
+    /// its own geometry.
     pub fn create(
         profile_path: Option<&Path>,
         origin: Vec3,
         yaw: f64,
         fuel_kg: Option<f64>,
+    ) -> Result<Self, String> {
+        Self::create_with_world(profile_path, origin, yaw, fuel_kg, false)
+    }
+
+    /// Creates a vehicle for a session that must have authoritative geometry.
+    ///
+    /// `require_world` is what the Speed Dreams host uses: without an installed
+    /// `CollisionWorld` the creation fails explicitly instead of simulating a car with
+    /// no ground under it. When `require_world` is false the vehicle is created with
+    /// whatever world is installed (possibly none) so deterministic unit tests that
+    /// supply their own samples keep working.
+    pub fn create_with_world(
+        profile_path: Option<&Path>,
+        origin: Vec3,
+        yaw: f64,
+        fuel_kg: Option<f64>,
+        require_world: bool,
     ) -> Result<Self, String> {
         let (config, document) = match profile_path {
             Some(path) => {
@@ -502,6 +710,18 @@ impl OpenFormulaSimulation {
             config.fuel.current_kg = config.fuel.initial_kg;
         }
         let simulator = VehicleSimulator::new(config, origin, yaw);
+        let installed = crate::collision_world::installed_world();
+        if require_world && installed.is_none() {
+            return Err(
+                "no authoritative ground collision world is installed for this session; \
+                 the host must install the circuit geometry before creating a vehicle"
+                    .to_string(),
+            );
+        }
+        let (world_generation, world) = match installed {
+            Some((generation, world)) => (generation, Some(world)),
+            None => (crate::collision_world::world_generation(), None),
+        };
         let mut simulation = Self {
             simulator,
             document: live_document,
@@ -529,9 +749,37 @@ impl OpenFormulaSimulation {
                 | BACKEND_SLOW_STATES_SIMPLIFIED,
             sequence: 0,
             last_step_dt: 0.0,
+            world,
+            world_generation,
+            last_wheel_samples: [TriRaycastSample::default(); 4],
+            last_barrier_impulse_ns: 0.0,
+            last_kinetic_energy_before_j: 0.0,
+            last_kinetic_energy_after_j: 0.0,
         };
         simulation.configure_floor_probes()?;
         Ok(simulation)
+    }
+
+    /// Identity of the geometry this vehicle is bound to.
+    pub fn world_identity(&self) -> Option<&crate::collision_world::WorldIdentity> {
+        self.world.as_ref().map(|world| world.identity())
+    }
+
+    /// Registry generation this vehicle captured at creation.
+    pub fn world_generation(&self) -> u64 {
+        self.world_generation
+    }
+
+    /// True when the installed session world is no longer the one this vehicle bound.
+    /// The vehicle must then be destroyed and re-created by the host.
+    fn world_is_stale(&self) -> bool {
+        match self.world.as_ref() {
+            Some(_) => {
+                crate::collision_world::world_generation() != self.world_generation
+                    || crate::collision_world::installed_world().is_none()
+            }
+            None => false,
+        }
     }
 
     pub fn backends(&self) -> u32 {
@@ -553,26 +801,28 @@ impl OpenFormulaSimulation {
         let config = &self.simulator.config;
         let floor = &config.aerodynamics.aero_model.underfloor;
         let design_plane_local_y = -default_spawn_height(config);
-        let (front_clearance, rear_clearance) = match (
-            floor.floor_clearance_front_m,
-            floor.floor_clearance_rear_m,
-        ) {
-            (Some(front), Some(rear)) => (front, rear),
-            _ => {
-                self.floor_probes = [
-                    FloorProbe {
-                        origin_local: Vec3::new(0.0, design_plane_local_y + 0.090, -0.90),
-                        ray_length: 0.24,
-                    },
-                    FloorProbe {
-                        origin_local: Vec3::new(0.0, design_plane_local_y + 0.090 + floor.throat_probe_offset_m, 0.85),
-                        ray_length: 0.24,
-                    },
-                ];
-                self.base_floor_clearance = [0.090, 0.090];
-                return Ok(());
-            }
-        };
+        let (front_clearance, rear_clearance) =
+            match (floor.floor_clearance_front_m, floor.floor_clearance_rear_m) {
+                (Some(front), Some(rear)) => (front, rear),
+                _ => {
+                    self.floor_probes = [
+                        FloorProbe {
+                            origin_local: Vec3::new(0.0, design_plane_local_y + 0.090, -0.90),
+                            ray_length: 0.24,
+                        },
+                        FloorProbe {
+                            origin_local: Vec3::new(
+                                0.0,
+                                design_plane_local_y + 0.090 + floor.throat_probe_offset_m,
+                                0.85,
+                            ),
+                            ray_length: 0.24,
+                        },
+                    ];
+                    self.base_floor_clearance = [0.090, 0.090];
+                    return Ok(());
+                }
+            };
         let front_anchor = config.tires.wheel_anchor_local(
             &config.chassis,
             &config.suspension,
@@ -591,8 +841,7 @@ impl OpenFormulaSimulation {
             } else {
                 0.0
             };
-            let station_clearance =
-                front_clearance + (rear_clearance - front_clearance) * fraction;
+            let station_clearance = front_clearance + (rear_clearance - front_clearance) * fraction;
             let probe_offset = if index == 1 {
                 floor.throat_probe_offset_m
             } else {
@@ -647,21 +896,6 @@ impl OpenFormulaSimulation {
         self.simulator.state.linear_velocity
     }
 
-    fn wheel_ray_length(&self, wheel: WheelIndex) -> f64 {
-        let config = &self.simulator.config;
-        let spring_length = if wheel.is_front() {
-            config.suspension.front_spring_length
-        } else {
-            config.suspension.rear_spring_length
-        };
-        let radius = if wheel.is_front() {
-            config.tires.front_tire_radius
-        } else {
-            config.tires.rear_tire_radius
-        };
-        spring_length + radius
-    }
-
     fn wheel_span(&self, wheel: WheelIndex) -> f64 {
         let config = &self.simulator.config;
         let width = if wheel.is_front() {
@@ -672,36 +906,104 @@ impl OpenFormulaSimulation {
         width * config.suspension.tri_ray_spacing_ratio
     }
 
-    /// Twelve independent transverse wheel rays. A ray that misses stays a miss: the
-    /// centre impact is never replicated onto the inner/outer samples.
+    /// Vehicle-local physical centre of one wheel, from the authoritative unsprung
+    /// state. Single definition, shared with the published hub position.
+    pub fn wheel_centre_local(&self, wheel: WheelIndex) -> Vec3 {
+        let state = &self.simulator.state;
+        let suspension = &state.suspension.wheels[wheel as usize];
+        crate::suspension::wheel_centre_local(
+            &self.simulator.config,
+            wheel,
+            suspension.suspension_compression_m,
+            suspension.hub_lateral_m,
+            suspension.hub_long_m,
+        )
+    }
+
+    /// World position of the physical wheel centre.
+    pub fn wheel_centre_world(&self, wheel: WheelIndex) -> Vec3 {
+        self.simulator
+            .state
+            .transform
+            .transform_point(self.wheel_centre_local(wheel))
+    }
+
+    /// Twelve independent transverse wheel rays, all originating at the physical
+    /// wheel centre. A ray that misses stays a miss: the centre impact is never
+    /// replicated onto the inner/outer samples.
+    ///
+    /// Contract (see `types::WheelRayContext`):
+    /// * origin = physical wheel centre + transverse band offset along the body
+    ///   lateral axis. The band offset changes sign per side, so the inner ray always
+    ///   points towards the car centreline.
+    /// * direction = suspension up axis (body up), pointing down.
+    /// * length = `tire_radius + compression + margin`, which keeps the *absolute*
+    ///   reach of the retired chassis-anchor ray (`spring_length + tire_radius`) while
+    ///   the origin follows the wheel. The full droop-to-bump envelope stays covered.
+    /// * `distance` is measured from the centre, so `suspension::sample_contact`
+    ///   converts it to `compression_at_sample - signed_gap`.
     fn sample_wheel_rays(&mut self) -> [TriRaycastSample; 4] {
         let state = &self.simulator.state;
         let config = &self.simulator.config;
         let basis = state.transform.basis;
-        let down = -basis.y;
+        let up = basis.y;
+        let down = -up;
         let mut samples_out = [TriRaycastSample::default(); 4];
-        let ground = track_ground();
+        let world = self.world.as_deref();
         for wheel in WheelIndex::ALL {
             let index = wheel as usize;
-            let anchor = config.tires.wheel_anchor_local(
-                &config.chassis,
-                &config.suspension,
-                wheel,
-            );
+            let anchor =
+                config
+                    .tires
+                    .wheel_anchor_local(&config.chassis, &config.suspension, wheel);
             let anchor_world = state.transform.transform_point(anchor);
+            let suspension = &state.suspension.wheels[index];
+            let radius = if wheel.is_front() {
+                config.tires.front_tire_radius
+            } else {
+                config.tires.rear_tire_radius
+            };
+            let centre_local = crate::suspension::wheel_centre_local(
+                config,
+                wheel,
+                suspension.suspension_compression_m,
+                suspension.hub_lateral_m,
+                suspension.hub_long_m,
+            );
+            let centre_world = state.transform.transform_point(centre_local);
+            let wheel_state = &state.tires.wheels[index];
+            // Rotate the physical tyre-width axis by its solved camber and steering
+            // pose before laying out the three contact rays. Suspension travel still
+            // uses the suspension axis below; the transverse footprint follows the
+            // wheel, so a steered/cambered tyre does not query a body-aligned strip.
+            let camber = suspension.geometric_camber_rad;
+            let steer_toe = wheel_state.steer_angle_rad + suspension.geometric_toe_rad;
+            let wheel_right_local = Vec3::new(
+                camber.cos() * steer_toe.cos(),
+                camber.sin(),
+                -camber.cos() * steer_toe.sin(),
+            );
+            let lateral_axis = state
+                .transform
+                .basis
+                .transform_vector(wheel_right_local)
+                .normalized();
             let span = self.wheel_span(wheel);
-            let length = self.wheel_ray_length(wheel);
+            let length = crate::suspension::wheel_ray_length_from_centre(
+                config,
+                wheel,
+                suspension.suspension_compression_m,
+            );
+            // Positive lateral offset = towards the right-hand side of the car, so the
+            // inner ray of a left wheel is the +X one and the inner ray of a right wheel
+            // is the -X one. One sign per side, never duplicated.
             let lateral_sign = if wheel.is_left() { 1.0 } else { -1.0 };
-            let lateral = basis.x * (span * lateral_sign);
-            let origins = [
-                anchor_world + lateral,
-                anchor_world,
-                anchor_world - lateral,
-            ];
+            let lateral = lateral_axis * (span * lateral_sign);
+            let origins = [centre_world + lateral, centre_world, centre_world - lateral];
             let hits = [
-                ground.and_then(|world| world.raycast(origins[0], down, length)),
-                ground.and_then(|world| world.raycast(origins[1], down, length)),
-                ground.and_then(|world| world.raycast(origins[2], down, length)),
+                cast_ground(world, origins[0], down, length),
+                cast_ground(world, origins[1], down, length),
+                cast_ground(world, origins[2], down, length),
             ];
             let mut sample = TriRaycastSample::default();
             for (slot, hit) in hits.iter().enumerate() {
@@ -709,15 +1011,17 @@ impl OpenFormulaSimulation {
                 let raycast = match hit {
                     Some(hit) => {
                         self.counters.wheel_hits += 1;
-                        crate::types::RaycastHit {
+                        RaycastHit {
                             is_colliding: true,
                             distance: hit.distance,
                             point: hit.point,
                             normal: hit.normal,
                             surface: hit.surface,
+                            surface_friction_multiplier: hit.friction,
+                            surface_rolling_resistance_multiplier: hit.rolling_resistance,
                         }
                     }
-                    None => crate::types::RaycastHit {
+                    None => RaycastHit {
                         is_colliding: false,
                         distance: length,
                         ..Default::default()
@@ -729,25 +1033,46 @@ impl OpenFormulaSimulation {
                     _ => sample.outer = raycast,
                 }
             }
+            sample.context = WheelRayContext::from_wheel_centre(
+                centre_world,
+                lateral_axis,
+                anchor_world,
+                up,
+                suspension.suspension_compression_m,
+                radius,
+                span,
+            );
             samples_out[index] = sample;
         }
         samples_out
     }
 
-    fn sample_floor(&mut self) -> (f64, f64, [f64; FLOOR_PROBE_COUNT], [Vec3; FLOOR_PROBE_COUNT], [Vec3; FLOOR_PROBE_COUNT], u32) {
+    fn sample_floor(
+        &mut self,
+    ) -> (
+        f64,
+        f64,
+        [f64; FLOOR_PROBE_COUNT],
+        [Vec3; FLOOR_PROBE_COUNT],
+        [Vec3; FLOOR_PROBE_COUNT],
+        u32,
+    ) {
         let state = &self.simulator.state;
         let basis = state.transform.basis;
         let down = -basis.y;
-        let mut clearance = [self.floor_probes[0].ray_length, self.floor_probes[1].ray_length];
+        let mut clearance = [
+            self.floor_probes[0].ray_length,
+            self.floor_probes[1].ray_length,
+        ];
         let mut points = [Vec3::ZERO; FLOOR_PROBE_COUNT];
         let mut normals = [Vec3::UP; FLOOR_PROBE_COUNT];
         let mut mask = 0u32;
-        let ground = track_ground();
+        let world = self.world.as_deref();
         for index in 0..FLOOR_PROBE_COUNT {
             let probe = self.floor_probes[index];
             let origin = state.transform.transform_point(probe.origin_local);
             self.counters.floor_queries += 1;
-            if let Some(hit) = ground.and_then(|world| world.raycast(origin, down, probe.ray_length)) {
+            if let Some(hit) = cast_ground(world, origin, down, probe.ray_length) {
                 self.counters.floor_hits += 1;
                 mask |= 1 << index;
                 clearance[index] = hit.distance;
@@ -759,7 +1084,14 @@ impl OpenFormulaSimulation {
         }
         let mut aero_clearance = [0.35f64; 5];
         aero_clearance[0] = clearance[0];
-        aero_clearance[3] = clearance[1] + self.simulator.config.aerodynamics.aero_model.underfloor.throat_probe_offset_m;
+        aero_clearance[3] = clearance[1]
+            + self
+                .simulator
+                .config
+                .aerodynamics
+                .aero_model
+                .underfloor
+                .throat_probe_offset_m;
         let _ = mask;
         (
             aero_clearance[0],
@@ -774,7 +1106,12 @@ impl OpenFormulaSimulation {
     /// Applies a rigid, perfectly inelastic impulse at a body contact point. Used for
     /// barrier/body contacts reported by the host and for floor contact from the two
     /// underfloor probes. Returns the impulse magnitude (N s).
-    fn apply_body_impulse(&mut self, point_world: Vec3, normal_world: Vec3, restitution: f64) -> f64 {
+    fn apply_body_impulse(
+        &mut self,
+        point_world: Vec3,
+        normal_world: Vec3,
+        restitution: f64,
+    ) -> f64 {
         let state = &mut self.simulator.state;
         let config = &self.simulator.config;
         let normal = if normal_world.length() > 1e-9 {
@@ -788,33 +1125,46 @@ impl OpenFormulaSimulation {
         );
         let com = state.transform.transform_point(com_local);
         let arm = point_world - com;
-        let point_velocity =
-            state.linear_velocity + state.angular_velocity.cross(arm);
+        let point_velocity = state.linear_velocity + state.angular_velocity.cross(arm);
         let normal_velocity = point_velocity.dot(normal);
         if normal_velocity >= 0.0 {
             return 0.0;
         }
         let basis = state.transform.basis;
-        let zero = crate::simplified_body_coupling::body_accelerations(config, state, crate::simulation::ForceTorqueOutput::default());
-        let unit = crate::simplified_body_coupling::body_accelerations(config, state,
-            crate::simulation::ForceTorqueOutput { force_world:normal, torque_world:arm.cross(normal) });
-        let (Ok((a0, alpha0)), Ok((a1, alpha1))) = (zero, unit) else { return 0.0; };
-        let response = a1-a0;
-        let angular_response = alpha1-alpha0;
+        let zero = crate::simplified_body_coupling::body_accelerations(
+            config,
+            state,
+            crate::simulation::ForceTorqueOutput::default(),
+        );
+        let unit = crate::simplified_body_coupling::body_accelerations(
+            config,
+            state,
+            crate::simulation::ForceTorqueOutput {
+                force_world: normal,
+                torque_world: arm.cross(normal),
+            },
+        );
+        let (Ok((a0, alpha0)), Ok((a1, alpha1))) = (zero, unit) else {
+            return 0.0;
+        };
+        let response = a1 - a0;
+        let angular_response = alpha1 - alpha0;
         let inverse_effective_mass = (response + angular_response.cross(arm)).dot(normal);
         if inverse_effective_mass <= 1e-9 {
             return 0.0;
         }
-        let impulse = -(1.0 + restitution.clamp(0.0, 0.2)) * normal_velocity / inverse_effective_mass;
+        let impulse =
+            -(1.0 + restitution.clamp(0.0, 0.2)) * normal_velocity / inverse_effective_mass;
         if !impulse.is_finite() || impulse <= 0.0 {
             return 0.0;
         }
-        let arms = WheelIndex::ALL.map(|w| crate::simplified_body_coupling::hub_arm(config,state,w));
+        let arms =
+            WheelIndex::ALL.map(|w| crate::simplified_body_coupling::hub_arm(config, state, w));
         state.linear_velocity += response * impulse;
         state.angular_velocity += angular_response * impulse;
         for wheel in WheelIndex::ALL {
             state.suspension.wheels[wheel as usize].unsprung_velocity_m_s -=
-                (response + angular_response.cross(arms[wheel as usize])).dot(basis.y)*impulse;
+                (response + angular_response.cross(arms[wheel as usize])).dot(basis.y) * impulse;
         }
         impulse
     }
@@ -831,6 +1181,19 @@ impl OpenFormulaSimulation {
         if !duration_seconds.is_finite() || duration_seconds <= 0.0 {
             return Ok(());
         }
+        // A new session replaced or removed the circuit geometry: this vehicle's
+        // samples would query the previous circuit. Refuse instead of integrating.
+        if self.world_is_stale() {
+            let error = format!(
+                "the collision world of this session was replaced or released \
+                 (vehicle generation {}, registry generation {}); the vehicle must be re-created",
+                self.world_generation,
+                crate::collision_world::world_generation()
+            );
+            self.failed = true;
+            self.last_error = error.clone();
+            return Err(error);
+        }
         let dt = duration_seconds.clamp(1.0 / 1000.0, 1.0 / 20.0);
         // Host identity; each nested solve subsequently sets its own endpoint and duration.
         crate::vertical_diagnostics::begin_step(self.simulator.state.sim_time, dt, self.sequence);
@@ -839,6 +1202,8 @@ impl OpenFormulaSimulation {
         self.counters.wheel_hits = 0;
         self.counters.floor_queries = 0;
         self.counters.floor_hits = 0;
+        self.last_barrier_impulse_ns = 0.0;
+        self.last_kinetic_energy_before_j = crate::open_formula::kinetic_energy(&self.simulator);
         let vehicle_input = VehicleInput {
             steering: input.steering.clamp(-1.0, 1.0),
             throttle: input.throttle.clamp(0.0, 1.0),
@@ -853,10 +1218,17 @@ impl OpenFormulaSimulation {
             },
         };
 
-        // Ground sampling for this step: 12 wheel rays + 2 floor probes.
+        // Ground sampling for this step: 12 wheel rays + 2 floor probes, from the
+        // physical wheel centres and the declared floor probes.
         let samples = self.sample_wheel_rays();
-        let (front_clearance, throat_clearance, floor_clearance, floor_points, floor_normals, floor_mask) =
-            self.sample_floor();
+        let (
+            front_clearance,
+            throat_clearance,
+            floor_clearance,
+            floor_points,
+            floor_normals,
+            floor_mask,
+        ) = self.sample_floor();
         let mut aero_environment = crate::aero::AeroEnvironment::unavailable();
         aero_environment.valid_mask = (floor_mask & 1) | ((floor_mask & 2) << 2);
         aero_environment.clearance_m[0] = front_clearance;
@@ -864,6 +1236,9 @@ impl OpenFormulaSimulation {
         aero_environment.contact_confidence = 0.0;
 
         // Barrier/body contacts reported by the host: geometry only, response here.
+        // These are resolved before the suspension solve, exactly once. The suspension
+        // solver never re-applies a barrier impulse, and the barrier loop never adds a
+        // wheel reaction; the split is structural, not a tolerance.
         self.last_body_contact_count = contacts.len().min(32) as u32;
         self.last_body_contact_impulse = [0.0; 32];
         for (contact_index, contact) in contacts.iter().enumerate() {
@@ -881,6 +1256,7 @@ impl OpenFormulaSimulation {
                 Vec3::new(contact.normal.x, contact.normal.y, contact.normal.z),
                 contact.restitution,
             );
+            self.last_barrier_impulse_ns += impulse.max(0.0);
             if contact_index < 32 {
                 self.last_body_contact_impulse[contact_index] = impulse.max(0.0);
             }
@@ -908,11 +1284,8 @@ impl OpenFormulaSimulation {
                     if predicted > 0.0 && floor_clearance[index] > 0.0 {
                         continue;
                     }
-                    let impulse = self.apply_body_impulse(
-                        floor_points[index],
-                        floor_normals[index],
-                        0.0,
-                    );
+                    let impulse =
+                        self.apply_body_impulse(floor_points[index], floor_normals[index], 0.0);
                     if impulse > 0.0 {
                         floor_impulse[index] = impulse;
                     }
@@ -925,8 +1298,12 @@ impl OpenFormulaSimulation {
         self.last_floor_mask = floor_mask;
         self.last_floor_clearance = floor_clearance;
 
-        self.simulator
-            .step_with_aerodynamics_environment(&vehicle_input, &samples, &aero_environment, dt);
+        self.simulator.step_with_aerodynamics_environment(
+            &vehicle_input,
+            &samples,
+            &aero_environment,
+            dt,
+        );
 
         if let Some(error) = self.simulator.state.suspension.mechanical_failure.clone() {
             // Publish the exact constraint numbers before restoring the accepted
@@ -936,12 +1313,27 @@ impl OpenFormulaSimulation {
                 failure.code = crate::vertical_diagnostics::FailureCode::BodyCornerNotConverged;
             }
             let rejected_time_s = self.simulator.state.sim_time;
-            crate::vertical_diagnostics::interval(accepted_before_step.simulator.state.sim_time, 0.0);
+            crate::vertical_diagnostics::interval(
+                accepted_before_step.simulator.state.sim_time,
+                0.0,
+            );
             let accepted = &accepted_before_step.simulator.state;
-            crate::vertical_diagnostics::record(crate::vertical_diagnostics::kind::RESTORED, -1, -1, 0, 0, 0.0,
-                accepted.linear_acceleration, accepted.angular_acceleration,
-                [&accepted.suspension.vertical[0], &accepted.suspension.vertical[1],
-                 &accepted.suspension.vertical[2], &accepted.suspension.vertical[3]]);
+            crate::vertical_diagnostics::record(
+                crate::vertical_diagnostics::kind::RESTORED,
+                -1,
+                -1,
+                0,
+                0,
+                0.0,
+                accepted.linear_acceleration,
+                accepted.angular_acceleration,
+                [
+                    &accepted.suspension.vertical[0],
+                    &accepted.suspension.vertical[1],
+                    &accepted.suspension.vertical[2],
+                    &accepted.suspension.vertical[3],
+                ],
+            );
             crate::vertical_diagnostics::dump_rejection(failure, rejected_time_s);
             *self = accepted_before_step;
             self.counters.rejected_steps += 1;
@@ -976,17 +1368,41 @@ impl OpenFormulaSimulation {
                 ..crate::vertical_diagnostics::FailureDiagnostics::default()
             };
             let rejected = &self.simulator.state;
-            crate::vertical_diagnostics::record_failure(failure, 0, 0,
-                rejected.linear_acceleration, rejected.angular_acceleration,
-                [&rejected.suspension.vertical[0], &rejected.suspension.vertical[1],
-                 &rejected.suspension.vertical[2], &rejected.suspension.vertical[3]]);
+            crate::vertical_diagnostics::record_failure(
+                failure,
+                0,
+                0,
+                rejected.linear_acceleration,
+                rejected.angular_acceleration,
+                [
+                    &rejected.suspension.vertical[0],
+                    &rejected.suspension.vertical[1],
+                    &rejected.suspension.vertical[2],
+                    &rejected.suspension.vertical[3],
+                ],
+            );
             let rejected_time_s = self.simulator.state.sim_time;
-            crate::vertical_diagnostics::interval(accepted_before_step.simulator.state.sim_time, 0.0);
+            crate::vertical_diagnostics::interval(
+                accepted_before_step.simulator.state.sim_time,
+                0.0,
+            );
             let accepted = &accepted_before_step.simulator.state;
-            crate::vertical_diagnostics::record(crate::vertical_diagnostics::kind::RESTORED, -1, -1, 0, 0, 0.0,
-                accepted.linear_acceleration, accepted.angular_acceleration,
-                [&accepted.suspension.vertical[0], &accepted.suspension.vertical[1],
-                 &accepted.suspension.vertical[2], &accepted.suspension.vertical[3]]);
+            crate::vertical_diagnostics::record(
+                crate::vertical_diagnostics::kind::RESTORED,
+                -1,
+                -1,
+                0,
+                0,
+                0.0,
+                accepted.linear_acceleration,
+                accepted.angular_acceleration,
+                [
+                    &accepted.suspension.vertical[0],
+                    &accepted.suspension.vertical[1],
+                    &accepted.suspension.vertical[2],
+                    &accepted.suspension.vertical[3],
+                ],
+            );
             crate::vertical_diagnostics::dump_rejection(failure, rejected_time_s);
             *self = accepted_before_step;
             self.counters.rejected_steps += 1;
@@ -1002,8 +1418,17 @@ impl OpenFormulaSimulation {
         // never replaced by a later graphic frame.
         self.sequence = self.sequence.saturating_add(1);
         self.last_step_dt = dt;
+        self.last_wheel_samples = samples;
+        self.last_kinetic_energy_after_j = kinetic_energy(&self.simulator);
         self.record_accepted_tick();
         Ok(())
+    }
+
+    /// Rigid-body kinetic energy of the accepted state (J). Linear translation plus
+    /// rotation about the centre of mass; no spring or thermal energy is included, so
+    /// two runs can be compared for passivity without mixing reservoirs.
+    pub fn kinetic_energy_j(&self) -> f64 {
+        kinetic_energy(&self.simulator)
     }
 
     /// One accepted-tick row plus the event detector and the pending-window writer.
@@ -1057,7 +1482,8 @@ impl OpenFormulaSimulation {
         snapshot.basis_x = vec3(basis.x);
         snapshot.basis_y = vec3(basis.y);
         snapshot.basis_z = vec3(basis.z);
-        snapshot.flags = OFP_FLAG_POWERTRAIN_THERMAL | OFP_FLAG_WHEEL_THERMAL | OFP_FLAG_BRAKE_THERMAL;
+        snapshot.flags =
+            OFP_FLAG_POWERTRAIN_THERMAL | OFP_FLAG_WHEEL_THERMAL | OFP_FLAG_BRAKE_THERMAL;
         // The powertrain state publishes revolutions per minute; the host converts once.
         snapshot.engine_rpm = state.powertrain.rpm;
         snapshot.engine_torque_nm = state.powertrain.engine_torque;
@@ -1075,12 +1501,12 @@ impl OpenFormulaSimulation {
         snapshot.throttle = state.throttle_input_smoothed;
         snapshot.brake = state.brake_input_smoothed;
         snapshot.steer_input = state.steer_input_smoothed;
-        snapshot.steering_angle_rad = state
-            .tires
-            .wheels
-            .iter()
-            .map(|tire| tire.steer_angle_rad)
-            .fold(0.0, f64::max);
+        // Representative road-wheel steering angle: the mean of the two front wheels,
+        // signed. The previous published value was the unsigned maximum over all four
+        // wheels, which loses the steering direction on a left/right manoeuvre.
+        snapshot.steering_angle_rad = 0.5
+            * (state.tires.wheels[WheelIndex::FrontLeft as usize].steer_angle_rad
+                + state.tires.wheels[WheelIndex::FrontRight as usize].steer_angle_rad);
         snapshot.aero_front_downforce_n = state.aero.front_downforce;
         snapshot.aero_floor_downforce_n = state.aero.diffuser_downforce;
         snapshot.aero_rear_downforce_n = state.aero.rear_downforce;
@@ -1138,11 +1564,6 @@ impl OpenFormulaSimulation {
             wheel_state.wear_grip_scale = wear.wear_grip_scale;
             wheel_state.contact_point = vec3(suspension.effective_contact_point);
             wheel_state.contact_normal = vec3(suspension.effective_normal);
-            let anchor = config.tires.wheel_anchor_local(
-                &config.chassis,
-                &config.suspension,
-                wheel,
-            );
             let spring_length = if wheel.is_front() {
                 config.suspension.front_spring_length
             } else {
@@ -1154,10 +1575,17 @@ impl OpenFormulaSimulation {
             } else {
                 config.tires.rear_tire_radius
             };
-            wheel_state.hub_position = vec3(
-                state.transform.transform_point(anchor)
-                    - basis.y * (spring_length - suspension.suspension_compression_m),
-            );
+            // Published hub position = the same physical centre the rays query, so the
+            // presentation layer, the contact geometry and the diagnostics cannot drift.
+            wheel_state.hub_position = vec3(state.transform.transform_point(
+                crate::suspension::wheel_centre_local(
+                    config,
+                    wheel,
+                    suspension.suspension_compression_m,
+                    suspension.hub_lateral_m,
+                    suspension.hub_long_m,
+                ),
+            ));
             wheel_state.brake_torque_nm = state.powertrain.brake_torques[index];
             wheel_state.ray_hit_mask = (suspension.ray_grounded[0] as u32)
                 | ((suspension.ray_grounded[1] as u32) << 1)
@@ -1187,7 +1615,8 @@ impl OpenFormulaSimulation {
         // accepted solve plus the rejection record; they never feed a force.
         snapshot.angular_acceleration = vec3(state.angular_acceleration);
         for index in 0..OFP_WHEELS {
-            snapshot.wheel_diagnostics[index] = wheel_diagnostics(&state.suspension.vertical[index]);
+            snapshot.wheel_diagnostics[index] =
+                wheel_diagnostics(&state.suspension.vertical[index]);
         }
         for axle in 0..2 {
             let source = &state.suspension.axles[axle];
@@ -1223,6 +1652,176 @@ impl OpenFormulaSimulation {
         snapshot
     }
 
+    /// One JSON document describing exactly what the contact layer measured and
+    /// applied over the last accepted step. This is telemetry: nothing here is read
+    /// back by the solver.
+    ///
+    /// It exists so the host can log the evidence the acceptance gates require
+    /// (per-ray origin, distance, gap, normal, material, demand, impulse, energy and
+    /// momentum) without inventing a second ABI structure for it.
+    pub fn contact_report_json(&self) -> String {
+        let state = &self.simulator.state;
+        let config = &self.simulator.config;
+        let basis = state.transform.basis;
+        let com_local = crate::simulation::center_of_mass_local_for_suspension_backend(
+            config,
+            state.suspension.backend,
+        );
+        let com = state.transform.transform_point(com_local);
+        let identity = self
+            .world_identity()
+            .map(|identity| identity.to_json())
+            .unwrap_or_else(|| "null".to_string());
+        let mut wheel_json = String::new();
+        for wheel in WheelIndex::ALL {
+            let index = wheel as usize;
+            let sample = &self.last_wheel_samples[index];
+            let suspension = &state.suspension.wheels[index];
+            let axis = sample.context.axis_or(basis.y);
+            let radius = sample.context.radius_m;
+            let hits = [&sample.inner, &sample.center, &sample.outer];
+            let lateral_sign = if wheel.is_left() { 1.0 } else { -1.0 };
+            let lateral =
+                sample.context.lateral_axis_world * (sample.context.span_m * lateral_sign);
+            let ray_origins = [
+                sample.context.centre_world + lateral,
+                sample.context.centre_world,
+                sample.context.centre_world - lateral,
+            ];
+            let mut ray_json = String::new();
+            for (slot, hit) in hits.iter().enumerate() {
+                let gap = TriRaycastSample::signed_gap(hit, axis, radius);
+                if slot > 0 {
+                    ray_json.push(',');
+                }
+                ray_json.push_str(&format!(
+                    "{{\"slot\":{},\"valid\":{},\"distance_m\":{:.9},\"gap_m\":{},\
+                     \"point\":[{:.9},{:.9},{:.9}],\"normal\":[{:.9},{:.9},{:.9}],\
+                     \"surface\":{},\"friction_multiplier\":{:.6},\
+                     \"rolling_resistance_multiplier\":{:.6},\
+                     \"origin\":[{:.9},{:.9},{:.9}]}}",
+                    slot,
+                    hit.is_colliding,
+                    hit.distance,
+                    if gap.is_finite() {
+                        format!("{gap:.9}")
+                    } else {
+                        "null".to_string()
+                    },
+                    hit.point.x,
+                    hit.point.y,
+                    hit.point.z,
+                    hit.normal.x,
+                    hit.normal.y,
+                    hit.normal.z,
+                    surface_code(hit.surface),
+                    hit.surface_friction_multiplier,
+                    hit.surface_rolling_resistance_multiplier,
+                    ray_origins[slot].x,
+                    ray_origins[slot].y,
+                    ray_origins[slot].z
+                ));
+            }
+            if index > 0 {
+                wheel_json.push(',');
+            }
+            wheel_json.push_str(&format!(
+                "{{\"wheel\":\"{}\",\"centre_world\":[{:.9},{:.9},{:.9}],\
+                 \"lateral_axis_world\":[{:.9},{:.9},{:.9}],\
+                 \"anchor_world\":[{:.9},{:.9},{:.9}],\"up\":[{:.6},{:.6},{:.6}],\
+                 \"radius_m\":{:.6},\"span_m\":{:.6},\"compression_at_sample_m\":{:.6},\
+                 \"compression_m\":{:.6},\"gap_weighted_m\":{},\
+                 \"contact_fraction\":{:.6},\"grounded\":{},\"normal_force_n\":{:.6},\
+                 \"effective_friction\":{:.6},\"effective_rolling_resistance\":{:.6},\
+                 \"contact_impulse_ns\":{:.6},\"rays\":[{}]}}",
+                wheel_name(wheel),
+                sample.context.centre_world.x,
+                sample.context.centre_world.y,
+                sample.context.centre_world.z,
+                sample.context.lateral_axis_world.x,
+                sample.context.lateral_axis_world.y,
+                sample.context.lateral_axis_world.z,
+                sample.context.anchor_world.x,
+                sample.context.anchor_world.y,
+                sample.context.anchor_world.z,
+                axis.x,
+                axis.y,
+                axis.z,
+                radius,
+                sample.context.span_m,
+                sample.context.compression_m,
+                suspension.suspension_compression_m,
+                weighted_gap(&[
+                    TriRaycastSample::signed_gap(&sample.inner, axis, radius),
+                    TriRaycastSample::signed_gap(&sample.center, axis, radius),
+                    TriRaycastSample::signed_gap(&sample.outer, axis, radius),
+                ])
+                .map(|gap| format!("{gap:.9}"))
+                .unwrap_or_else(|| "null".to_string()),
+                suspension.contact_fraction,
+                suspension.is_grounded,
+                suspension.total_normal_force,
+                suspension.effective_friction,
+                suspension.effective_rolling_resistance,
+                suspension.normal_impulse_newton_seconds,
+                ray_json
+            ));
+        }
+        format!(
+            "{{\"world\":{},\"world_generation\":{},\"sim_time_s\":{:.9},\"dt_s\":{:.9},\
+             \"origin\":[{:.9},{:.9},{:.9}],\"center_of_mass\":[{:.9},{:.9},{:.9}],\
+             \"linear_velocity\":[{:.9},{:.9},{:.9}],\
+             \"angular_velocity\":[{:.9},{:.9},{:.9}],\
+             \"kinetic_energy_before_j\":{:.6},\"kinetic_energy_after_j\":{:.6},\
+             \"barrier_impulse_ns\":{:.6},\"floor_impulse_ns\":[{:.6},{:.6}],\
+             \"floor_clearance_m\":[{:.6},{:.6}],\"floor_valid_mask\":{},\
+             \"body_contact_count\":{},\"wheel_ray_queries\":{},\"wheel_ray_hits\":{},\
+             \"floor_ray_queries\":{},\"floor_ray_hits\":{},\
+             \"steer_input\":{:.6},\"steering_angle_rad\":{:.6},\
+             \"throttle\":{:.6},\"brake\":{:.6},\"gear\":{},\"speed_m_s\":{:.6},\
+             \"wheels\":[{}]}}",
+            identity,
+            self.world_generation,
+            state.sim_time,
+            self.last_step_dt,
+            state.transform.origin.x,
+            state.transform.origin.y,
+            state.transform.origin.z,
+            com.x,
+            com.y,
+            com.z,
+            state.linear_velocity.x,
+            state.linear_velocity.y,
+            state.linear_velocity.z,
+            state.angular_velocity.x,
+            state.angular_velocity.y,
+            state.angular_velocity.z,
+            self.last_kinetic_energy_before_j,
+            self.last_kinetic_energy_after_j,
+            self.last_barrier_impulse_ns,
+            self.last_floor_impulse[0],
+            self.last_floor_impulse[1],
+            self.last_floor_clearance[0],
+            self.last_floor_clearance[1],
+            self.last_floor_mask,
+            self.last_body_contact_count,
+            self.counters.wheel_queries,
+            self.counters.wheel_hits,
+            self.counters.floor_queries,
+            self.counters.floor_hits,
+            state.steer_input_smoothed,
+            // Signed, averaged over the front axle: the direction of the manoeuvre is
+            // preserved (the retired diagnostic used an unsigned maximum).
+            0.5 * (state.tires.wheels[WheelIndex::FrontLeft as usize].steer_angle_rad
+                + state.tires.wheels[WheelIndex::FrontRight as usize].steer_angle_rad),
+            state.throttle_input_smoothed,
+            state.brake_input_smoothed,
+            state.powertrain.current_gear,
+            state.linear_velocity.length(),
+            wheel_json
+        )
+    }
+
     pub fn vehicle_specs(&self) -> crate::open_formula_ffi::OfpVehicleSpecs {
         let config = &self.simulator.config;
         let mut specs = crate::open_formula_ffi::OfpVehicleSpecs::default();
@@ -1230,11 +1829,19 @@ impl OpenFormulaSimulation {
         specs.has_reverse = (config.powertrain.reverse_ratio > 0.0) as i32;
         specs.final_drive = config.powertrain.final_drive;
         specs.reverse_ratio = config.powertrain.reverse_ratio;
-        for (target, ratio) in specs.gear_ratios.iter_mut().zip(&config.powertrain.gear_ratios) {
+        for (target, ratio) in specs
+            .gear_ratios
+            .iter_mut()
+            .zip(&config.powertrain.gear_ratios)
+        {
             *target = *ratio;
         }
-        specs.tire_width_m = [config.tires.front_tire_width, config.tires.front_tire_width,
-            config.tires.rear_tire_width, config.tires.rear_tire_width];
+        specs.tire_width_m = [
+            config.tires.front_tire_width,
+            config.tires.front_tire_width,
+            config.tires.rear_tire_width,
+            config.tires.rear_tire_width,
+        ];
         // Active-profile metadata: the presentation layer must not duplicate physics
         // constants or fall back to the retired reference car.
         specs.max_rpm = config.powertrain.max_rpm;
@@ -1371,10 +1978,20 @@ impl OpenFormulaSimulation {
         for field in SETUP_FIELDS {
             let pointer = format!("/{}", field.path.replace('.', "/"));
             if let Some(mut value) = self.document.pointer(&pointer).and_then(Value::as_f64) {
-                if field.path == "fuel.initial_kg" { value = self.simulator.config.fuel.current_kg; }
-                text.push_str(&format!("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
-                    field.path, field.label, field.unit, value, field.minimum, field.maximum,
-                    field.step, if field.editable { 1 } else { 0 }));
+                if field.path == "fuel.initial_kg" {
+                    value = self.simulator.config.fuel.current_kg;
+                }
+                text.push_str(&format!(
+                    "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+                    field.path,
+                    field.label,
+                    field.unit,
+                    value,
+                    field.minimum,
+                    field.maximum,
+                    field.step,
+                    if field.editable { 1 } else { 0 }
+                ));
             }
         }
         text
@@ -1440,7 +2057,9 @@ impl OpenFormulaSimulation {
                 return Err(format!("setup path {path} requires a numeric value"));
             }
             let descriptor = SETUP_FIELDS.iter().find(|f| f.path == path).unwrap();
-            let number = value.as_f64().ok_or_else(|| format!("invalid number for {path}"))?;
+            let number = value
+                .as_f64()
+                .ok_or_else(|| format!("invalid number for {path}"))?;
             if !number.is_finite() || number < descriptor.minimum || number > descriptor.maximum {
                 return Err(format!("setup path {path} is outside its limits"));
             }
@@ -1465,7 +2084,9 @@ impl OpenFormulaSimulation {
         }
         config.fuel.current_kg = if object.contains_key("fuel.initial_kg") {
             config.fuel.initial_kg.min(config.fuel.capacity_kg)
-        } else { previous.fuel.current_kg.min(config.fuel.capacity_kg) };
+        } else {
+            previous.fuel.current_kg.min(config.fuel.capacity_kg)
+        };
         self.simulator.config = config;
         self.simulator
             .state
@@ -1542,7 +2163,9 @@ impl OpenFormulaSimulation {
             ),
             inertia: crate::simulation::principal_inertia_for_suspension_backend(config, backend),
             spawn_height: default_spawn_height(config),
-            mass: config.chassis.total_vehicle_mass(&config.tires, &config.fuel),
+            mass: config
+                .chassis
+                .total_vehicle_mass(&config.tires, &config.fuel),
         }
     }
 }
@@ -1577,19 +2200,31 @@ fn resolve_profile_document(path: &Path) -> Result<Value, String> {
     merged.insert("schema_version".to_string(), serde_json::json!(3));
     merged.insert(
         "vehicle_id".to_string(),
-        document.get("vehicle_identifier").cloned().unwrap_or(Value::Null),
+        document
+            .get("vehicle_identifier")
+            .cloned()
+            .unwrap_or(Value::Null),
     );
     merged.insert(
         "profile_name".to_string(),
         document.get("profile_name").cloned().unwrap_or(Value::Null),
     );
-    merged.insert("units".to_string(), document.get("units").cloned().unwrap_or(Value::Null));
+    merged.insert(
+        "units".to_string(),
+        document.get("units").cloned().unwrap_or(Value::Null),
+    );
     merged.insert(
         "coordinate_contract".to_string(),
-        document.get("coordinate_contract").cloned().unwrap_or(Value::Null),
+        document
+            .get("coordinate_contract")
+            .cloned()
+            .unwrap_or(Value::Null),
     );
     let section_map: [(&str, &[&str]); 11] = [
-        ("chassis", &["chassis", "geometry", "physical_mass_inventory"]),
+        (
+            "chassis",
+            &["chassis", "geometry", "physical_mass_inventory"],
+        ),
         ("fuel", &["fuel"]),
         ("steering", &["steering"]),
         ("powertrain", &["powertrain"]),
@@ -1682,10 +2317,43 @@ fn surface_code(surface: SurfaceType) -> i32 {
     }
 }
 
+/// Rigid-body kinetic energy (J): translation of the whole mass plus rotation about
+/// the centre of mass, using the same resolved mass properties the force solver uses.
+/// Diagnostics only; it is never fed back into an integration.
+fn kinetic_energy(simulator: &VehicleSimulator) -> f64 {
+    let state = &simulator.state;
+    let props =
+        crate::vehicle_mass_properties::resolve_vehicle_mass_properties_for_suspension_backend(
+            &simulator.config,
+            state.suspension.backend,
+        );
+    let mass = props.total_mass_kilograms;
+    let inertia = props
+        .inertia_about_center_of_mass
+        .entries_kilogram_square_metres;
+    let v = state.linear_velocity;
+    let w = state.angular_velocity;
+    let angular = 0.5
+        * (inertia[0][0] * w.x * w.x
+            + inertia[1][1] * w.y * w.y
+            + inertia[2][2] * w.z * w.z
+            + 2.0
+                * (inertia[0][1] * w.x * w.y
+                    + inertia[0][2] * w.x * w.z
+                    + inertia[1][2] * w.y * w.z));
+    let linear = 0.5 * mass * v.dot(v);
+    let total = linear + angular;
+    if total.is_finite() {
+        total
+    } else {
+        0.0
+    }
+}
+
 #[cfg(test)]
 mod audio_presentation_tests {
     use super::*;
-    use crate::open_formula_ffi::{OFP_ABI_VERSION, OfpControlInput};
+    use crate::open_formula_ffi::{OfpControlInput, OFP_ABI_VERSION};
 
     fn neutral_input() -> OfpControlInput {
         OfpControlInput {
@@ -1731,8 +2399,7 @@ mod audio_presentation_tests {
         assert!(snapshot.shift_timer_s >= 0.0);
         assert!(snapshot.is_rev_limited <= 1);
         // Williams RWD: rear spins exist; output-shaft math stays in the audio wrapper.
-        let rear_mean =
-            (snapshot.wheels[2].spin_rad_s + snapshot.wheels[3].spin_rad_s) * 0.5;
+        let rear_mean = (snapshot.wheels[2].spin_rad_s + snapshot.wheels[3].spin_rad_s) * 0.5;
         assert!(rear_mean.is_finite());
     }
 

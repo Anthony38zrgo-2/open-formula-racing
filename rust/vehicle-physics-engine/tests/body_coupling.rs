@@ -146,6 +146,7 @@ fn an_infeasible_road_rolls_back_pose_clock_fuel_and_corner_state() {
         point: Vec3::new(0., 10., 0.),
         normal: Vec3::UP,
         surface: SurfaceType::Road,
+        ..Default::default()
     };
     sim.step(
         &VehicleInput::default(),
@@ -153,6 +154,7 @@ fn an_infeasible_road_rolls_back_pose_clock_fuel_and_corner_state() {
             inner: hit,
             center: hit,
             outer: hit,
+            ..TriRaycastSample::default()
         }; 4],
         1. / 120.,
     );

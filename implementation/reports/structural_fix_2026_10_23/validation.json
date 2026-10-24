@@ -1,0 +1,10 @@
+{
+  "release_integration_suites": {
+    "body_coupling": 6,
+    "setup_authority": 15,
+    "structural_contact": 16
+  },
+  "total_passed": 37,
+  "failed": 0,
+  "log": "release_tests.log"
+}

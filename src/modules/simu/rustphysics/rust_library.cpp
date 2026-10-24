@@ -177,6 +177,19 @@ bool RustPhysicsLibrary::load(const std::string& library_path)
     traceDump = reinterpret_cast<TraceDumpFn>(resolve(_module, "ofp_trace_dump"));
     traceBuffered = reinterpret_cast<TraceBufferedFn>(resolve(_module, "ofp_trace_buffered"));
     effectiveSetup = reinterpret_cast<EffectiveSetupFn>(resolve(_module, "ofp_effective_setup"));
+    // Session collision-world entry points: optional, so a library built before the
+    // refactor still loads and the adapter falls back to the single-argument loader.
+    loadTrackGroundMeshV2 = reinterpret_cast<LoadTrackGroundMeshV2Fn>(
+        resolve(_module, "ofp_load_track_ground_mesh_v2"));
+    releaseTrackGroundMesh = reinterpret_cast<ReleaseTrackGroundMeshFn>(
+        resolve(_module, "ofp_release_track_ground_mesh"));
+    worldGeneration = reinterpret_cast<WorldGenerationFn>(resolve(_module, "ofp_world_generation"));
+    worldInstallCount = reinterpret_cast<WorldInstallCountFn>(
+        resolve(_module, "ofp_world_install_count"));
+    worldIdentityJson = reinterpret_cast<WorldIdentityJsonFn>(
+        resolve(_module, "ofp_world_identity_json"));
+    worldLastError = reinterpret_cast<WorldLastErrorFn>(resolve(_module, "ofp_world_last_error"));
+    contactReport = reinterpret_cast<ContactReportFn>(resolve(_module, "ofp_contact_report"));
     if (abiVersion() != OFP_ABI_VERSION)
     {
         _last_error = "Rust physics ABI mismatch: library reports " +
@@ -228,4 +241,11 @@ void RustPhysicsLibrary::unload()
     traceDump = nullptr;
     traceBuffered = nullptr;
     effectiveSetup = nullptr;
+    loadTrackGroundMeshV2 = nullptr;
+    releaseTrackGroundMesh = nullptr;
+    worldGeneration = nullptr;
+    worldInstallCount = nullptr;
+    worldIdentityJson = nullptr;
+    worldLastError = nullptr;
+    contactReport = nullptr;
 }

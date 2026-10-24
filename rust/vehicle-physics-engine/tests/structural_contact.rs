@@ -53,11 +53,13 @@ fn contact_sample(
         point: Vec3::new(0.0, -distance, 0.0),
         normal: Vec3::UP,
         surface: SurfaceType::Road,
+        ..Default::default()
     };
     TriRaycastSample {
         inner: hit,
         center: hit,
         outer: hit,
+        ..TriRaycastSample::default()
     }
 }
 
@@ -92,7 +94,9 @@ fn body_of(sim: &VehicleSimulator) -> BodyKinematics {
 }
 
 fn total_mass(config: &VehicleConfig) -> f64 {
-    config.chassis.total_vehicle_mass(&config.tires, &config.fuel)
+    config
+        .chassis
+        .total_vehicle_mass(&config.tires, &config.fuel)
 }
 
 fn trace(name: &str, payload: String) {
@@ -126,22 +130,14 @@ fn p0_airborne_wheel_drops_its_suspension_force_from_the_body() {
     let mut lifted_samples = grounded_samples;
     lifted_samples[WheelIndex::FrontRight as usize] = airborne();
 
-    let (with_contact, _) = grounded.solve_external(
-        body,
-        &VehicleInput::default(),
-        &grounded_samples,
-        DT,
-    );
-    let (without_contact, _) = lifted.solve_external(
-        body,
-        &VehicleInput::default(),
-        &lifted_samples,
-        DT,
-    );
+    let (with_contact, _) =
+        grounded.solve_external(body, &VehicleInput::default(), &grounded_samples, DT);
+    let (without_contact, _) =
+        lifted.solve_external(body, &VehicleInput::default(), &lifted_samples, DT);
 
     let front_right = grounded.state.suspension.wheels[WheelIndex::FrontRight as usize];
-    let lifted_force = lifted.state.suspension.wheels[WheelIndex::FrontRight as usize]
-        .chassis_suspension_force;
+    let lifted_force =
+        lifted.state.suspension.wheels[WheelIndex::FrontRight as usize].chassis_suspension_force;
     let lost = with_contact.force_world.y - without_contact.force_world.y;
     let element_delta: f64 = WheelIndex::ALL
         .iter()
@@ -195,8 +191,7 @@ fn published_normal_impulse_matches_the_supported_load() {
         .iter()
         .map(|w| sim.state.suspension.wheels[*w as usize].suspension_compression_m)
         .collect();
-    let (resting, _) =
-        sim.solve_external(body, &VehicleInput::default(), &samples, DT);
+    let (resting, _) = sim.solve_external(body, &VehicleInput::default(), &samples, DT);
     println!(
         "resting wrench: force {:?}, torque {:?}",
         resting.force_world, resting.torque_world
@@ -213,7 +208,9 @@ fn published_normal_impulse_matches_the_supported_load() {
         worst = worst.max(error);
         println!(
             "{wheel:?}: load {:.3} N, impulse {:.6} N s, expected {:.6} N s, compression {:.6} m",
-            state.total_normal_force, state.normal_impulse_newton_seconds, expected,
+            state.total_normal_force,
+            state.normal_impulse_newton_seconds,
+            expected,
             state.suspension_compression_m
         );
     }
@@ -248,7 +245,12 @@ fn axle_fallback_usage_on_a_grounded_axle() {
     let (mut sim, config) = settled();
     let body = body_of(&sim);
     let before = sim.state.suspension.axle_fallback_count;
-    let (_, _) = sim.solve_external(body, &VehicleInput::default(), &settled_samples(&config), DT);
+    let (_, _) = sim.solve_external(
+        body,
+        &VehicleInput::default(),
+        &settled_samples(&config),
+        DT,
+    );
     let grounded = sim.state.suspension.axle_fallback_count - before;
 
     let mut lifted_samples = settled_samples(&config);
@@ -261,8 +263,14 @@ fn axle_fallback_usage_on_a_grounded_axle() {
         "axle fallbacks in one step: both grounded {grounded}, FR airborne {lifted}; worst iterations {}",
         sim.state.suspension.axle_max_iterations
     );
-    assert_eq!(grounded,0,"a supported axle must converge without fallback");
-    assert_eq!(lifted,0,"one airborne corner must converge without fallback");
+    assert_eq!(
+        grounded, 0,
+        "a supported axle must converge without fallback"
+    );
+    assert_eq!(
+        lifted, 0,
+        "one airborne corner must converge without fallback"
+    );
     assert!(sim.state.suspension.mechanical_failure.is_none());
     trace(
         "axle_fallback_usage",
@@ -284,8 +292,10 @@ fn p0_airborne_arb_side_does_not_transfer_its_roll_moment() {
     // Both corners in bump so the ground constraint is active on both sides and
     // the bank measures the bar, not a wheel that has already lost contact. The
     // travel stays well inside the bump stop so the bank is not a stop-force test.
-    samples[WheelIndex::FrontLeft as usize] = contact_sample(&config, WheelIndex::FrontLeft, base + 0.006);
-    samples[WheelIndex::FrontRight as usize] = contact_sample(&config, WheelIndex::FrontRight, base + 0.002);
+    samples[WheelIndex::FrontLeft as usize] =
+        contact_sample(&config, WheelIndex::FrontLeft, base + 0.006);
+    samples[WheelIndex::FrontRight as usize] =
+        contact_sample(&config, WheelIndex::FrontRight, base + 0.002);
 
     let mut both = sim.clone();
     let (both_force, _) = both.solve_external(body, &VehicleInput::default(), &samples, DT);
@@ -293,7 +303,8 @@ fn p0_airborne_arb_side_does_not_transfer_its_roll_moment() {
     let mut lifted_samples = samples;
     lifted_samples[WheelIndex::FrontRight as usize] = airborne();
     let mut lifted = sim.clone();
-    let (lifted_force, _) = lifted.solve_external(body, &VehicleInput::default(), &lifted_samples, DT);
+    let (lifted_force, _) =
+        lifted.solve_external(body, &VehicleInput::default(), &lifted_samples, DT);
 
     let fl = both.state.suspension.wheels[WheelIndex::FrontLeft as usize];
     let fr = both.state.suspension.wheels[WheelIndex::FrontRight as usize];
@@ -325,7 +336,10 @@ fn p0_airborne_arb_side_does_not_transfer_its_roll_moment() {
         (fl.antiroll_force + fr.antiroll_force).abs() < 1.0,
         "an ideal bar must produce equal and opposite corner forces"
     );
-    assert!(fl.antiroll_force.abs() > 100.0, "the bank must load the bar");
+    assert!(
+        fl.antiroll_force.abs() > 100.0,
+        "the bank must load the bar"
+    );
     // Lifting the inner wheel must not zero the bar force that the corner still
     // carries into the chassis.
     assert!(
@@ -359,13 +373,12 @@ fn mass_contract_closes() {
     let total = total_mass(&config);
     let corners: Vec<f64> = WheelIndex::ALL
         .iter()
-        .map(|wheel| {
-            vehicle_physics_engine::simulation::corner_unsprung_mass_kg(&config, *wheel)
-        })
+        .map(|wheel| vehicle_physics_engine::simulation::corner_unsprung_mass_kg(&config, *wheel))
         .collect();
     let unsprung: f64 = corners.iter().sum();
     let sprung = sprung_mass_kg(&config);
-    let inertia_total = principal_inertia_for_suspension_backend(&config, SuspensionBackend::Simplified);
+    let inertia_total =
+        principal_inertia_for_suspension_backend(&config, SuspensionBackend::Simplified);
     let inertia_sprung = sprung_principal_inertia(&config, SuspensionBackend::Simplified);
     let properties =
         vehicle_physics_engine::vehicle_mass_properties::resolve_vehicle_mass_properties(&config);
@@ -381,8 +394,14 @@ fn mass_contract_closes() {
             inertia_sprung.x, inertia_sprung.y, inertia_sprung.z
         ),
     );
-    assert!((sprung + unsprung - total).abs() < 1e-6, "budgets must close");
-    assert!(sprung > 0.5 * total, "the sprung body must carry most of the car");
+    assert!(
+        (sprung + unsprung - total).abs() < 1e-6,
+        "budgets must close"
+    );
+    assert!(
+        sprung > 0.5 * total,
+        "the sprung body must carry most of the car"
+    );
     assert!(
         inertia_sprung.x < inertia_total.x
             && inertia_sprung.y < inertia_total.y
@@ -395,11 +414,14 @@ fn mass_contract_closes() {
 /// leaves the four corners at their design compression right now.
 fn plane_offset(config: &VehicleConfig, sim: &VehicleSimulator) -> f64 {
     let wheel = WheelIndex::FrontLeft;
-    let anchor = sim.state.transform.transform_point(
-        config
-            .tires
-            .wheel_anchor_local(&config.chassis, &config.suspension, wheel),
-    );
+    let anchor = sim
+        .state
+        .transform
+        .transform_point(config.tires.wheel_anchor_local(
+            &config.chassis,
+            &config.suspension,
+            wheel,
+        ));
     let max_ray = spring_length(config, wheel) + tire_radius(config, wheel);
     anchor.y - (max_ray - rest_compression_m(config, wheel))
 }
@@ -417,14 +439,21 @@ fn plane_samples(
     sim: &VehicleSimulator,
     offset: f64,
 ) -> [TriRaycastSample; 4] {
-    assert!(sim.state.suspension.mechanical_failure.is_none(), "previous interval failed: {:?}",sim.state.suspension.mechanical_failure);
+    assert!(
+        sim.state.suspension.mechanical_failure.is_none(),
+        "previous interval failed: {:?}",
+        sim.state.suspension.mechanical_failure
+    );
     array::from_fn(|index| {
         let wheel = WheelIndex::ALL[index];
-        let anchor = sim.state.transform.transform_point(
-            config
-                .tires
-                .wheel_anchor_local(&config.chassis, &config.suspension, wheel),
-        );
+        let anchor = sim
+            .state
+            .transform
+            .transform_point(config.tires.wheel_anchor_local(
+                &config.chassis,
+                &config.suspension,
+                wheel,
+            ));
         let max_ray = spring_length(config, wheel) + tire_radius(config, wheel);
         let down_axis = sim.state.transform.basis.y;
         let distance = (anchor.y - offset) / down_axis.y;
@@ -437,11 +466,13 @@ fn plane_samples(
             point: anchor - down_axis * distance,
             normal: Vec3::UP,
             surface: SurfaceType::Road,
+            ..Default::default()
         };
         TriRaycastSample {
             inner: hit,
             center: hit,
             outer: hit,
+            ..TriRaycastSample::default()
         }
     })
 }
@@ -454,16 +485,23 @@ fn sloped_samples(
     offset: f64,
     roll_radians: f64,
 ) -> [TriRaycastSample; 4] {
-    assert!(sim.state.suspension.mechanical_failure.is_none(), "previous interval failed: {:?}",sim.state.suspension.mechanical_failure);
+    assert!(
+        sim.state.suspension.mechanical_failure.is_none(),
+        "previous interval failed: {:?}",
+        sim.state.suspension.mechanical_failure
+    );
     let slope = roll_radians.tan();
     let normal = Vec3::new(-slope, 1.0, 0.0).normalized();
     array::from_fn(|index| {
         let wheel = WheelIndex::ALL[index];
-        let anchor = sim.state.transform.transform_point(
-            config
-                .tires
-                .wheel_anchor_local(&config.chassis, &config.suspension, wheel),
-        );
+        let anchor = sim
+            .state
+            .transform
+            .transform_point(config.tires.wheel_anchor_local(
+                &config.chassis,
+                &config.suspension,
+                wheel,
+            ));
         let max_ray = spring_length(config, wheel) + tire_radius(config, wheel);
         let plane_y = offset + anchor.x * slope;
         let down_axis = sim.state.transform.basis.y;
@@ -477,11 +515,13 @@ fn sloped_samples(
             point: anchor - down_axis * distance,
             normal,
             surface: SurfaceType::Road,
+            ..Default::default()
         };
         TriRaycastSample {
             inner: hit,
             center: hit,
             outer: hit,
+            ..TriRaycastSample::default()
         }
     })
 }
@@ -495,7 +535,11 @@ fn settle_on_plane(
 ) {
     let steps = (seconds / dt).round().max(1.0) as usize;
     for step in 0..steps {
-        sim.step(&VehicleInput::default(), &plane_samples(config, sim, offset), dt);
+        sim.step(
+            &VehicleInput::default(),
+            &plane_samples(config, sim, offset),
+            dt,
+        );
         if std::env::var_os("OF_STRUCTURAL_SETTLE_TRACE").is_some() && step % 60 == 0 {
             println!(
                 "   settle t={:.2}: y {:.4}, vy {:.4}, comp {:?}, grounded {:?}",
@@ -504,8 +548,7 @@ fn settle_on_plane(
                 sim.state.linear_velocity.y,
                 WheelIndex::ALL
                     .map(|w| sim.state.suspension.wheels[w as usize].suspension_compression_m),
-                WheelIndex::ALL
-                    .map(|w| sim.state.suspension.wheels[w as usize].is_grounded),
+                WheelIndex::ALL.map(|w| sim.state.suspension.wheels[w as usize].is_grounded),
             );
         }
     }
@@ -545,14 +588,28 @@ fn coarse_host_frames_are_subdivided_internally() {
             sim.state.suspension.axle_fallback_count
         ),
     );
-    assert_eq!(grounded, 4, "a 1/120 s frame must keep all four wheels loaded");
-    assert_eq!(sim.state.suspension.axle_fallback_count, 0, "subdivision must avoid the fallback");
-    let fine_dt=1.0/240.0;
-    let mut reference=VehicleSimulator::new(config.clone(),Vec3::ZERO,0.0);
-    let fine_offset=prepare_plane(&config,&mut reference,fine_dt);
-    for _ in 0..240 { reference.step(&input,&plane_samples(&config,&reference,fine_offset),fine_dt); }
-    assert!((reference.state.linear_velocity-sim.state.linear_velocity).length()<0.1,
-        "coarse and fine host frames must agree after the same manoeuvre");
+    assert_eq!(
+        grounded, 4,
+        "a 1/120 s frame must keep all four wheels loaded"
+    );
+    assert_eq!(
+        sim.state.suspension.axle_fallback_count, 0,
+        "subdivision must avoid the fallback"
+    );
+    let fine_dt = 1.0 / 240.0;
+    let mut reference = VehicleSimulator::new(config.clone(), Vec3::ZERO, 0.0);
+    let fine_offset = prepare_plane(&config, &mut reference, fine_dt);
+    for _ in 0..240 {
+        reference.step(
+            &input,
+            &plane_samples(&config, &reference, fine_offset),
+            fine_dt,
+        );
+    }
+    assert!(
+        (reference.state.linear_velocity - sim.state.linear_velocity).length() < 0.1,
+        "coarse and fine host frames must agree after the same manoeuvre"
+    );
     assert!(
         (sim.state.transform.origin.y - reference.state.transform.origin.y).abs() < 0.001,
         "ride height must match the fine step"
@@ -593,14 +650,26 @@ fn flat_ground_drive_keeps_contact_without_fallback() {
             sim.state.suspension.axle_max_iterations
         ),
     );
-    assert!(sim.state.transform.origin.is_finite(), "state must stay finite");
-    assert_eq!(grounded, 4, "flat ground must keep all four wheels in contact");
-    assert_eq!(fallbacks, 0, "the coupled axle must not fall back on flat ground");
+    assert!(
+        sim.state.transform.origin.is_finite(),
+        "state must stay finite"
+    );
+    assert_eq!(
+        grounded, 4,
+        "flat ground must keep all four wheels in contact"
+    );
+    assert_eq!(
+        fallbacks, 0,
+        "the coupled axle must not fall back on flat ground"
+    );
     assert!(
         sim.state.transform.origin.y > settled_y - 0.05,
         "the body must not sink through the plane"
     );
-    assert!(sim.state.linear_velocity.length() > 1.0, "throttle must move the car");
+    assert!(
+        sim.state.linear_velocity.length() > 1.0,
+        "throttle must move the car"
+    );
 }
 
 /// Time-step sweep: the rest state must not depend on the host step. Convergence is
@@ -612,8 +681,8 @@ fn temporal_sweep_keeps_the_same_rest_state() {
     for dt in [1.0 / 240.0, 1.0 / 480.0] {
         let mut sim = VehicleSimulator::new(config.clone(), Vec3::ZERO, 0.0);
         let offset = prepare_plane(&config, &mut sim, dt);
-        let settled_compressions =
-            WheelIndex::ALL.map(|w| sim.state.suspension.wheels[w as usize].suspension_compression_m);
+        let settled_compressions = WheelIndex::ALL
+            .map(|w| sim.state.suspension.wheels[w as usize].suspension_compression_m);
         let settled_y = sim.state.transform.origin.y;
         let mut input = VehicleInput::default();
         input.throttle = 0.25;
@@ -643,7 +712,11 @@ fn temporal_sweep_keeps_the_same_rest_state() {
                 sim.state.suspension.axle_fallback_count
             ),
         );
-        assert!(y.is_finite() && speed.is_finite(), "dt 1/{:.0} diverged", 1.0 / dt);
+        assert!(
+            y.is_finite() && speed.is_finite(),
+            "dt 1/{:.0} diverged",
+            1.0 / dt
+        );
         assert_eq!(grounded, 4, "dt 1/{:.0} lost contact", 1.0 / dt);
         states.push((y, speed));
     }
@@ -652,8 +725,14 @@ fn temporal_sweep_keeps_the_same_rest_state() {
     let speed_spread = states.iter().map(|s| s.1).fold(f64::MIN, f64::max)
         - states.iter().map(|s| s.1).fold(f64::MAX, f64::min);
     println!("sweep spread: y {y_spread:.4} m, speed {speed_spread:.3} m/s");
-    assert!(y_spread < 0.01, "ride height must not depend on dt ({y_spread:.4} m)");
-    assert!(speed_spread < 0.5, "same manoeuvre must end at a similar speed");
+    assert!(
+        y_spread < 0.01,
+        "ride height must not depend on dt ({y_spread:.4} m)"
+    );
+    assert!(
+        speed_spread < 0.5,
+        "same manoeuvre must end at a similar speed"
+    );
 }
 
 /// Kerb step: 15 mm ground step under a rolling car. Contact must be recovered
@@ -702,8 +781,14 @@ fn kerb_step_recovers_contact() {
             sim.state.suspension.axle_max_iterations
         ),
     );
-    assert!(sim.state.transform.origin.is_finite(), "kerb must keep a finite state");
-    assert!(peak_load.is_finite() && peak_load > 2000.0, "the kerb must load the tyre");
+    assert!(
+        sim.state.transform.origin.is_finite(),
+        "kerb must keep a finite state"
+    );
+    assert!(
+        peak_load.is_finite() && peak_load > 2000.0,
+        "the kerb must load the tyre"
+    );
     assert_eq!(grounded, 4, "the car must recover contact after the kerb");
     assert!(
         sim.state.suspension.axle_fallback_count <= 2,
@@ -730,21 +815,37 @@ fn partial_contact_keeps_the_suspension_connected() {
     let state = sim.state.suspension.wheels[WheelIndex::FrontLeft as usize];
     println!(
         "partial contact: fraction {:.2}, load {:.1} N, grounded {}, compression {:.4} m",
-        state.contact_fraction, state.total_normal_force, state.is_grounded,
+        state.contact_fraction,
+        state.total_normal_force,
+        state.is_grounded,
         state.suspension_compression_m
     );
     trace(
         "partial_contact",
         format!(
             "\"fraction\":{:.6},\"load_n\":{:.6},\"grounded\":{},\"compression_m\":{:.6}",
-            state.contact_fraction, state.total_normal_force, state.is_grounded,
+            state.contact_fraction,
+            state.total_normal_force,
+            state.is_grounded,
             state.suspension_compression_m
         ),
     );
-    assert!((state.contact_fraction - 0.25).abs() < 1e-9, "one of four ray weights");
-    assert!(state.is_grounded, "a partially supported corner is still in contact");
-    assert!(state.total_normal_force > 100.0, "the corner must still carry load");
-    assert!(sim.state.transform.origin.is_finite(), "state must stay finite");
+    assert!(
+        (state.contact_fraction - 0.25).abs() < 1e-9,
+        "one of four ray weights"
+    );
+    assert!(
+        state.is_grounded,
+        "a partially supported corner is still in contact"
+    );
+    assert!(
+        state.total_normal_force > 100.0,
+        "the corner must still carry load"
+    );
+    assert!(
+        sim.state.transform.origin.is_finite(),
+        "state must stay finite"
+    );
 }
 
 /// Geometry envelope: the rest point sits inside the prepared travel range and a normal
@@ -778,7 +879,9 @@ fn geometry_envelope_contains_the_used_travel() {
         let rest = rest_compression_m(&config, wheel);
         report.push_str(&format!(
             "{wheel:?}: q [{:.4}, {:.4}] m, rest {:.4} m, comp {:.4} m, k_wheel {:.0} N/m; ",
-            envelope.q_min, envelope.q_max, rest,
+            envelope.q_min,
+            envelope.q_max,
+            rest,
             sim.state.suspension.wheels[wheel as usize].suspension_compression_m,
             envelope.k_wheel_rest_n_per_m
         ));
@@ -789,11 +892,17 @@ fn geometry_envelope_contains_the_used_travel() {
         assert!(
             lowest[wheel as usize] > envelope.q_min && highest[wheel as usize] < envelope.q_max,
             "{wheel:?} must stay inside [{:.4}, {:.4}] m, used [{:.4}, {:.4}]",
-            envelope.q_min, envelope.q_max, lowest[wheel as usize], highest[wheel as usize]
+            envelope.q_min,
+            envelope.q_max,
+            lowest[wheel as usize],
+            highest[wheel as usize]
         );
     }
     println!("geometry: {report}");
-    trace("geometry_envelope", format!("\"detail\":\"{}\"", report.replace('"', "'")));
+    trace(
+        "geometry_envelope",
+        format!("\"detail\":\"{}\"", report.replace('"', "'")),
+    );
 }
 
 /// Inclined ground: the four normal reactions must still carry the weight projected on
@@ -898,7 +1007,10 @@ fn wheel_losing_every_ray_stays_connected_to_the_body() {
         lifted.chassis_suspension_force.abs() > 10.0,
         "the airborne corner must still transmit its element force"
     );
-    assert!(sim.state.transform.origin.is_finite(), "state must stay finite");
+    assert!(
+        sim.state.transform.origin.is_finite(),
+        "state must stay finite"
+    );
     assert!(sim.state.linear_velocity.length().is_finite());
 }
 
@@ -923,7 +1035,10 @@ fn reset_restores_the_same_rest_state() {
             "\"y_before\":{before_y:.6},\"y_after\":{after_y:.6},\"comp_before\":{before:?},\"comp_after\":{after:?}"
         ),
     );
-    assert!((before_y - after_y).abs() < 2e-3, "reset must return the same ride height");
+    assert!(
+        (before_y - after_y).abs() < 2e-3,
+        "reset must return the same ride height"
+    );
     for wheel in 0..4 {
         assert!(
             (before[wheel] - after[wheel]).abs() < 2e-3,
@@ -948,11 +1063,13 @@ fn free_fall_of_the_whole_vehicle_is_gravity_only() {
         let mass = vehicle_physics_engine::simulation::corner_unsprung_mass_kg(&config, wheel);
         corner_mass += mass;
         // Relative axial acceleration is not the corner's world acceleration.
-        let r = vehicle_physics_engine::simplified_body_coupling::hub_arm(&config, &sim.state, wheel);
+        let r =
+            vehicle_physics_engine::simplified_body_coupling::hub_arm(&config, &sim.state, wheel);
         let axis = sim.state.transform.basis.y;
         let omega = sim.state.angular_velocity;
         let acceleration = sim.state.linear_acceleration
-            + sim.state.angular_acceleration.cross(r) + omega.cross(omega.cross(r))
+            + sim.state.angular_acceleration.cross(r)
+            + omega.cross(omega.cross(r))
             + omega.cross(axis) * (2.0 * state.unsprung_velocity_m_s)
             + axis * state.unsprung_acceleration_m_s2;
         corner_moment += mass * acceleration.y;
@@ -983,15 +1100,21 @@ fn left_right_permutation_keeps_the_axle_total() {
     let body = body_of(&sim);
     let mut samples = settled_samples(&config);
     let base = rest_compression_m(&config, WheelIndex::FrontLeft);
-    samples[WheelIndex::FrontLeft as usize] = contact_sample(&config, WheelIndex::FrontLeft, base + 0.010);
-    samples[WheelIndex::FrontRight as usize] = contact_sample(&config, WheelIndex::FrontRight, base - 0.010);
+    samples[WheelIndex::FrontLeft as usize] =
+        contact_sample(&config, WheelIndex::FrontLeft, base + 0.010);
+    samples[WheelIndex::FrontRight as usize] =
+        contact_sample(&config, WheelIndex::FrontRight, base - 0.010);
 
     let mut direct = sim.clone();
     let (direct_force, _) = direct.solve_external(body, &VehicleInput::default(), &samples, DT);
     let mut mirrored_samples = samples;
-    mirrored_samples.swap(WheelIndex::FrontLeft as usize, WheelIndex::FrontRight as usize);
+    mirrored_samples.swap(
+        WheelIndex::FrontLeft as usize,
+        WheelIndex::FrontRight as usize,
+    );
     let mut mirrored = sim.clone();
-    let (mirrored_force, _) = mirrored.solve_external(body, &VehicleInput::default(), &mirrored_samples, DT);
+    let (mirrored_force, _) =
+        mirrored.solve_external(body, &VehicleInput::default(), &mirrored_samples, DT);
 
     println!(
         "permutation: direct {:.3} N, mirrored {:.3} N",

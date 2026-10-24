@@ -5,6 +5,7 @@ pub mod underfloor_contact_configuration;
 pub mod bin_support;
 pub mod brake_thermals;
 pub mod calibration;
+pub mod collision_world;
 pub mod ffi;
 pub mod powertrain;
 pub mod powertrain_thermals;

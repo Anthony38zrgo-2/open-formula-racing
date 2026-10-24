@@ -1,4 +1,4 @@
-﻿//! C-ABI FFI for Formula-90 / Godot integration.
+//! C-ABI FFI for Formula-90 / Godot integration.
 //!
 //! Recommended mode:
 //!   Godot owns a RigidBody3D and all collision queries.
@@ -109,8 +109,18 @@ pub extern "C" fn f1_94_physics_get_runtime_config(
             suspension_front_resting_ratio: sim.config.suspension.front_resting_ratio,
             suspension_rear_resting_ratio: sim.config.suspension.rear_resting_ratio,
             powertrain_cooling_duct_openings_supplied: false,
-            water_cooling_duct_opening: sim.config.powertrain.powertrain_thermal.water_cooling_duct.opening,
-            oil_cooling_duct_opening: sim.config.powertrain.powertrain_thermal.oil_cooling_duct.opening,
+            water_cooling_duct_opening: sim
+                .config
+                .powertrain
+                .powertrain_thermal
+                .water_cooling_duct
+                .opening,
+            oil_cooling_duct_opening: sim
+                .config
+                .powertrain
+                .powertrain_thermal
+                .oil_cooling_duct
+                .opening,
         };
     }
     true
@@ -127,14 +137,20 @@ pub fn apply_runtime_config_to_sim(sim: &mut VehicleSimulator, cfg: &FfiRuntimeC
         if cfg.water_cooling_duct_opening.is_finite()
             && (0.0..=1.0).contains(&cfg.water_cooling_duct_opening)
         {
-            sim.config.powertrain.powertrain_thermal.water_cooling_duct.opening =
-                cfg.water_cooling_duct_opening;
+            sim.config
+                .powertrain
+                .powertrain_thermal
+                .water_cooling_duct
+                .opening = cfg.water_cooling_duct_opening;
         }
         if cfg.oil_cooling_duct_opening.is_finite()
             && (0.0..=1.0).contains(&cfg.oil_cooling_duct_opening)
         {
-            sim.config.powertrain.powertrain_thermal.oil_cooling_duct.opening =
-                cfg.oil_cooling_duct_opening;
+            sim.config
+                .powertrain
+                .powertrain_thermal
+                .oil_cooling_duct
+                .opening = cfg.oil_cooling_duct_opening;
         }
     }
     sim.aids = AidsMask::from_bits(cfg.aids_enabled_mask);
@@ -275,6 +291,7 @@ impl From<FfiRaycastHit> for RaycastHit {
             point: Vec3::new(f.point_x, f.point_y, f.point_z),
             normal: Vec3::new(f.normal_x, f.normal_y, f.normal_z),
             surface,
+            ..RaycastHit::default()
         }
     }
 }
@@ -293,6 +310,10 @@ impl From<FfiTriRaycastSample> for TriRaycastSample {
             inner: f.inner.into(),
             center: f.center.into(),
             outer: f.outer.into(),
+            // The retired Godot contract measures hit distances from the chassis
+            // attachment point the host cast them at. That interpretation is declared
+            // explicitly instead of being assumed by the solver.
+            context: crate::types::WheelRayContext::from_chassis_anchor(),
         }
     }
 }
@@ -641,8 +662,16 @@ pub extern "C" fn formula_one_physics_create_from_vehicle_profile_v1(
     error_buffer_length: u32,
 ) -> *mut c_void {
     let configuration = (|| -> Result<VehicleConfig, String> {
-        let authorized_root = read_vehicle_profile_path(authorized_root_pointer, authorized_root_length, "authorized root")?;
-        let profile_path = read_vehicle_profile_path(profile_path_pointer, profile_path_length, "vehicle profile")?;
+        let authorized_root = read_vehicle_profile_path(
+            authorized_root_pointer,
+            authorized_root_length,
+            "authorized root",
+        )?;
+        let profile_path = read_vehicle_profile_path(
+            profile_path_pointer,
+            profile_path_length,
+            "vehicle profile",
+        )?;
         crate::vehicle_configuration::load_vehicle_configuration_from_authorized_root(
             std::path::Path::new(&profile_path),
             std::path::Path::new(&authorized_root),
@@ -666,7 +695,11 @@ pub extern "C" fn formula_one_physics_create_from_vehicle_profile_v1(
     }
 }
 
-fn read_vehicle_profile_path(pointer: *const u8, length: u32, description: &str) -> Result<String, String> {
+fn read_vehicle_profile_path(
+    pointer: *const u8,
+    length: u32,
+    description: &str,
+) -> Result<String, String> {
     if pointer.is_null() || length == 0 {
         return Err(format!("null or empty {description} path"));
     }
@@ -803,7 +836,10 @@ pub extern "C" fn f1_94_physics_get_wheel_anchor_local(
     // SAFETY: `sim_ptr` is non-null (checked above) and, per the C ABI contract, points to a live `VehicleSimulator`.
     let sim = unsafe { &*(sim_ptr as *const VehicleSimulator) };
     let wheel = WheelIndex::ALL[(wheel_idx as usize).min(3)];
-    let anchor = sim.config.tires.wheel_anchor_local(&sim.config.chassis, &sim.config.suspension, wheel);
+    let anchor =
+        sim.config
+            .tires
+            .wheel_anchor_local(&sim.config.chassis, &sim.config.suspension, wheel);
     // SAFETY: `out_x`/`out_y`/`out_z` are non-null (checked above) and point to writable `f64`s.
     unsafe {
         *out_x = anchor.x;
@@ -887,10 +923,7 @@ pub extern "C" fn f1_94_physics_get_center_of_mass_local(
     }
     // SAFETY: `sim_ptr` is non-null (checked above) and, per the C ABI contract, points to a live `VehicleSimulator`.
     let sim = unsafe { &*(sim_ptr as *const VehicleSimulator) };
-    let cg = center_of_mass_local_for_suspension_backend(
-        &sim.config,
-        sim.state.suspension.backend,
-    );
+    let cg = center_of_mass_local_for_suspension_backend(&sim.config, sim.state.suspension.backend);
     // SAFETY: `out_x`/`out_y`/`out_z` are non-null (checked above) and point to writable `f64`s.
     unsafe {
         *out_x = cg.x;
@@ -949,7 +982,9 @@ pub extern "C" fn f1_94_physics_get_vehicle_mass(sim_ptr: *const c_void) -> f64 
     let sim = unsafe { &*(sim_ptr as *const VehicleSimulator) };
     // Live total mass (dry + remaining fuel). The host uses this for the Godot
     // body mass while the runtime config keeps reporting the dry tuning value.
-    sim.config.chassis.total_vehicle_mass(&sim.config.tires, &sim.config.fuel)
+    sim.config
+        .chassis
+        .total_vehicle_mass(&sim.config.tires, &sim.config.fuel)
 }
 
 #[no_mangle]
@@ -1160,13 +1195,10 @@ fn write_telemetry(
                 .water_optimal_minimum_temperature_celsius,
             water_optimal_maximum_temperature_celsius: telem
                 .water_optimal_maximum_temperature_celsius,
-            water_hot_derating_temperature_celsius: telem
-                .water_hot_derating_temperature_celsius,
+            water_hot_derating_temperature_celsius: telem.water_hot_derating_temperature_celsius,
             water_critical_temperature_celsius: telem.water_critical_temperature_celsius,
-            oil_optimal_minimum_temperature_celsius: telem
-                .oil_optimal_minimum_temperature_celsius,
-            oil_optimal_maximum_temperature_celsius: telem
-                .oil_optimal_maximum_temperature_celsius,
+            oil_optimal_minimum_temperature_celsius: telem.oil_optimal_minimum_temperature_celsius,
+            oil_optimal_maximum_temperature_celsius: telem.oil_optimal_maximum_temperature_celsius,
             oil_hot_derating_temperature_celsius: telem.oil_hot_derating_temperature_celsius,
             oil_critical_temperature_celsius: telem.oil_critical_temperature_celsius,
             fuel_remaining_kg: telem.fuel_remaining_kg,
@@ -1213,16 +1245,28 @@ mod layout_tests {
         );
         assert_eq!(offset_of!(FfiTelemetryOutput, fl_brake_power_w), 880);
         assert_eq!(offset_of!(FfiTelemetryOutput, fl_brake_energy_j), 912);
-        assert_eq!(offset_of!(FfiTelemetryOutput, fl_brake_natural_cooling_w_k), 944);
-        assert_eq!(offset_of!(FfiTelemetryOutput, fl_brake_speed_cooling_w_k), 976);
+        assert_eq!(
+            offset_of!(FfiTelemetryOutput, fl_brake_natural_cooling_w_k),
+            944
+        );
+        assert_eq!(
+            offset_of!(FfiTelemetryOutput, fl_brake_speed_cooling_w_k),
+            976
+        );
         assert_eq!(offset_of!(FfiTelemetryOutput, tc_eligible), 1008);
         assert_eq!(offset_of!(FfiTelemetryOutput, tc_gear_authority), 1016);
         assert_eq!(offset_of!(FfiTelemetryOutput, tc_slip_ratio), 1040);
         assert_eq!(offset_of!(FfiTelemetryOutput, drive_torque_pre_tc_nm), 1072);
         assert_eq!(offset_of!(FfiTelemetryOutput, pre_tc_drive_power_w), 1104);
         assert_eq!(offset_of!(FfiTelemetryOutput, net_drive_power_w), 1112);
-        assert_eq!(offset_of!(FfiTelemetryOutput, engine_block_temperature_celsius), 1120);
-        assert_eq!(offset_of!(FfiTelemetryOutput, oil_critical_temperature_celsius), 1320);
+        assert_eq!(
+            offset_of!(FfiTelemetryOutput, engine_block_temperature_celsius),
+            1120
+        );
+        assert_eq!(
+            offset_of!(FfiTelemetryOutput, oil_critical_temperature_celsius),
+            1320
+        );
         // FUEL-100 append-only ABI 15 block.
         assert_eq!(offset_of!(FfiTelemetryOutput, fuel_remaining_kg), 1328);
         assert_eq!(offset_of!(FfiTelemetryOutput, fuel_capacity_kg), 1336);
@@ -1282,27 +1326,53 @@ pub extern "C" fn formula_one_physics_read_driver_tire_state(
     simulator_pointer: *const c_void,
     output_pointer: *mut DriverTireStateSnapshot,
 ) -> bool {
-    if simulator_pointer.is_null() || output_pointer.is_null() { return false; }
+    if simulator_pointer.is_null() || output_pointer.is_null() {
+        return false;
+    }
     let simulator = unsafe { &*(simulator_pointer as *const VehicleSimulator) };
     let mut snapshot = DriverTireStateSnapshot::default();
     for wheel_index in 0..4 {
         let tire = &simulator.state.tires.wheels[wheel_index];
         let suspension = &simulator.state.suspension.wheels[wheel_index];
-        snapshot.wheel_normal_load_newtons[wheel_index] = if suspension.is_grounded { suspension.total_normal_force.max(0.0) } else { 0.0 };
-        snapshot.wheel_lateral_capacity_newtons[wheel_index] = if suspension.is_grounded { tire.lateral_capacity_newtons } else { 0.0 };
-        snapshot.wheel_longitudinal_capacity_newtons[wheel_index] = if suspension.is_grounded { tire.longitudinal_capacity_newtons } else { 0.0 };
+        snapshot.wheel_normal_load_newtons[wheel_index] = if suspension.is_grounded {
+            suspension.total_normal_force.max(0.0)
+        } else {
+            0.0
+        };
+        snapshot.wheel_lateral_capacity_newtons[wheel_index] = if suspension.is_grounded {
+            tire.lateral_capacity_newtons
+        } else {
+            0.0
+        };
+        snapshot.wheel_longitudinal_capacity_newtons[wheel_index] = if suspension.is_grounded {
+            tire.longitudinal_capacity_newtons
+        } else {
+            0.0
+        };
         snapshot.wheel_lateral_force_newtons[wheel_index] = tire.lateral_force;
         snapshot.wheel_longitudinal_force_newtons[wheel_index] = tire.longitudinal_force;
         snapshot.wheel_combined_utilization[wheel_index] = tire.combined_utilization;
         snapshot.wheel_combined_demand[wheel_index] = tire.combined_demand;
         snapshot.wheel_slip_angle_radians[wheel_index] = tire.effective_slip_angle_rad;
         snapshot.wheel_peak_slip_angle_radians[wheel_index] = tire.effective_lateral_peak_slip_rad;
-        snapshot.wheel_grip_scale[wheel_index] = tire.mechanical_modifiers.grip_scale * tire.mechanical_modifiers.wear_grip_scale;
-        snapshot.wheel_brake_efficiency[wheel_index] = simulator.state.brake_thermal.wheels[wheel_index].efficiency;
+        snapshot.wheel_grip_scale[wheel_index] =
+            tire.mechanical_modifiers.grip_scale * tire.mechanical_modifiers.wear_grip_scale;
+        snapshot.wheel_brake_efficiency[wheel_index] =
+            simulator.state.brake_thermal.wheels[wheel_index].efficiency;
     }
-    snapshot.total_mass_kilograms = simulator.config.chassis.total_vehicle_mass(&simulator.config.tires, &simulator.config.fuel);
-    snapshot.front_weight_fraction = simulator.config.chassis.effective_front_weight_distribution(&simulator.config.tires, &simulator.config.fuel);
-    snapshot.front_steering_angle_radians = -(simulator.state.tires.wheels[0].steer_angle_rad + simulator.state.tires.wheels[1].steer_angle_rad) * 0.5;
-    unsafe { *output_pointer = snapshot; }
+    snapshot.total_mass_kilograms = simulator
+        .config
+        .chassis
+        .total_vehicle_mass(&simulator.config.tires, &simulator.config.fuel);
+    snapshot.front_weight_fraction = simulator
+        .config
+        .chassis
+        .effective_front_weight_distribution(&simulator.config.tires, &simulator.config.fuel);
+    snapshot.front_steering_angle_radians = -(simulator.state.tires.wheels[0].steer_angle_rad
+        + simulator.state.tires.wheels[1].steer_angle_rad)
+        * 0.5;
+    unsafe {
+        *output_pointer = snapshot;
+    }
     true
 }

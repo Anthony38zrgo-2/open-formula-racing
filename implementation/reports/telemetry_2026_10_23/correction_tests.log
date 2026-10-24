@@ -1,0 +1,71 @@
+    Blocking waiting for file lock on artifact directory
+   Compiling vehicle_physics_engine v0.1.0 (D:\open-formula\rust\vehicle-physics-engine)
+    Finished `release` profile [optimized] target(s) in 2m 42s
+     Running tests\body_coupling.rs (rust\target\release\deps\body_coupling-ead3ad4f12636538.exe)
+
+running 6 tests
+test horizontal_force_accelerates_total_mass_and_not_only_sprung_mass ... ok
+test yaw_inertia_includes_transport_of_the_corner_masses ... ok
+test a_free_corner_sees_the_rotating_anchor_acceleration ... ok
+test hard_travel_limit_impulses_reach_the_body ... ok
+test actual_world_momentum_in_free_fall_closes_against_gravity_impulse ... ok
+test an_infeasible_road_rolls_back_pose_clock_fuel_and_corner_state ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests\setup_authority.rs (rust\target\release\deps\setup_authority-b074ac82fd0a69fe.exe)
+
+running 15 tests
+test translation::a_non_finite_requested_trim_is_rejected ... ok
+test translation::an_explicit_bar_rate_is_never_rewritten ... ok
+test translation::a_zero_design_trim_disables_the_translation_instead_of_dividing_by_zero ... ok
+test translation::each_trim_moves_only_its_own_element ... ok
+test translation::one_bar_per_axle_for_both_representations ... ok
+test translation::the_design_setup_resolves_to_the_authored_coefficients ... ok
+test translation::the_translation_never_compounds ... ok
+test the_garage_controls_stay_the_stored_paths_and_stay_editable ... ok
+test the_design_profile_keeps_its_authored_elements ... ok
+test a_rejected_transaction_leaves_the_running_elements_untouched ... ok
+test the_rebound_knob_moves_its_own_axle_and_nothing_else ... ok
+test the_bump_stop_knob_reaches_the_geometric_stops ... ok
+test the_antiroll_knob_is_the_effective_bar ... ok
+test the_bump_and_damping_knobs_reach_the_active_damper ... ok
+test replaying_a_setup_never_multiplies_the_profile_again ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests\structural_contact.rs (rust\target\release\deps\structural_contact-9a783c775d2554de.exe)
+
+running 16 tests
+test mass_contract_closes ... ok
+test axle_fallback_usage_on_a_grounded_axle ... ok
+test free_fall_of_the_whole_vehicle_is_gravity_only ... ok
+test p0_airborne_arb_side_does_not_transfer_its_roll_moment ... ok
+test published_normal_impulse_matches_the_supported_load ... ok
+test p0_airborne_wheel_drops_its_suspension_force_from_the_body ... ok
+test left_right_permutation_keeps_the_axle_total ... ok
+test partial_contact_keeps_the_suspension_connected ... ok
+test flat_ground_drive_keeps_contact_without_fallback ... ok
+test coarse_host_frames_are_subdivided_internally ... ok
+test inclined_plane_keeps_the_normal_load_balance ... ok
+test wheel_losing_every_ray_stays_connected_to_the_body ... ok
+test geometry_envelope_contains_the_used_travel ... ok
+test kerb_step_recovers_contact ... ok
+test reset_restores_the_same_rest_state ... ok
+test temporal_sweep_keeps_the_same_rest_state ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.78s
+
+     Running tests\vertical_telemetry.rs (rust\target\release\deps\vertical_telemetry-44c140fd619458a6.exe)
+
+running 7 tests
+test vertical_diagnostics::regression_tests::seeing_ground_does_not_mean_support ... ok
+test vertical_diagnostics::tests::failure_labels_are_stable ... ok
+test vertical_diagnostics::tests::csv_header_matches_row_field_count ... ok
+test vertical_diagnostics::regression_tests::loss_of_support_triggers_even_when_all_rays_see_ground ... ok
+test vertical_diagnostics::regression_tests::overflow_is_counted ... ok
+test vertical_diagnostics::tests::ring_keeps_the_newest_capacity ... ok
+test exhausted_body_iterations_keep_candidate_without_test_solver_overrides ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+

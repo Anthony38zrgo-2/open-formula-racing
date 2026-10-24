@@ -1,0 +1,60 @@
+{
+  "candidate": {
+    "base_commit": "4a14467ca061982fca87a60212489bef4e018911",
+    "built_path": "rust/target/release/vehicle_physics_engine.dll",
+    "built_sha256": "233d34912769474587cb34c97323a3ccb8d2ee325f018ff19ceda429e4b3a42a",
+    "size_bytes": 4959744,
+    "abi_signature": "0xeebdad2292b2359d",
+    "abi_matches_previous": true
+  },
+  "installed": {
+    "path": "D:\\open-formula\\distribution\\lib\\games\\speed-dreams-2\\modules\\simu\\vehicle_physics_engine.dll",
+    "sha256": "233d34912769474587cb34c97323a3ccb8d2ee325f018ff19ceda429e4b3a42a",
+    "previous_sha256": "7088504e89d84a0a0cd8daf884433d8557ca1d6a8ff877e75035144149ae55cd",
+    "superseded_in_session": {
+      "sha256": "8c1cf07991b85053279527109aeb8f225637f09d58f9ead875e6ea113c34faaf",
+      "reason": "recompilado tras extraer VehicleSimulator::reset; misma fisica, prueba de reset contra el camino de produccion"
+    },
+    "installed_at": "2026-10-22T23:56:00-05:00",
+    "game_running_at_install": false
+  },
+  "backup_directory": "C:\\Users\\bill\\open-formula-backups\\2026-10-22-structural-8c1cf079",
+  "rollback_script": "C:\\Users\\bill\\open-formula-backups\\2026-10-22-structural-8c1cf079\\rollback.ps1",
+  "rollback_restores": ["vehicle_physics_engine.dll", "distribution_manifest.json"],
+  "distribution_manifest_updated": true,
+  "protected_files": {
+    "checked": 16,
+    "unchanged": 15,
+    "changed": [
+      {
+        "path": "D:\\open-formula\\distribution\\user-settings\\open_formula.db",
+        "sha256": "8d30f9da35bd05ca994c4c02ef7303308d40283457677f12e1412ee958ab77d3",
+        "last_write": "2026-10-22T21:59:17-05:00",
+        "note": "escrito por la sesion del usuario a las 21:59, antes de este trabajo; no se ha abierto en modo escritura ni modificado"
+      }
+    ],
+    "profiles_unchanged": true
+  },
+  "tests_at_install": {
+    "structural_contact": "17 passed, 0 failed, 0 ignored",
+    "setup_authority": "15 passed, 0 failed"
+  },
+  "changes_vs_previous_candidate": [
+    "convergencia del eje incluye el limite de suelo; fallback 2->0 por paso, 32->4 iteraciones",
+    "masa fisica por esquina contada una vez: cuerpo 546,600 kg, esquinas 66,000 kg",
+    "fuerza de suspension aplicada siempre en el centro del buje; sin soporte duplicado",
+    "gravedad y aceleracion de anclaje en la ecuacion de la esquina",
+    "marcos del host mas gruesos que 1/240 s se subdividen internamente (maximo 8)",
+    "consecuencia: altura de reposo ~3 mm delante y ~7,5 mm detras mas alta; inercia de guinada 462 -> 281 kg m2"
+  ],
+  "manual_T3_acceptance": "pending_user",
+  "dll_level_verification": {
+    "bank": "verify_installed_dll.py (dll_verification/)",
+    "reference": "7088504e89d84a0a0cd8daf884433d8557ca1d6a8ff877e75035144149ae55cd (build anterior, respaldado)",
+    "controls_resolving_to_their_element": "10/10",
+    "saved_setup_replay_identical": true,
+    "design_trajectory_identical_to_previous_build": false,
+    "note": "la diferencia de trayectoria es el efecto buscado de la correccion; la identidad solo se exige en el replay del reglaje"
+  },
+  "ab_guide": "Mismo reglaje, mismo combustible y misma maniobra; comparar apoyo de las cuatro ruedas, ausencia de alternancia de cargas y altura de carroceria. La aceptacion de conduccion es del usuario."
+}

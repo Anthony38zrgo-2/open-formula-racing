@@ -1,0 +1,15 @@
+{
+  "steps": 800,
+  "median_step_ms": 1.148549999925308,
+  "p99_step_ms": 4.571100002067396,
+  "max_step_ms": 12.107499998819549,
+  "windows": [
+    {
+      "rows": 10820,
+      "writer_thread": "ofp-telemetry-writer",
+      "capture_ms": 9.8671,
+      "format_write_ms": 225.82489999999999,
+      "dropped_windows": 0
+    }
+  ]
+}

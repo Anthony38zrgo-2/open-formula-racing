@@ -11,18 +11,52 @@ pub struct Vec3 {
 
 impl Default for Vec3 {
     #[inline]
-    fn default() -> Self { Self::ZERO }
+    fn default() -> Self {
+        Self::ZERO
+    }
 }
 
 impl Vec3 {
-    pub const ZERO: Self = Self { x: 0.0, y: 0.0, z: 0.0 };
-    pub const ONE: Self = Self { x: 1.0, y: 1.0, z: 1.0 };
-    pub const UP: Self = Self { x: 0.0, y: 1.0, z: 0.0 };
-    pub const DOWN: Self = Self { x: 0.0, y: -1.0, z: 0.0 };
-    pub const RIGHT: Self = Self { x: 1.0, y: 0.0, z: 0.0 };
-    pub const LEFT: Self = Self { x: -1.0, y: 0.0, z: 0.0 };
-    pub const FORWARD: Self = Self { x: 0.0, y: 0.0, z: -1.0 }; // Godot standard: -Z forward
-    pub const BACK: Self = Self { x: 0.0, y: 0.0, z: 1.0 };
+    pub const ZERO: Self = Self {
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+    };
+    pub const ONE: Self = Self {
+        x: 1.0,
+        y: 1.0,
+        z: 1.0,
+    };
+    pub const UP: Self = Self {
+        x: 0.0,
+        y: 1.0,
+        z: 0.0,
+    };
+    pub const DOWN: Self = Self {
+        x: 0.0,
+        y: -1.0,
+        z: 0.0,
+    };
+    pub const RIGHT: Self = Self {
+        x: 1.0,
+        y: 0.0,
+        z: 0.0,
+    };
+    pub const LEFT: Self = Self {
+        x: -1.0,
+        y: 0.0,
+        z: 0.0,
+    };
+    pub const FORWARD: Self = Self {
+        x: 0.0,
+        y: 0.0,
+        z: -1.0,
+    }; // Godot standard: -Z forward
+    pub const BACK: Self = Self {
+        x: 0.0,
+        y: 0.0,
+        z: 1.0,
+    };
 
     #[inline]
     pub const fn new(x: f64, y: f64, z: f64) -> Self {
@@ -212,21 +246,9 @@ impl Mat3 {
         let (sp, cp) = (pitch.sin(), pitch.cos());
         let (sr, cr) = (roll.sin(), roll.cos());
 
-        let x = Vec3::new(
-            cy * cr + sy * sp * sr,
-            cp * sr,
-            -sy * cr + cy * sp * sr,
-        );
-        let y = Vec3::new(
-            -cy * sr + sy * sp * cr,
-            cp * cr,
-            sy * sr + cy * sp * cr,
-        );
-        let z = Vec3::new(
-            sy * cp,
-            -sp,
-            cy * cp,
-        );
+        let x = Vec3::new(cy * cr + sy * sp * sr, cp * sr, -sy * cr + cy * sp * sr);
+        let y = Vec3::new(-cy * sr + sy * sp * cr, cp * cr, sy * sr + cy * sp * cr);
+        let z = Vec3::new(sy * cp, -sp, cy * cp);
 
         Self { x, y, z }
     }
@@ -267,7 +289,12 @@ pub struct Quat {
 }
 
 impl Quat {
-    pub const IDENTITY: Self = Self { x: 0.0, y: 0.0, z: 0.0, w: 1.0 };
+    pub const IDENTITY: Self = Self {
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+        w: 1.0,
+    };
 
     #[inline]
     pub const fn new(x: f64, y: f64, z: f64, w: f64) -> Self {
@@ -360,19 +387,15 @@ impl Quat {
     /// Angular integration from angular velocity vector (in rad/s) over timestep dt.
     pub fn integrate_angular_velocity(self, omega: Vec3, dt: f64) -> Self {
         let half_dt = 0.5 * dt;
-        let delta_q = Quat::new(
-            omega.x * half_dt,
-            omega.y * half_dt,
-            omega.z * half_dt,
-            1.0,
-        );
+        let delta_q = Quat::new(omega.x * half_dt, omega.y * half_dt, omega.z * half_dt, 1.0);
         // Quaternion multiplication: self * delta_q
         Self::new(
             self.w * delta_q.x + self.x * delta_q.w + self.y * delta_q.z - self.z * delta_q.y,
             self.w * delta_q.y - self.x * delta_q.z + self.y * delta_q.w + self.z * delta_q.x,
             self.w * delta_q.z + self.x * delta_q.y - self.y * delta_q.x + self.z * delta_q.w,
             self.w * delta_q.w - self.x * delta_q.x - self.y * delta_q.y - self.z * delta_q.z,
-        ).normalized()
+        )
+        .normalized()
     }
 }
 
@@ -428,6 +451,16 @@ pub enum WheelIndex {
     RearRight = 3,
 }
 
+/// Stable short name of a wheel, for telemetry and logs. Rust order is FL, FR, RL, RR.
+pub fn wheel_name(wheel: WheelIndex) -> &'static str {
+    match wheel {
+        WheelIndex::FrontLeft => "FL",
+        WheelIndex::FrontRight => "FR",
+        WheelIndex::RearLeft => "RL",
+        WheelIndex::RearRight => "RR",
+    }
+}
+
 impl WheelIndex {
     pub const ALL: [Self; 4] = [
         Self::FrontLeft,
@@ -475,6 +508,19 @@ pub struct RaycastHit {
     pub point: Vec3,
     pub normal: Vec3,
     pub surface: SurfaceType,
+    /// Physical per-triangle grip coefficient from the collision-world source.
+    /// Legacy callers that do not provide material data preserve the configured
+    /// vehicle surface coefficient by using the neutral multiplier of 1.
+    #[serde(default = "neutral_surface_multiplier")]
+    pub surface_friction_multiplier: f64,
+    /// Physical per-triangle rolling-resistance coefficient. Neutral for legacy
+    /// callers that only provide a surface category.
+    #[serde(default = "neutral_surface_multiplier")]
+    pub surface_rolling_resistance_multiplier: f64,
+}
+
+fn neutral_surface_multiplier() -> f64 {
+    1.0
 }
 
 impl Default for RaycastHit {
@@ -485,6 +531,107 @@ impl Default for RaycastHit {
             point: Vec3::ZERO,
             normal: Vec3::UP,
             surface: SurfaceType::Road,
+            surface_friction_multiplier: 1.0,
+            surface_rolling_resistance_multiplier: 1.0,
+        }
+    }
+}
+
+/// Geometric context of one tricast query.
+///
+/// `from_wheel_centre` selects the distance contract that produced the three hits:
+///
+/// * `true` (current contract, used by the Speed Dreams host through
+///   `OpenFormulaSimulation`): every distance is measured from the **physical wheel
+///   centre** along the suspension axis. The conversion to a suspension compression
+///   is `compression_at_sample - signed_gap`, where
+///   `signed_gap = distance * (up . normal) - radius` and positive means the wheel
+///   floats above the road. This is the only contract in which moving the ray origin
+///   actually moves the wheel.
+/// * `false` (retired chassis-anchor contract, reachable from the legacy Godot FFI
+///   entry points and from unit tests that build samples by hand): distances are
+///   measured from the chassis attachment point and the old
+///   `spring_length + radius - distance` conversion still applies. It is kept so the
+///   retired `f1_94_physics_*` ABI keeps its documented meaning, and it must never be
+///   produced by the Speed Dreams adapter.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct WheelRayContext {
+    /// Distance contract of the three hits. See the type documentation.
+    pub from_wheel_centre: bool,
+    /// Physical wheel centre at sample time (world, m).
+    pub centre_world: Vec3,
+    /// Wheel-width direction after steer, toe and camber at sample time.
+    pub lateral_axis_world: Vec3,
+    /// Chassis attachment point at sample time (world, m).
+    pub anchor_world: Vec3,
+    /// Suspension up axis at sample time (unit, world). May be zero when unknown;
+    /// the consumer then falls back to the body up axis.
+    pub up: Vec3,
+    /// Unsprung coordinate `q` (compression) at sample time (m).
+    pub compression_m: f64,
+    /// Physical tire radius (m), never the effective rolling radius.
+    pub radius_m: f64,
+    /// Transverse half-spread of the outer rays from the wheel centre (m). The inner
+    /// ray sits at `+span` on a left wheel and `-span` on a right wheel.
+    pub span_m: f64,
+}
+
+impl Default for WheelRayContext {
+    fn default() -> Self {
+        Self {
+            from_wheel_centre: false,
+            centre_world: Vec3::ZERO,
+            lateral_axis_world: Vec3::RIGHT,
+            anchor_world: Vec3::ZERO,
+            up: Vec3::UP,
+            compression_m: 0.0,
+            radius_m: 0.0,
+            span_m: 0.0,
+        }
+    }
+}
+
+impl WheelRayContext {
+    /// Current contract: hits measured from the physical wheel centre.
+    pub fn from_wheel_centre(
+        centre_world: Vec3,
+        lateral_axis_world: Vec3,
+        anchor_world: Vec3,
+        up: Vec3,
+        compression_m: f64,
+        radius_m: f64,
+        span_m: f64,
+    ) -> Self {
+        let up = if up.length() > 0.5 {
+            up.normalized()
+        } else {
+            Vec3::UP
+        };
+        Self {
+            from_wheel_centre: true,
+            centre_world,
+            lateral_axis_world,
+            anchor_world,
+            up,
+            compression_m,
+            radius_m,
+            span_m,
+        }
+    }
+
+    /// Retired chassis-anchor contract (legacy FFI and hand-built unit-test samples).
+    pub fn from_chassis_anchor() -> Self {
+        Self::default()
+    }
+
+    /// Suspension axis used by the consumer, with a safe fallback.
+    pub fn axis_or(&self, fallback: Vec3) -> Vec3 {
+        if self.up.length() > 0.5 {
+            self.up.normalized()
+        } else if fallback.length() > 0.5 {
+            fallback.normalized()
+        } else {
+            Vec3::UP
         }
     }
 }
@@ -495,6 +642,49 @@ pub struct TriRaycastSample {
     pub inner: RaycastHit,
     pub center: RaycastHit,
     pub outer: RaycastHit,
+    /// Origin and interpretation of the three hits.
+    pub context: WheelRayContext,
+}
+
+impl TriRaycastSample {
+    /// Samples produced by the current wheel-centre contract.
+    pub fn wheel_centre(
+        inner: RaycastHit,
+        center: RaycastHit,
+        outer: RaycastHit,
+        context: WheelRayContext,
+    ) -> Self {
+        Self {
+            inner,
+            center,
+            outer,
+            context,
+        }
+    }
+
+    /// True when the three distances are measured from the physical wheel centre.
+    #[inline]
+    pub fn measured_from_wheel_centre(&self) -> bool {
+        self.context.from_wheel_centre
+    }
+
+    /// Signed gap of one hit: positive = the ray origin floats above the road.
+    ///
+    /// `distance` is measured along `axis` from the ray origin to the surface. The
+    /// perpendicular clearance is `distance * (axis . normal)`, so a banked or ramped
+    /// triangle reports the true normal gap instead of a shortened slant distance.
+    /// A surface whose normal is almost perpendicular to the suspension axis (a
+    /// wall) is not a support plane and reports no gap.
+    pub fn signed_gap(hit: &RaycastHit, axis: Vec3, radius: f64) -> f64 {
+        if !hit.is_colliding || !hit.distance.is_finite() {
+            return f64::INFINITY;
+        }
+        let alignment = axis.dot(hit.normal);
+        if alignment < 0.15 {
+            return f64::INFINITY;
+        }
+        hit.distance * alignment - radius.max(0.0)
+    }
 }
 
 impl TriRaycastSample {
@@ -515,10 +705,23 @@ impl TriRaycastSample {
     pub fn weighted_distance(&self, max_length: f64) -> f64 {
         let mut sum = 0.0;
         let mut weight_sum = 0.0;
-        if self.inner.is_colliding { sum += self.inner.distance; weight_sum += 1.0; }
-        if self.center.is_colliding { sum += 2.0 * self.center.distance; weight_sum += 2.0; }
-        if self.outer.is_colliding { sum += self.outer.distance; weight_sum += 1.0; }
-        if weight_sum > 0.0 { sum / weight_sum } else { max_length }
+        if self.inner.is_colliding {
+            sum += self.inner.distance;
+            weight_sum += 1.0;
+        }
+        if self.center.is_colliding {
+            sum += 2.0 * self.center.distance;
+            weight_sum += 2.0;
+        }
+        if self.outer.is_colliding {
+            sum += self.outer.distance;
+            weight_sum += 1.0;
+        }
+        if weight_sum > 0.0 {
+            sum / weight_sum
+        } else {
+            max_length
+        }
     }
 
     /// Calculate weighted average surface normal using 1:2:1 transverse weighting.
@@ -526,21 +729,34 @@ impl TriRaycastSample {
     pub fn weighted_normal(&self) -> Vec3 {
         let mut sum = Vec3::ZERO;
         let mut weight_sum = 0.0;
-        if self.inner.is_colliding { sum += self.inner.normal; weight_sum += 1.0; }
-        if self.center.is_colliding { sum += self.center.normal * 2.0; weight_sum += 2.0; }
-        if self.outer.is_colliding { sum += self.outer.normal; weight_sum += 1.0; }
-        if weight_sum > 0.0 { sum.normalized() } else { Vec3::UP }
+        if self.inner.is_colliding {
+            sum += self.inner.normal;
+            weight_sum += 1.0;
+        }
+        if self.center.is_colliding {
+            sum += self.center.normal * 2.0;
+            weight_sum += 2.0;
+        }
+        if self.outer.is_colliding {
+            sum += self.outer.normal;
+            weight_sum += 1.0;
+        }
+        if weight_sum > 0.0 {
+            sum.normalized()
+        } else {
+            Vec3::UP
+        }
     }
 }
 
 /// Real-time driver input frame.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct VehicleInput {
-    pub steering: f64,      // -1.0 (full left) to +1.0 (full right)
-    pub throttle: f64,      // 0.0 to 1.0
-    pub brake: f64,         // 0.0 to 1.0
-    pub handbrake: f64,     // 0.0 to 1.0
-    pub clutch: f64,        // 0.0 (engaged) to 1.0 (disengaged)
+    pub steering: f64,            // -1.0 (full left) to +1.0 (full right)
+    pub throttle: f64,            // 0.0 to 1.0
+    pub brake: f64,               // 0.0 to 1.0
+    pub handbrake: f64,           // 0.0 to 1.0
+    pub clutch: f64,              // 0.0 (engaged) to 1.0 (disengaged)
     pub gear_request: Option<i8>, // None = no change, Some(0) = Neutral, Some(1..6) = Gear, Some(-1) = Reverse
 }
 

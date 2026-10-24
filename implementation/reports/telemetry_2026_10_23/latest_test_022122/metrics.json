@@ -1,0 +1,100 @@
+{
+  "fr_unloaded_runs": [
+    [
+      29.5,
+      29.5,
+      29.52
+    ],
+    [
+      29.6,
+      29.6,
+      29.62
+    ],
+    [
+      29.8,
+      29.8,
+      29.82
+    ],
+    [
+      29.84,
+      31.24,
+      31.26
+    ]
+  ],
+  "t3_body_iterations_mean": 9.98036253776435,
+  "t3_body_iterations_max": 13,
+  "worst_gaps": [
+    {
+      "before_t": "1.0000",
+      "after_t": "1.0200",
+      "wall_gap_s": 3.219,
+      "physics_gap_s": 0.02
+    },
+    {
+      "before_t": "73.7400",
+      "after_t": "73.7600",
+      "wall_gap_s": 1.035,
+      "physics_gap_s": 0.02
+    },
+    {
+      "before_t": "70.3400",
+      "after_t": "70.3600",
+      "wall_gap_s": 0.744,
+      "physics_gap_s": 0.02
+    },
+    {
+      "before_t": "75.0000",
+      "after_t": "75.0200",
+      "wall_gap_s": 0.688,
+      "physics_gap_s": 0.02
+    },
+    {
+      "before_t": "54.3400",
+      "after_t": "54.3600",
+      "wall_gap_s": 0.357,
+      "physics_gap_s": 0.02
+    },
+    {
+      "before_t": "76.2600",
+      "after_t": "76.2800",
+      "wall_gap_s": 0.32,
+      "physics_gap_s": 0.02
+    },
+    {
+      "before_t": "36.9000",
+      "after_t": "36.9200",
+      "wall_gap_s": 0.306,
+      "physics_gap_s": 0.02
+    },
+    {
+      "before_t": "35.6600",
+      "after_t": "35.6800",
+      "wall_gap_s": 0.278,
+      "physics_gap_s": 0.02
+    },
+    {
+      "before_t": "16.3000",
+      "after_t": "16.3200",
+      "wall_gap_s": 0.277,
+      "physics_gap_s": 0.02
+    },
+    {
+      "before_t": "38.1600",
+      "after_t": "38.1800",
+      "wall_gap_s": 0.277,
+      "physics_gap_s": 0.02
+    },
+    {
+      "before_t": "31.0800",
+      "after_t": "31.1000",
+      "wall_gap_s": 0.276,
+      "physics_gap_s": 0.02
+    },
+    {
+      "before_t": "52.8200",
+      "after_t": "52.8400",
+      "wall_gap_s": 0.267,
+      "physics_gap_s": 0.02
+    }
+  ]
+}

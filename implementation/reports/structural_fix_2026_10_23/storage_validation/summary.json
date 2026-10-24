@@ -1,0 +1,11 @@
+{
+  "storage": "sqlite",
+  "storage_checks": "passed",
+  "database": "implementation\\reports\\structural_fix_2026_10_23\\storage_validation\\validation-ad0a3c945a0e4899807bb5fe3637bc61.db",
+  "editable_fields": 33,
+  "rust_apply": "passed",
+  "rust_edit": "passed",
+  "fixed_values_unchanged": true,
+  "rejected_transaction_unchanged": true,
+  "source_sha256": "33af96f7e95c02ef2d95a13f3288d00eb7772ae87e77b1cd6c311395a019638f"
+}

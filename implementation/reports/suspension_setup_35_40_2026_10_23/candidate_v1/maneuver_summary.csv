@@ -1,0 +1,9 @@
+profile,case,accepted_s,failed,min_floor_m,max_roll_deg,front_unsupported_wheel_seconds,rear_unsupported_wheel_seconds,stop_wheel_fraction,max_stop_n,final_speed_kph
+baseline,straight_brake,3.6120,false,0.023253,0.0000,0.0000,0.0000,0.123477,1214.323,3.502
+baseline,trail_brake_reversal,4.0000,false,0.030376,0.5516,0.0000,0.0000,0.033500,359.622,126.803
+baseline,slalom,5.0000,false,0.074582,0.2928,0.0000,0.0000,0.000000,0.000,102.918
+baseline,one_wheel_bump,3.0000,false,0.082018,0.8303,0.1000,0.0260,0.000000,0.000,75.798
+candidate,straight_brake,3.6360,false,0.026000,0.0000,0.0000,0.0000,0.000000,0.000,3.562
+candidate,trail_brake_reversal,4.0000,false,0.029193,0.5453,0.0500,0.0000,0.000000,0.000,23.465
+candidate,slalom,5.0000,false,0.033217,0.2359,0.0000,0.0000,0.000000,0.000,103.010
+candidate,one_wheel_bump,3.0000,false,0.033975,0.5855,0.1400,0.0360,0.000000,0.000,75.798

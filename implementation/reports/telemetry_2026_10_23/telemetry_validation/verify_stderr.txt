@@ -1,0 +1,12 @@
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+SLOW_STATE_BACKEND_READY backend=simplified tires_hertz=20 brakes_hertz=10 powertrain_hertz=10
+SUSPENSION_BACKEND_READY backend=simplified contact_rays=12 prepared=true
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+SLOW_STATE_BACKEND_READY backend=simplified tires_hertz=20 brakes_hertz=10 powertrain_hertz=10
+SUSPENSION_BACKEND_READY backend=simplified contact_rays=12 prepared=true
+MECHANICAL_STEP_REJECTED time=0 reason=Ground constraint is incompatible with suspension bump limit
+RUSTTRACE reason=rejection trigger_t=0.000 wheel=2 code=1 rows=1 csv=D:\open-formula\implementation\reports\telemetry_2026_10_23\telemetry_validation\trace\rustphysics_rejection_w2_t0000.000.csv
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+SLOW_STATE_BACKEND_READY backend=simplified tires_hertz=20 brakes_hertz=10 powertrain_hertz=10
+SUSPENSION_BACKEND_READY backend=simplified contact_rays=12 prepared=true
+RUSTTRACE reason=contact_loss trigger_t=0.254 wheel=0 rows=3177 csv=D:\open-formula\implementation\reports\telemetry_2026_10_23\telemetry_validation\trace\rustphysics_contact_loss_w0_t0000.254.csv

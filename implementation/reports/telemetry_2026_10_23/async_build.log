@@ -1,0 +1,104 @@
+[1/4] Checking and building Rust physics dependencies with Cargo
+    Blocking waiting for file lock on artifact directory
+   Compiling vehicle_audio_engine v0.1.0 (D:\open-formula\rust\vehicle-audio-engine)
+   Compiling vehicle_physics_engine v0.1.0 (D:\open-formula\rust\vehicle-physics-engine)
+warning: vehicle_audio_engine@0.1.0: open-formula audio stamped from dirty sources (see git status)
+warning: unused imports: `ModularVoiceConfig` and `Waveform`
+  --> vehicle-audio-engine\src\synth\mod.rs:13:35
+   |
+13 |     LimiterConfig, ModularConfig, ModularVoiceConfig, QualityProfile, RaspConfig, TcConfig,
+   |                                   ^^^^^^^^^^^^^^^^^^
+14 |     Waveform,
+   |     ^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: type `CDiagnostics` is more private than the item `DspRuntime::diagnostics`
+   --> vehicle-audio-engine\src\dsp_runtime.rs:397:5
+    |
+397 |     pub(crate) fn diagnostics(&self) -> CDiagnostics {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method `DspRuntime::diagnostics` is reachable at visibility `pub(crate)`
+    |
+note: but type `CDiagnostics` is only usable at visibility `pub(self)`
+   --> vehicle-audio-engine\src\dsp_runtime.rs:114:1
+    |
+114 | struct CDiagnostics {
+    | ^^^^^^^^^^^^^^^^^^^
+    = note: `#[warn(private_interfaces)]` on by default
+
+warning: fields `layer_keys`, `layer_cursors`, `exhaust_key`, and `exhaust_cursor` are never read
+   --> vehicle-audio-engine\src\mixer.rs:438:5
+    |
+435 | pub struct VehicleAudioEngine {
+    |            ------------------ fields in this struct
+...
+438 |     layer_keys: Vec<String>,
+    |     ^^^^^^^^^^
+439 |     layer_cursors: Vec<f64>,
+    |     ^^^^^^^^^^^^^
+...
+518 |     exhaust_key: String,
+    |     ^^^^^^^^^^^
+519 |     exhaust_cursor: f64,
+    |     ^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `vehicle_audio_engine` (lib) generated 3 warnings (run `cargo fix --lib -p vehicle_audio_engine` to apply 1 suggestion)
+   Compiling open_formula_audio v0.1.0 (D:\open-formula\rust\open-formula-audio)
+warning: unused variable: `k`
+   --> vehicle-audio-engine\src\bin\va_probe.rs:172:13
+    |
+172 |         for k in 0..3 {
+    |             ^ help: if this is intentional, prefix it with an underscore: `_k`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `k`
+   --> vehicle-audio-engine\src\bin\va_probe.rs:251:13
+    |
+251 |         for k in 0..3 {
+    |             ^ help: if this is intentional, prefix it with an underscore: `_k`
+
+warning: unused variable: `k`
+   --> vehicle-audio-engine\src\bin\va_probe.rs:268:13
+    |
+268 |         for k in 0..3 {
+    |             ^ help: if this is intentional, prefix it with an underscore: `_k`
+
+warning: unused variable: `k`
+   --> vehicle-audio-engine\src\bin\va_probe.rs:303:13
+    |
+303 |         for k in 0..3 {
+    |             ^ help: if this is intentional, prefix it with an underscore: `_k`
+
+warning: unused variable: `k`
+   --> vehicle-audio-engine\src\bin\va_probe.rs:332:13
+    |
+332 |         for k in 0..3 {
+    |             ^ help: if this is intentional, prefix it with an underscore: `_k`
+
+warning: fields `assets_root`, `commons_dir`, `v10_dir`, and `create_error` are never read
+   --> open-formula-audio\src\lib.rs:194:5
+    |
+192 | pub struct OfpAudioHandle {
+    |            -------------- fields in this struct
+193 |     engine: VehicleAudioEngine,
+194 |     assets_root: PathBuf,
+    |     ^^^^^^^^^^^
+195 |     commons_dir: PathBuf,
+    |     ^^^^^^^^^^^
+196 |     v10_dir: PathBuf,
+    |     ^^^^^^^
+...
+201 |     create_error: String,
+    |     ^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `open_formula_audio` (lib) generated 1 warning
+warning: `vehicle_audio_engine` (bin "va_probe") generated 5 warnings (run `cargo fix --bin "va_probe" -p vehicle_audio_engine` to apply 5 suggestions)
+    Finished `release` profile [optimized] target(s) in 3m 07s
+[2/4] Building CXX object src/modules/simu/rustphysics/CMakeFiles/rustphysics.dir/rust_library.cpp.obj
+[3/4] Building CXX object src/modules/simu/rustphysics/CMakeFiles/rustphysics.dir/rustphysics.cpp.obj
+[4/4] Linking CXX shared module lib\games\speed-dreams-2\modules\simu\rustphysics.dll

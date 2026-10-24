@@ -8,7 +8,7 @@
 use std::ffi::{CStr, CString, c_char, c_void};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
-use crate::open_formula::{OpenFormulaSimulation, set_track_ground_mesh, track_ground};
+use crate::open_formula::OpenFormulaSimulation;
 use crate::types::{Mat3, Vec3};
 
 pub const OFP_ABI_VERSION: u32 = 7;
@@ -519,21 +519,140 @@ pub extern "C" fn ofp_build_provenance() -> *const c_char {
 
 #[no_mangle]
 pub extern "C" fn ofp_load_track_ground_mesh(path: *const c_char) -> i32 {
+    load_ground_mesh(path, std::ptr::null(), 0)
+}
+
+/// Installs the session ground geometry with an explicit circuit identity.
+///
+/// Appending a new entry point keeps ABI v7 layout untouched: the host resolves this
+/// symbol optionally and falls back to `ofp_load_track_ground_mesh` when it is absent.
+/// `revision` 0 means "host does not version its export".
+#[no_mangle]
+pub extern "C" fn ofp_load_track_ground_mesh_v2(
+    path: *const c_char,
+    circuit_id: *const c_char,
+    revision: u32,
+) -> i32 {
+    load_ground_mesh(path, circuit_id, revision)
+}
+
+fn load_ground_mesh(path: *const c_char, circuit_id: *const c_char, revision: u32) -> i32 {
     let result = catch_unwind(AssertUnwindSafe(|| -> Result<i32, String> {
-        let path = read_c_string(path).ok_or_else(|| "ground mesh path is not valid UTF-8".to_string())?;
-        let count = set_track_ground_mesh(path)?;
-        Ok(count as i32)
+        let path = read_c_string(path)
+            .ok_or_else(|| "ground mesh path is not valid UTF-8".to_string())?;
+        let id = read_c_string(circuit_id).filter(|value| !value.trim().is_empty());
+        let revision = if revision == 0 { None } else { Some(revision) };
+        let (identity, generation) =
+            crate::open_formula::install_track_ground_mesh(path, id, revision)?;
+        set_world_error("");
+        let _ = generation;
+        Ok(identity.triangle_count as i32)
     }));
     match result {
         Ok(Ok(count)) => count,
-        Ok(Err(_)) => -1,
+        Ok(Err(message)) => {
+            // A failed load must never leave the previous circuit installed: the host
+            // would then simulate on geometry that does not belong to this session.
+            crate::open_formula::release_track_ground_mesh();
+            set_world_error(&message);
+            -1
+        }
+        Err(_) => {
+            crate::open_formula::release_track_ground_mesh();
+            set_world_error("panic while loading the ground mesh");
+            -2
+        }
+    }
+}
+
+/// Releases the session world. Called by the host on session shutdown; the generation
+/// advances so any vehicle still alive refuses to step on stale geometry.
+#[no_mangle]
+pub extern "C" fn ofp_release_track_ground_mesh() -> i32 {
+    match catch_unwind(AssertUnwindSafe(|| {
+        crate::open_formula::release_track_ground_mesh()
+    })) {
+        Ok(released) => i32::from(released),
         Err(_) => -2,
     }
 }
 
 #[no_mangle]
 pub extern "C" fn ofp_track_ground_triangles() -> i32 {
-    track_ground().map(|world| world.triangle_count() as i32).unwrap_or(-1)
+    crate::open_formula::installed_world_identity()
+        .map(|identity| identity.triangle_count as i32)
+        .unwrap_or(-1)
+}
+
+/// Registry generation of the installed world (0 = never installed).
+#[no_mangle]
+pub extern "C" fn ofp_world_generation() -> u64 {
+    crate::collision_world::world_generation()
+}
+
+/// Number of installs since process start (session accounting).
+#[no_mangle]
+pub extern "C" fn ofp_world_install_count() -> u64 {
+    crate::collision_world::install_count()
+}
+
+/// Last ground-load failure text ("" when the last load succeeded).
+#[no_mangle]
+pub extern "C" fn ofp_world_last_error(buffer: *mut c_char, capacity: u32) -> i32 {
+    let text = world_error();
+    write_error(buffer, capacity, &text);
+    text.len() as i32
+}
+
+/// JSON identity of the installed geometry, or `null`. Returns the required length;
+/// a short buffer receives a truncated, NUL-terminated copy.
+#[no_mangle]
+pub extern "C" fn ofp_world_identity_json(buffer: *mut c_char, capacity: u32) -> i32 {
+    let text = crate::open_formula::installed_world_identity()
+        .map(|identity| identity.to_json())
+        .unwrap_or_else(|| "null".to_string());
+    write_error(buffer, capacity, &text);
+    text.len() as i32
+}
+
+/// JSON contact report of the last accepted step for one vehicle (see
+/// `OpenFormulaSimulation::contact_report_json`). Telemetry only.
+#[no_mangle]
+pub extern "C" fn ofp_contact_report(handle: *const c_void, buffer: *mut c_char, capacity: u32) -> i32 {
+    match catch_unwind(AssertUnwindSafe(|| -> i32 {
+        match handle_ref(handle) {
+            Some(simulation) => {
+                let text = simulation.contact_report_json();
+                write_error(buffer, capacity, &text);
+                text.len() as i32
+            }
+            None => -1,
+        }
+    })) {
+        Ok(code) => code,
+        Err(_) => -2,
+    }
+}
+
+static WORLD_ERROR: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+fn set_world_error(message: &str) {
+    let mut guard = WORLD_ERROR
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    *guard = if message.is_empty() {
+        None
+    } else {
+        Some(message.to_string())
+    };
+}
+
+fn world_error() -> String {
+    WORLD_ERROR
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .clone()
+        .unwrap_or_default()
 }
 
 #[no_mangle]
@@ -551,11 +670,15 @@ pub extern "C" fn ofp_create(
             )),
         };
         let fuel = if fuel_kg > 0.0 { Some(fuel_kg) } else { None };
-        let simulation = OpenFormulaSimulation::create(
+        // The Speed Dreams path requires an installed session world: a vehicle without
+        // authoritative ground geometry must fail loudly instead of falling through a
+        // world with no collision surface.
+        let simulation = OpenFormulaSimulation::create_with_world(
             path.as_deref(),
             Vec3::new(origin.x, origin.y, origin.z),
             yaw_radians,
             fuel,
+            true,
         )?;
         Ok(Box::into_raw(Box::new(simulation)) as *mut c_void)
     }));

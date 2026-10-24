@@ -11,7 +11,7 @@ const GEVP_GEAR_INERTIA: f64 = 0.02;
 // Keep at least this fraction of demanded torque so the car always retains drive.
 const MIN_TC_TORQUE_SCALE: f64 = 0.10;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "retired-f1-2030-fixtures"))]
 mod automatic_selection_regression_tests {
     use super::*;
 
@@ -1073,7 +1073,7 @@ mod engine_torque_attack_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "retired-f1-2030-fixtures"))]
 mod differential_tests {
     use super::*;
 

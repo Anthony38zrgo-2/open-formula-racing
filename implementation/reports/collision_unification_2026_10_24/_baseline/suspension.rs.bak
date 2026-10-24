@@ -1,0 +1,2576 @@
+// Mechanical suspension + tricast tire-carcass model.
+//
+// Godot still supplies three transverse raycasts per wheel. Rust turns them into a
+// virtual contact patch and integrates a 1-DOF unsprung wheel between the road/tire
+// carcass and the chassis suspension. This removes the old direct raycast->damper
+// impulse path while preserving the existing FFI shape.
+use crate::suspension_geo_config::{AntiRollConfig, GeometricSuspensionConfig, SuspensionModelKind};
+use crate::suspension_kinematics::{jacobian, solve_corner};
+use crate::tire_thermals::TireMechanicalModifiers;
+use crate::types::{Mat3, RaycastHit, SurfaceType, TriRaycastSample, Vec3, WheelIndex};
+use crate::vehicle_config::VehicleConfig;
+use crate::wheel_mechanics::{
+    static_wheel_load, tire_radius, tire_width, WheelMechanicalTuning,
+};
+use serde::{Deserialize, Serialize};
+
+#[path = "vertical_suspension_integration.rs"]
+mod vertical_suspension_integration;
+use vertical_suspension_integration::{integrate_vertical_suspension, GroundContactConstraint};
+
+#[path = "simplified_suspension.rs"]
+mod simplified_suspension;
+pub use simplified_suspension::SuspensionBackend;
+use simplified_suspension::SimplifiedSuspension;
+#[path = "simplified_axle_integration.rs"]
+mod simplified_axle_integration;
+use simplified_axle_integration::GeometricAxleCornerIntegration;
+#[path = "simplified_contact_kinematics.rs"]
+mod simplified_contact_kinematics;
+use simplified_contact_kinematics::SimplifiedNormalContact;
+
+/// Mechanical state for one wheel. Distances are SI internally; legacy millimetre
+/// fields remain for telemetry/API compatibility.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct WheelSuspensionState {
+    /// spring_length - suspension_compression_m. May become negative during bottom-out.
+    pub spring_current_length: f64,
+    /// Compatibility field: current usable spring length clamped to geometric travel.
+    pub max_spring_length: f64,
+    pub compression_mm: f64,
+    pub previous_compression_mm: f64,
+    pub spring_speed_mm_s: f64,
+    pub spring_force: f64,
+    pub damping_force: f64,
+    pub antiroll_force: f64,
+    pub bottom_out_force: f64,
+    /// Road/tire normal load. This is the Fz consumed by the tire model and applied
+    /// externally to the single vehicle rigid body.
+    pub total_normal_force: f64,
+    #[serde(default)]
+    pub normal_impulse_newton_seconds: f64,
+    #[serde(default)]
+    pub suspension_impulse_newton_seconds: f64,
+    #[serde(default)]
+    pub travel_limit_impulse_newton_seconds: f64,
+    /// Force transmitted by the suspension element itself; exposed for telemetry.
+    #[serde(default)]
+    pub chassis_suspension_force: f64,
+    pub is_grounded: bool,
+    pub effective_contact_point: Vec3,
+    pub effective_normal: Vec3,
+    pub effective_surface: SurfaceType,
+    pub effective_friction: f64,
+    pub effective_stiffness: f64,
+    pub effective_rolling_resistance: f64,
+    /// Effective camber (rad) at the contact patch â€” kinematic camber combined with
+    /// the road-plane (tri-ray footprint) contribution. Consumed by the tire model
+    /// and thermal inputs via `dynamic_camber` (kept in sync).
+    #[serde(default)]
+    pub effective_contact_camber_rad: f64,
+    /// Wheel-kinematic camber (rad): static camber plus the camber gain applied to
+    /// suspension travel relative to rest. Never includes the road-plane incline.
+    #[serde(default)]
+    pub kinematic_camber_rad: f64,
+    pub dynamic_camber: f64,
+
+    // --- New mechanical wheel state ---
+    /// Fraction of the 1:2:1 tricast footprint currently touching [0, 1].
+    #[serde(default)]
+    pub contact_fraction: f64,
+    /// Per-ray support state in Inner / Center / Outer order (tricast thermal zones).
+    #[serde(default)]
+    pub ray_grounded: [bool; 3],
+    /// Individual geometric compression targets from Inner/Center/Outer rays.
+    #[serde(default)]
+    pub ray_compressions_m: [f64; 3],
+    /// Filtered road compression target seen by the virtual wheel center.
+    #[serde(default)]
+    pub road_compression_m: f64,
+    #[serde(default)]
+    pub previous_road_compression_m: f64,
+    #[serde(default)]
+    pub road_velocity_m_s: f64,
+    #[serde(default)]
+    pub normal_contact_projection: f64,
+    #[serde(default)]
+    pub normal_contact_projection_rate_per_second: f64,
+    #[serde(default)]
+    pub normal_road_compression_metres: f64,
+    #[serde(default)]
+    pub normal_road_velocity_metres_per_second: f64,
+    #[serde(default)]
+    pub normal_force_application_compression_metres: f64,
+
+    /// Actual virtual suspension compression (wheel-center DOF).
+    #[serde(default)]
+    pub suspension_compression_m: f64,
+    #[serde(default)]
+    pub unsprung_velocity_m_s: f64,
+    #[serde(default)]
+    pub unsprung_acceleration_m_s2: f64,
+    /// Radial tire carcass state.
+    #[serde(default)]
+    pub tire_deflection_m: f64,
+    #[serde(default)]
+    pub tire_deflection_velocity_m_s: f64,
+    #[serde(default)]
+    pub tire_vertical_force: f64,
+    /// Internal initialization guard prevents a startup drop when the car is spawned on ground.
+    #[serde(default)]
+    mechanical_initialized: bool,
+    /// GRIP-06: first-order filtered surface values (tau from
+    /// `surface_transition_tau_s`) so kerb/grass crossings ramp instead of stepping.
+    #[serde(default)]
+    surface_filter_initialized: bool,
+    #[serde(default)]
+    pub filtered_surface_friction: f64,
+    #[serde(default)]
+    pub filtered_surface_stiffness: f64,
+    #[serde(default)]
+    pub filtered_surface_rolling_resistance: f64,
+    // --- SUS-GEO-04 geometric diagnostics (legacy leaves them at 0/false) ---
+    /// Damper compression s = Lrest - L (m, + on bump).
+    #[serde(default)]
+    pub damper_compression_m: f64,
+    /// Damper shaft velocity ds/dt = r * v (m/s).
+    #[serde(default)]
+    pub damper_velocity_m_s: f64,
+    /// Motion ratio r = ds/dq (dimensionless, > 0 when valid).
+    #[serde(default)]
+    pub motion_ratio: f64,
+    /// Rate dr/dq (1/m) for the tangent stiffness.
+    #[serde(default)]
+    pub motion_ratio_rate_per_m: f64,
+    /// Tangent wheel rate k_s*r^2 + F_s*dr/dq (N/m, diagnostic/telemetry).
+    #[serde(default)]
+    pub tangent_wheel_rate_n_per_m: f64,
+    /// Pushrod axial force (N, + tension / - compression, label-independent).
+    /// No bending/buckling model.
+    #[serde(default)]
+    pub rod_axial_force_n: f64,
+    /// True when the mechanism is at/clamped by a physical limit or invalid.
+    #[serde(default)]
+    pub geometric_clamped: bool,
+    /// Worst link residual of the last kinematics solve (m).
+    #[serde(default)]
+    pub geometric_max_residual_m: f64,
+    // --- SUS-GEO-05 chassis reaction diagnostics (legacy: zeroed) ---
+    /// Vertical load through the element path (rod+damper+rocker) (N).
+    #[serde(default)]
+    pub load_path_element_n: f64,
+    /// Vertical load through the wishbone legs (N).
+    #[serde(default)]
+    pub load_path_wishbone_n: f64,
+    /// Vertical load through trackrod (+driveshaft) (N).
+    #[serde(default)]
+    pub load_path_other_n: f64,
+    /// Whole-wheel balance residual |G - (F_c + W - m a)| (N).
+    #[serde(default)]
+    pub balance_residual_n: f64,
+    /// |rod upright-side - rod rocker-side| (N).
+    #[serde(default)]
+    pub rod_mismatch_n: f64,
+    /// Link solve fell back to damped least squares.
+    #[serde(default)]
+    pub link_singular: bool,
+    /// Spring stored energy 1/2 k total^2 (J, analytic).
+    #[serde(default)]
+    pub spring_energy_j: f64,
+    /// Damper dissipated energy accumulated âˆ«F_d v_s dt (J, >= 0).
+    #[serde(default)]
+    pub damper_dissipated_j: f64,
+    // --- SUS-GEO-06 wheel pose from linkage (legacy: zeros, gains rule) ---
+    /// Total kinematic camber from statics + linkage (rad, previous tick).
+    #[serde(default)]
+    pub geometric_camber_rad: f64,
+    /// Total toe from statics + linkage bump-steer (rad, previous tick).
+    #[serde(default)]
+    pub geometric_toe_rad: f64,
+    /// Hub lateral offset vs design hub_center (m, previous tick).
+    #[serde(default)]
+    pub hub_lateral_m: f64,
+    /// Hub longitudinal offset vs design hub_center (m, previous tick).
+    #[serde(default)]
+    pub hub_long_m: f64,
+}
+
+impl WheelSuspensionState {
+    pub fn new(config: &VehicleConfig, wheel: WheelIndex) -> Self {
+        let spring_length = spring_length(config, wheel);
+        let resting_ratio = resting_ratio(config, wheel);
+        let compression = spring_length * resting_ratio;
+        let current_length = spring_length - compression;
+        let static_force = static_wheel_load(config, wheel);
+        Self {
+            spring_current_length: current_length,
+            max_spring_length: current_length,
+            compression_mm: compression * 1000.0,
+            previous_compression_mm: compression * 1000.0,
+            spring_speed_mm_s: 0.0,
+            spring_force: static_force,
+            damping_force: 0.0,
+            antiroll_force: 0.0,
+            bottom_out_force: 0.0,
+            total_normal_force: static_force,
+            normal_impulse_newton_seconds: 0.0,
+            suspension_impulse_newton_seconds: 0.0,
+            travel_limit_impulse_newton_seconds: 0.0,
+            chassis_suspension_force: static_force,
+            is_grounded: false,
+            effective_contact_point: Vec3::ZERO,
+            effective_normal: Vec3::UP,
+            effective_surface: SurfaceType::Road,
+            effective_friction: surface_value(&config.tires.surface_friction, SurfaceType::Road, 1.0),
+            effective_stiffness: surface_value(&config.tires.surface_stiffness, SurfaceType::Road, 5.0),
+            effective_rolling_resistance: surface_value(
+                &config.tires.surface_rolling_resistance,
+                SurfaceType::Road,
+                1.0,
+            ),
+            dynamic_camber: camber(config, wheel),
+            effective_contact_camber_rad: camber(config, wheel),
+            kinematic_camber_rad: camber(config, wheel),
+            contact_fraction: 0.0,
+            ray_grounded: [false; 3],
+            ray_compressions_m: [0.0; 3],
+            road_compression_m: compression,
+            previous_road_compression_m: compression,
+            road_velocity_m_s: 0.0,
+            normal_contact_projection: 1.0,
+            normal_contact_projection_rate_per_second: 0.0,
+            normal_road_compression_metres: 0.0,
+            normal_road_velocity_metres_per_second: 0.0,
+            normal_force_application_compression_metres: 0.0,
+            suspension_compression_m: compression,
+            unsprung_velocity_m_s: 0.0,
+            unsprung_acceleration_m_s2: 0.0,
+            tire_deflection_m: 0.0,
+            tire_deflection_velocity_m_s: 0.0,
+            tire_vertical_force: static_force,
+            mechanical_initialized: false,
+            // Start at the Road values so the filter has no startup transient and
+            // tau = 0.0 remains an exact pass-through.
+            surface_filter_initialized: true,
+            filtered_surface_friction: surface_value(
+                &config.tires.surface_friction,
+                SurfaceType::Road,
+                1.0,
+            ),
+            filtered_surface_stiffness: surface_value(
+                &config.tires.surface_stiffness,
+                SurfaceType::Road,
+                5.0,
+            ),
+            filtered_surface_rolling_resistance: surface_value(
+                &config.tires.surface_rolling_resistance,
+                SurfaceType::Road,
+                1.0,
+            ),
+            damper_compression_m: 0.0,
+            damper_velocity_m_s: 0.0,
+            motion_ratio: 1.0,
+            motion_ratio_rate_per_m: 0.0,
+            tangent_wheel_rate_n_per_m: config.suspension.calculate_spring_rate(&config.chassis, &config.tires, &config.fuel, wheel).max(1.0),
+            rod_axial_force_n: 0.0,
+            geometric_clamped: false,
+            geometric_max_residual_m: 0.0,
+            load_path_element_n: 0.0,
+            load_path_wishbone_n: 0.0,
+            load_path_other_n: 0.0,
+            balance_residual_n: 0.0,
+            rod_mismatch_n: 0.0,
+            link_singular: false,
+            spring_energy_j: 0.0,
+            damper_dissipated_j: 0.0,
+            geometric_camber_rad: camber(config, wheel),
+            geometric_toe_rad: if wheel.is_front() { config.suspension.front_toe } else { config.suspension.rear_toe },
+            hub_lateral_m: 0.0,
+            hub_long_m: 0.0,
+        }
+    }
+}
+
+/// GRIP-06: apply the per-wheel surface filter. With `tau = 0.0` this is an exact
+/// pass-through; with a positive tau the effective friction/stiffness/rolling
+/// values ease toward the raw blended sample, so kerb and grass transitions are
+/// no longer single-frame steps.
+fn filter_surface_values(
+    config: &VehicleConfig,
+    state: &mut WheelSuspensionState,
+    raw_friction: f64,
+    raw_stiffness: f64,
+    raw_rolling: f64,
+    dt: f64,
+) {
+    let tau = config.tires.surface_transition_tau_s.max(0.0);
+    if tau <= 1e-9 {
+        state.filtered_surface_friction = raw_friction;
+        state.filtered_surface_stiffness = raw_stiffness;
+        state.filtered_surface_rolling_resistance = raw_rolling;
+        state.surface_filter_initialized = true;
+    } else {
+        if !state.surface_filter_initialized {
+            state.filtered_surface_friction = raw_friction;
+            state.filtered_surface_stiffness = raw_stiffness;
+            state.filtered_surface_rolling_resistance = raw_rolling;
+            state.surface_filter_initialized = true;
+        }
+        let alpha = 1.0 - (-dt / tau).exp();
+        state.filtered_surface_friction +=
+            (raw_friction - state.filtered_surface_friction) * alpha;
+        state.filtered_surface_stiffness +=
+            (raw_stiffness - state.filtered_surface_stiffness) * alpha;
+        state.filtered_surface_rolling_resistance +=
+            (raw_rolling - state.filtered_surface_rolling_resistance) * alpha;
+    }
+    state.effective_friction = state.filtered_surface_friction;
+    state.effective_stiffness = state.filtered_surface_stiffness;
+    state.effective_rolling_resistance = state.filtered_surface_rolling_resistance;
+}
+
+/// SUS-GEO-11: per-wheel data that depends only on the validated geometry
+/// (hardpoints, droop/bump, zero direction). It used to be re-derived by
+/// `travel_envelope` from inside every substep (9 searches per wheel and tick);
+/// it is now built once per configuration and reused by stops and integration.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PreparedWheelEnvelope {
+    pub q_min: f64,
+    pub q_max: f64,
+    /// Rest wheel rate k_s * r0^2 used by the explicit ARB/stop approximation.
+    pub k_wheel_rest_n_per_m: f64,
+}
+
+/// SUS-GEO-11: prepared envelopes for the four corners (see [`PreparedWheelEnvelope`]).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PreparedGeometricSuspension {
+    pub wheels: [PreparedWheelEnvelope; 4],
+}
+
+impl PreparedGeometricSuspension {
+    /// Build from the validated geometry. Uses the same zero-direction
+    /// (`rack = 0`) contract as the previous in-loop searches.
+    pub fn build(geo: &GeometricSuspensionConfig) -> Self {
+        let mut wheels = [PreparedWheelEnvelope {
+            q_min: 0.0,
+            q_max: 0.0,
+            k_wheel_rest_n_per_m: 1.0,
+        }; 4];
+        for wheel in WheelIndex::ALL {
+            let (q_min, q_max) = geometric_q_limits(geo, wheel);
+            wheels[wheel as usize] = PreparedWheelEnvelope {
+                q_min,
+                q_max,
+                k_wheel_rest_n_per_m: geometric_k_wheel_rest(geo, wheel).max(1.0),
+            };
+        }
+        Self { wheels }
+    }
+
+    #[inline]
+    pub fn for_wheel(&self, wheel: WheelIndex) -> PreparedWheelEnvelope {
+        self.wheels[wheel as usize]
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SuspensionSystem {
+    #[serde(skip)]
+    pub benchmark_evaluation_counts: Option<std::sync::Arc<[std::sync::atomic::AtomicU64; 4]>>,
+    #[serde(default)]
+    pub backend: SuspensionBackend,
+    #[serde(skip)]
+    simplified_prepared: Option<std::sync::Arc<SimplifiedSuspension>>,
+    pub wheels: [WheelSuspensionState; 4],
+    /// SUS-GEO-11: rebuilt on construction/reset or explicit invalidation;
+    /// never touched per substep (serde-skipped state snapshot detail).
+    #[serde(skip)]
+    geometric_prepared: Option<PreparedGeometricSuspension>,
+    // --- SUS-GEO-05 body-mode diagnostics (metres for travels) ---
+    #[serde(default)]
+    pub heave_m: f64,
+    #[serde(default)]
+    pub roll_m: f64,
+    #[serde(default)]
+    pub pitch_m: f64,
+    #[serde(default)]
+    pub warp_m: f64,
+    /// Diagnostic roll-centre heights, chassis-local Y (m). 0 when legacy.
+    #[serde(default)]
+    pub rc_front_m: f64,
+    #[serde(default)]
+    pub rc_rear_m: f64,
+    /// Per-axle lateral load transfer (right minus left, N).
+    #[serde(default)]
+    pub transfer_front_n: f64,
+    #[serde(default)]
+    pub transfer_rear_n: f64,
+    /// ARB stored energy per axle (J).
+    #[serde(default)]
+    pub arb_energy_front_j: f64,
+    #[serde(default)]
+    pub arb_energy_rear_j: f64,
+    /// Phase A diagnostics: axle substeps that exhausted the fixed-point budget
+    /// and fell back to the sequential recomputation. Never affects forces.
+    #[serde(default)]
+    pub axle_fallback_count: u64,
+    /// Phase A diagnostics: worst fixed-point iteration count seen on this system.
+    #[serde(default)]
+    pub axle_max_iterations: u32,
+    /// Current trial body acceleration (world); the standalone transaction iterates
+    /// it with the corner solve before committing a single interval.
+    #[serde(default)]
+    pub body_acceleration_world: Vec3,
+    #[serde(default)]
+    pub body_angular_acceleration_world: Vec3,
+    #[serde(default)]
+    pub body_angular_velocity_world: Vec3,
+    /// Chassis linear velocity (world), used only to report anchor velocity.
+    #[serde(default)]
+    pub body_linear_velocity_world: Vec3,
+    #[serde(default)]
+    pub body_reference_world: Vec3,
+    #[serde(default)]
+    pub mechanical_failure: Option<String>,
+    /// Vertical-suspension telemetry of the last solve, one entry per corner.
+    /// Measurements only: nothing here feeds a force or a constraint.
+    #[serde(skip)]
+    pub vertical: [crate::vertical_diagnostics::WheelVerticalDiagnostics; 4],
+    /// Per-axle simultaneous-solve telemetry (front, rear).
+    #[serde(skip)]
+    pub axles: [crate::vertical_diagnostics::AxleVerticalDiagnostics; 2],
+    /// Exact numbers of the constraint that rejected the last solve, when it was
+    /// rejected. Cleared at the start of every new trial, so a published value
+    /// always belongs to the trial being reported.
+    #[serde(skip)]
+    pub failure: Option<crate::vertical_diagnostics::FailureDiagnostics>,
+}
+
+impl SuspensionSystem {
+    pub fn new(config: &VehicleConfig) -> Self {
+        let geometric_prepared = Self::prepare_geometric(config);
+        let backend = SuspensionBackend::production();
+        let simplified_prepared = Self::prepare_simplified(config, backend, geometric_prepared.as_ref());
+        if backend == SuspensionBackend::Simplified {
+            eprintln!("SUSPENSION_BACKEND_READY backend=simplified contact_rays=12 prepared={}", simplified_prepared.is_some());
+        }
+        Self {
+            benchmark_evaluation_counts: None,
+            wheels: [
+                WheelSuspensionState::new(config, WheelIndex::FrontLeft),
+                WheelSuspensionState::new(config, WheelIndex::FrontRight),
+                WheelSuspensionState::new(config, WheelIndex::RearLeft),
+                WheelSuspensionState::new(config, WheelIndex::RearRight),
+            ],
+            geometric_prepared,
+            backend,
+            simplified_prepared,
+            heave_m: 0.0,
+            roll_m: 0.0,
+            pitch_m: 0.0,
+            warp_m: 0.0,
+            rc_front_m: 0.0,
+            rc_rear_m: 0.0,
+            transfer_front_n: 0.0,
+            transfer_rear_n: 0.0,
+            arb_energy_front_j: 0.0,
+            arb_energy_rear_j: 0.0,
+            axle_fallback_count: 0,
+            axle_max_iterations: 0,
+            body_acceleration_world: Vec3::ZERO,
+            body_angular_acceleration_world: Vec3::ZERO,
+            body_angular_velocity_world: Vec3::ZERO,
+            body_linear_velocity_world: Vec3::ZERO,
+            body_reference_world: Vec3::ZERO,
+            mechanical_failure: None,
+            vertical: [crate::vertical_diagnostics::WheelVerticalDiagnostics::default(); 4],
+            axles: [crate::vertical_diagnostics::AxleVerticalDiagnostics::default(); 2],
+            failure: None,
+        }
+    }
+
+    /// SUS-GEO-11: prepared envelopes derived only from
+    /// `VehicleConfig::geometric_suspension` (hardpoints + droop/bump).
+    fn prepare_geometric(config: &VehicleConfig) -> Option<PreparedGeometricSuspension> {
+        if !matches!(config.suspension.suspension_model, SuspensionModelKind::Geometric) {
+            return None;
+        }
+        config
+            .suspension.geometric_suspension
+            .as_ref()
+            .map(PreparedGeometricSuspension::build)
+    }
+
+    /// SUS-GEO-11: prepared per-wheel envelopes (None in legacy mode).
+    pub fn prepared_geometric(&self) -> Option<&PreparedGeometricSuspension> {
+        self.geometric_prepared.as_ref()
+    }
+
+    /// SUS-GEO-11: explicit invalidation hook for a caller that replaces
+    /// `VehicleConfig::geometric_suspension` in place. No runtime path mutates
+    /// the geometric configuration today; a new `SuspensionSystem` (sim
+    /// create/reset) rebuilds it anyway. Never called per tick/substep.
+    pub fn rebuild_geometric_prepared(&mut self, config: &VehicleConfig) {
+        self.geometric_prepared = Self::prepare_geometric(config);
+        self.simplified_prepared = Self::prepare_simplified(config, self.backend, self.geometric_prepared.as_ref());
+    }
+
+    /// Explicit reset transition: forces the next step to re-derive the rest reference
+    /// from the freshly placed chassis (used by reset, placement and setup changes).
+    pub fn reset_mechanical_state(&mut self) {
+        for wheel in self.wheels.iter_mut() {
+            wheel.mechanical_initialized = false;
+            wheel.contact_fraction = 0.0;
+            wheel.unsprung_velocity_m_s = 0.0;
+        }
+        // Diagnostics describe a solve, so a reset must not leave a stale one behind.
+        self.vertical = [crate::vertical_diagnostics::WheelVerticalDiagnostics::default(); 4];
+        self.axles = [crate::vertical_diagnostics::AxleVerticalDiagnostics::default(); 2];
+        self.failure = None;
+    }
+
+    pub fn select_backend(&mut self, config: &VehicleConfig, backend: SuspensionBackend) {
+        self.backend = backend;
+        self.rebuild_geometric_prepared(config);
+    }
+
+    fn prepare_simplified(config: &VehicleConfig, backend: SuspensionBackend,
+        prepared: Option<&PreparedGeometricSuspension>) -> Option<std::sync::Arc<SimplifiedSuspension>> {
+        if backend != SuspensionBackend::Simplified { return None; }
+        Some(std::sync::Arc::new(SimplifiedSuspension::build(config.suspension.geometric_suspension.as_ref()?, prepared?)))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn wheel_wrench(&self, geometry: &GeometricSuspensionConfig, wheel: WheelIndex,
+        travel_metres: f64, steering_radians: f64, contact_force_world: Vec3,
+        contact_point_world: Vec3, aligning_couple_world: Vec3, grounded: bool,
+        unsprung_mass_kilograms: f64, unsprung_acceleration_metres_per_second_squared: f64,
+        spring_force_newtons: f64, damping_force_newtons: f64, auxiliary_force_newtons: f64,
+        motion_ratio: f64, rod_reference_newtons: f64, body: crate::types::Transform3D,
+        centre_of_gravity_local: Vec3,
+    ) -> crate::suspension_loads::GeoWheelWrench {
+        if self.backend == SuspensionBackend::Simplified {
+            return crate::suspension_loads::GeoWheelWrench {
+                force_world: if grounded { contact_force_world } else { Vec3::ZERO },
+                torque_world: if grounded {
+                    (contact_point_world - body.transform_point(centre_of_gravity_local))
+                        .cross(contact_force_world) + aligning_couple_world
+                } else { Vec3::ZERO },
+                paths: Default::default(),
+                elem_y_n: 0.0,
+                wish_y_n: 0.0,
+                other_y_n: 0.0,
+            };
+        }
+        if let Some(counts) = &self.benchmark_evaluation_counts {
+            counts[2].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        crate::suspension_loads::geometric_wheel_wrench(geometry, wheel, travel_metres,
+            steering_radians, contact_force_world, contact_point_world, aligning_couple_world,
+            grounded, unsprung_mass_kilograms, unsprung_acceleration_metres_per_second_squared,
+            spring_force_newtons, damping_force_newtons, auxiliary_force_newtons,
+            motion_ratio, rod_reference_newtons, body, centre_of_gravity_local)
+    }
+
+    pub fn resolves_internal_link_forces(&self) -> bool {
+        self.backend == SuspensionBackend::Standard
+    }
+
+    /// SUS-GEO-11: one-time repair for states deserialized without prepared
+    /// data (serde-skipped). Never a per-substep cost.
+    fn ensure_geometric_prepared(&mut self, config: &VehicleConfig) {
+        if self.geometric_prepared.is_none() {
+            self.geometric_prepared = Self::prepare_geometric(config);
+        }
+        if self.backend == SuspensionBackend::Simplified && self.simplified_prepared.is_none() {
+            self.simplified_prepared = Self::prepare_simplified(config, self.backend, self.geometric_prepared.as_ref());
+        }
+    }
+
+    /// Convert the three transverse raycasts into a contact-patch target, then integrate
+    /// the virtual unsprung wheel/tire against the chassis suspension.
+    ///
+    /// Compatibility entry point: uses neutral (identity) pressure/thermal modifiers.
+    pub fn step(&mut self, config: &VehicleConfig, samples: &[TriRaycastSample; 4], dt: f64) {
+        self.step_with_modifiers(config, &[TireMechanicalModifiers::identity(); 4], samples, dt);
+    }
+
+    /// Same as Self::step but applies pressure/thermal mechanical modifiers to the
+    /// radial tire carcass (stiffness, damping, max deflection). Modifiers are computed
+    /// BEFORE forces (current tick pressure); thermal state updates afterwards so the
+    /// new pressure only affects the next tick.
+    pub fn step_with_modifiers(
+        &mut self,
+        config: &VehicleConfig,
+        modifiers: &[TireMechanicalModifiers; 4],
+        samples: &[TriRaycastSample; 4],
+        dt: f64,
+    ) {
+        self.step_with_modifiers_and_body_orientation(
+            config,
+            modifiers,
+            samples,
+            dt,
+            Mat3::IDENTITY,
+        );
+    }
+
+    pub fn step_with_modifiers_and_body_orientation(
+        &mut self,
+        config: &VehicleConfig,
+        modifiers: &[TireMechanicalModifiers; 4],
+        samples: &[TriRaycastSample; 4],
+        dt: f64,
+        body_orientation: Mat3,
+    ) {
+        self.step_with_integration_method(config, modifiers, samples, dt,
+            self.backend == SuspensionBackend::Simplified, body_orientation);
+    }
+
+    pub fn step_with_modifiers_and_body_kinematics(&mut self, configuration: &VehicleConfig,
+        modifiers: &[TireMechanicalModifiers; 4], samples: &[TriRaycastSample; 4],
+        duration_seconds: f64, body: crate::simulation::BodyKinematics) {
+        self.step_with_contact_kinematics(configuration, modifiers, samples, duration_seconds,
+            self.backend == SuspensionBackend::Simplified, body.transform.basis, Some(body));
+    }
+
+    fn step_with_integration_method(
+        &mut self,
+        configuration: &VehicleConfig,
+        mechanical_modifiers: &[TireMechanicalModifiers; 4],
+        contact_samples: &[TriRaycastSample; 4],
+        duration_seconds: f64,
+        use_implicit_integration: bool,
+        body_orientation: Mat3,
+    ) {
+        self.step_with_contact_kinematics(configuration, mechanical_modifiers, contact_samples,
+            duration_seconds, use_implicit_integration, body_orientation, None);
+    }
+
+    fn step_with_contact_kinematics(
+        &mut self,
+        configuration: &VehicleConfig,
+        mechanical_modifiers: &[TireMechanicalModifiers; 4],
+        contact_samples: &[TriRaycastSample; 4],
+        duration_seconds: f64,
+        use_implicit_integration: bool,
+        body_orientation: Mat3,
+        body_kinematics: Option<crate::simulation::BodyKinematics>,
+    ) {
+        let duration_seconds = duration_seconds.max(1e-5);
+        for index in 0..4 {
+            let wheel = WheelIndex::ALL[index];
+            self.sample_contact(configuration, wheel, &contact_samples[index], duration_seconds, body_orientation);
+            // Ray geometry is a property of the query, not of the solve: record how
+            // much ray the corner still needed, so a wheel that never finds ground is
+            // distinguishable from one that finds it and is held back.
+            let max_ray_length = spring_length(configuration, wheel) + tire_radius(configuration, wheel);
+            self.vertical[index].ray_shortfall_m =
+                ray_shortfall(&contact_samples[index], max_ray_length);
+            let state = &self.wheels[index];
+            self.vertical[index].contact_point = state.effective_contact_point;
+            self.vertical[index].contact_normal = state.effective_normal;
+            self.vertical[index].ray_hit_mask = (state.ray_grounded[0] as u32) | ((state.ray_grounded[1] as u32) << 1) | ((state.ray_grounded[2] as u32) << 2);
+        }
+
+        if self.backend == SuspensionBackend::Simplified
+            && matches!(configuration.suspension.suspension_model, SuspensionModelKind::Geometric)
+            && configuration.suspension.geometric_suspension.is_some()
+        {
+            if let Some(body) = body_kinematics {
+                self.configure_simplified_contact_kinematics(configuration, body);
+                self.body_angular_velocity_world = body.angular_velocity;
+                self.body_linear_velocity_world = body.linear_velocity;
+                self.body_reference_world = body.transform.origin;
+            }
+            self.solve_simplified_geometric_axle(configuration, mechanical_modifiers,
+                [WheelIndex::FrontLeft, WheelIndex::FrontRight], duration_seconds, body_orientation);
+            self.solve_simplified_geometric_axle(configuration, mechanical_modifiers,
+                [WheelIndex::RearLeft, WheelIndex::RearRight], duration_seconds, body_orientation);
+            if let Some(body) = body_kinematics {
+                self.update_simplified_contact_application_points(configuration, body);
+            }
+            self.update_body_modes(configuration);
+            return;
+        }
+
+        // ARB must use one coherent compression snapshot, not values modified by solve order.
+        let compression_snapshot_metres = [
+            self.wheels[0].suspension_compression_m,
+            self.wheels[1].suspension_compression_m,
+            self.wheels[2].suspension_compression_m,
+            self.wheels[3].suspension_compression_m,
+        ];
+        self.solve_force(configuration, WheelIndex::FrontLeft, mechanical_modifiers[0], compression_snapshot_metres[1], duration_seconds, use_implicit_integration);
+        self.solve_force(configuration, WheelIndex::FrontRight, mechanical_modifiers[1], compression_snapshot_metres[0], duration_seconds, use_implicit_integration);
+        self.solve_force(configuration, WheelIndex::RearLeft, mechanical_modifiers[2], compression_snapshot_metres[3], duration_seconds, use_implicit_integration);
+        self.solve_force(configuration, WheelIndex::RearRight, mechanical_modifiers[3], compression_snapshot_metres[2], duration_seconds, use_implicit_integration);
+        self.update_body_modes(configuration);
+    }
+
+    /// SUS-GEO-05: total damper-dissipated energy over the four circuits (J).
+    pub fn damper_dissipated_total(&self) -> f64 {
+        self.wheels.iter().map(|w| w.damper_dissipated_j).sum()
+    }
+
+    /// SUS-GEO-05: modal decomposition of wheel travels + per-axle transfers.
+    /// Pure diagnostics (no force impact); RC heights geometric-only.
+    fn update_body_modes(&mut self, config: &VehicleConfig) {        let rest = |w: WheelIndex| rest_compression_m(config, w);
+        let q = [
+            self.wheels[0].suspension_compression_m - rest(WheelIndex::FrontLeft),
+            self.wheels[1].suspension_compression_m - rest(WheelIndex::FrontRight),
+            self.wheels[2].suspension_compression_m - rest(WheelIndex::RearLeft),
+            self.wheels[3].suspension_compression_m - rest(WheelIndex::RearRight),
+        ];
+        let modes = crate::suspension_loads::body_modes(q);
+        self.heave_m = modes.heave_m;
+        self.roll_m = modes.roll_m;
+        self.pitch_m = modes.pitch_m;
+        self.warp_m = modes.warp_m;
+        let fz = [
+            self.wheels[0].total_normal_force,
+            self.wheels[1].total_normal_force,
+            self.wheels[2].total_normal_force,
+            self.wheels[3].total_normal_force,
+        ];
+        self.transfer_front_n = fz[1] - fz[0];
+        self.transfer_rear_n = fz[3] - fz[2];
+        if self.backend == SuspensionBackend::Simplified && is_geometric(config) {
+            self.rc_front_m = 0.0;
+            self.rc_rear_m = 0.0;
+            self.arb_energy_front_j = 0.5 * self.simplified_antiroll_stiffness(config,
+                [WheelIndex::FrontLeft, WheelIndex::FrontRight]) * (q[0] - q[1]).powi(2);
+            self.arb_energy_rear_j = 0.5 * self.simplified_antiroll_stiffness(config,
+                [WheelIndex::RearLeft, WheelIndex::RearRight]) * (q[2] - q[3]).powi(2);
+            return;
+        }
+        if let Some(geo) = config.suspension.geometric_suspension.as_ref() {
+            if matches!(
+                config.suspension.suspension_model,
+                crate::suspension_geo_config::SuspensionModelKind::Geometric
+            ) {
+                self.rc_front_m =
+                    crate::suspension_loads::roll_centre_height(&geo.corners.fl, &geo.corners.fr, config.chassis.front_track * 0.5)
+                        .unwrap_or(0.0);
+                self.rc_rear_m =
+                    crate::suspension_loads::roll_centre_height(&geo.corners.rl, &geo.corners.rr, config.chassis.rear_track * 0.5)
+                        .unwrap_or(0.0);
+                let dq_f = q[0] - q[1];
+                let dq_r = q[2] - q[3];
+                // k_rest per axle from the tangent at rest (cheap: use current
+                // tangent at small travel, else fall back to element*1).
+                self.arb_energy_front_j = if self.backend == SuspensionBackend::Simplified {
+                    0.5 * self.simplified_antiroll_stiffness(config, [WheelIndex::FrontLeft, WheelIndex::FrontRight]) * dq_f * dq_f
+                } else {
+                    crate::suspension_loads::arb_energy(
+                        geo,
+                        true,
+                        dq_f,
+                        self.wheels[0].tangent_wheel_rate_n_per_m.max(1.0),
+                    )
+                };
+                self.arb_energy_rear_j = if self.backend == SuspensionBackend::Simplified {
+                    0.5 * self.simplified_antiroll_stiffness(config, [WheelIndex::RearLeft, WheelIndex::RearRight]) * dq_r * dq_r
+                } else {
+                    crate::suspension_loads::arb_energy(
+                        geo,
+                        false,
+                        dq_r,
+                        self.wheels[2].tangent_wheel_rate_n_per_m.max(1.0),
+                    )
+                };
+            } else {
+                self.rc_front_m = 0.0;
+                self.rc_rear_m = 0.0;
+                self.arb_energy_front_j = 0.0;
+                self.arb_energy_rear_j = 0.0;
+            }
+        } else {
+            self.rc_front_m = 0.0;
+            self.rc_rear_m = 0.0;
+            self.arb_energy_front_j = 0.0;
+            self.arb_energy_rear_j = 0.0;
+        }
+    }
+
+    fn sample_contact(
+        &mut self,
+        config: &VehicleConfig,
+        wheel: WheelIndex,
+        sample: &TriRaycastSample,
+        dt: f64,
+        body_orientation: Mat3,
+    ) {
+        let backend = self.backend;
+        let state = &mut self.wheels[wheel as usize];
+        let spring_len = spring_length(config, wheel);
+        let radius = tire_radius(config, wheel);
+        let max_ray_length = spring_len + radius;
+        let tuning = WheelMechanicalTuning::for_wheel(config, wheel);
+
+        state.ray_compressions_m = [
+            ray_compression(&sample.inner, max_ray_length),
+            ray_compression(&sample.center, max_ray_length),
+            ray_compression(&sample.outer, max_ray_length),
+        ];
+        state.ray_grounded = [
+            sample.inner.is_colliding,
+            sample.center.is_colliding,
+            sample.outer.is_colliding,
+        ];
+        let previous_contact_fraction = state.contact_fraction;
+        let previous_normal_compression_metres = state.normal_road_compression_metres;
+        let previous_normal_projection = state.normal_contact_projection;
+        state.contact_fraction = tricast_contact_fraction(sample);
+
+        let target = if sample.has_any_contact() {
+            // Geometry remains an active-hit weighted average, while contact_fraction retains
+            // how much of the tread is supported. Tire stiffness is scaled by that fraction.
+            let distance = sample.weighted_distance(max_ray_length).min(max_ray_length);
+            (max_ray_length - distance).max(0.0)
+        } else {
+            0.0
+        };
+
+        if !state.mechanical_initialized {
+            state.road_compression_m = target;
+            state.previous_road_compression_m = target;
+            if sample.has_any_contact() {
+                // Rigid contact: the carcass has no static squash, so the wheel rests
+                // exactly at the ground-imposed compression.
+                state.suspension_compression_m = target.clamp(0.0, spring_len);
+                state.compression_mm = state.suspension_compression_m * 1000.0;
+                state.previous_compression_mm = state.compression_mm;
+            }
+            state.mechanical_initialized = true;
+        } else {
+            state.previous_road_compression_m = state.road_compression_m;
+            let tau = tuning.road_height_filter_tau_s.max(1e-5);
+            let alpha = 1.0 - (-dt / tau).exp();
+            if backend == SuspensionBackend::Simplified {
+                if sample.has_any_contact() { state.road_compression_m = target; }
+            } else {
+                state.road_compression_m += (target - state.road_compression_m) * alpha;
+            }
+        }
+
+        state.road_velocity_m_s = ((state.road_compression_m
+            - state.previous_road_compression_m)
+            / dt)
+            .clamp(-tuning.max_road_velocity_m_s, tuning.max_road_velocity_m_s);
+
+        if backend == SuspensionBackend::Simplified && previous_contact_fraction <= 0.0 {
+            state.road_velocity_m_s = 0.0;
+        }
+        if !sample.has_any_contact() {
+            if backend == SuspensionBackend::Simplified {
+                state.road_velocity_m_s = 0.0;
+                state.normal_road_velocity_metres_per_second = 0.0;
+                state.normal_contact_projection_rate_per_second = 0.0;
+            }
+            state.effective_normal = Vec3::UP;
+            state.effective_contact_point = Vec3::ZERO;
+            state.effective_surface = SurfaceType::Road;
+            filter_surface_values(
+                config,
+                state,
+                surface_value(&config.tires.surface_friction, SurfaceType::Road, 1.0),
+                surface_value(&config.tires.surface_stiffness, SurfaceType::Road, 5.0),
+                surface_value(&config.tires.surface_rolling_resistance, SurfaceType::Road, 1.0),
+                dt,
+            );
+            // No road plane: effective camber equals the wheel-kinematic camber derived
+            // from the current suspension travel. Continuous with the contact branch
+            // because the compression state itself is continuous.
+            let travel_delta_m = state.suspension_compression_m
+                - spring_len * resting_ratio(config, wheel);
+            // SUS-GEO-06: linkage camber replaces the linear gain in
+            // geometric mode (previous-tick pose, filter-consistent).
+            let kinematic_camber = if is_geometric(config) {
+                state.geometric_camber_rad
+            } else {
+                camber(config, wheel) + camber_gain(config, wheel) * travel_delta_m
+            };
+            state.kinematic_camber_rad = kinematic_camber;
+            state.dynamic_camber = kinematic_camber;
+            state.effective_contact_camber_rad = kinematic_camber;
+            return;
+        }
+
+        state.effective_normal = sample.weighted_normal();
+        if backend == SuspensionBackend::Simplified {
+            let projection = state.effective_normal.dot(body_orientation.y).clamp(0.0, 1.0);
+            state.normal_contact_projection = projection;
+            state.normal_road_compression_metres = projection * target
+                + tire_radius(config, wheel) * (1.0 - projection);
+            let continuous_contact = previous_contact_fraction > 0.0;
+            state.normal_road_velocity_metres_per_second = if continuous_contact {
+                (state.normal_road_compression_metres - previous_normal_compression_metres) / dt
+            } else { 0.0 };
+            state.normal_contact_projection_rate_per_second = if continuous_contact {
+                (projection - previous_normal_projection) / dt
+            } else { 0.0 };
+        }
+        state.effective_contact_point = weighted_point(sample);
+        // SUS-GEO-06: hub lateral/longitudinal trajectory rides the contact
+        // patch (previous-tick offsets, mm-cm scale, filter-consistent).
+        if is_geometric(config) {
+            state.effective_contact_point = state.effective_contact_point
+                + backend.contact_hub_offset_world_metres(
+                    body_orientation,
+                    state.hub_lateral_m,
+                    state.hub_long_m,
+                );
+        }
+        state.effective_surface = dominant_surface(sample);
+        filter_surface_values(
+            config,
+            state,
+            blended_surface(sample, &config.tires.surface_friction, 1.0),
+            blended_surface(sample, &config.tires.surface_stiffness, 5.0),
+            blended_surface(sample, &config.tires.surface_rolling_resistance, 1.0),
+            dt,
+        );
+
+        let base_camber = camber(config, wheel);
+        let travel_delta_m =
+            state.suspension_compression_m - spring_len * resting_ratio(config, wheel);
+        // SUS-GEO-06: linkage camber replaces the linear gain in geometric mode.
+        let kinematic_camber = if is_geometric(config) {
+            state.geometric_camber_rad
+        } else {
+            base_camber + camber_gain(config, wheel) * travel_delta_m
+        };
+        state.kinematic_camber_rad = kinematic_camber;
+        let span = tire_width(config, wheel) * config.suspension.tri_ray_spacing_ratio * 2.0;
+        if sample.inner.is_colliding && sample.outer.is_colliding && span > 1e-6 {
+            let delta_h = sample.inner.distance - sample.outer.distance;
+            let incline = (delta_h / span).atan();
+            // Effective camber combines the kinematic travel term with the road plane:
+            // the right side mirrors the incline (existing banked-road convention).
+            state.dynamic_camber =
+                kinematic_camber + if wheel.is_right() { -incline } else { incline };
+        } else {
+            state.dynamic_camber = kinematic_camber;
+        }
+        state.effective_contact_camber_rad = state.dynamic_camber;
+    }
+
+    fn solve_force(
+        &mut self,
+        config: &VehicleConfig,
+        wheel: WheelIndex,
+        modifiers: TireMechanicalModifiers,
+        opposite_compression_m: f64,
+        dt: f64,
+        use_implicit_integration: bool,
+    ) {
+        let is_geo = matches!(config.suspension.suspension_model, SuspensionModelKind::Geometric)
+            && config.suspension.geometric_suspension.is_some();
+        if is_geo {
+            self.ensure_geometric_prepared(config);
+            self.solve_force_geometric(config, wheel, modifiers, opposite_compression_m, dt, use_implicit_integration, None);
+        } else {
+            self.solve_force_legacy(config, wheel, modifiers, opposite_compression_m, dt, use_implicit_integration);
+        }
+    }
+
+    fn solve_force_legacy(
+        &mut self,
+        config: &VehicleConfig,
+        wheel: WheelIndex,
+        modifiers: TireMechanicalModifiers,
+        opposite_compression_m: f64,
+        dt: f64,
+        use_implicit_integration: bool,
+    ) {
+        let state = &mut self.wheels[wheel as usize];
+        let spring_len = spring_length(config, wheel);
+        let spring_k = config.suspension.calculate_spring_rate(&config.chassis, &config.tires, &config.fuel, wheel).max(1.0);
+        let tuning = WheelMechanicalTuning::for_wheel(config, wheel);
+        let unsprung_mass = tuning.physical_unsprung_mass_kg.max(1.0);
+        let arb_ratio = if wheel.is_front() {
+            config.suspension.front_arb_ratio
+        } else {
+            config.suspension.rear_arb_ratio
+        };
+
+        let previous_compression = state.suspension_compression_m;
+        let mut x = state.suspension_compression_m;
+        let mut v = state.unsprung_velocity_m_s;
+
+        let antiroll_force_newtons =
+            (previous_compression - opposite_compression_m) * spring_k * arb_ratio;
+        let contact = ground_contact_constraint(config, wheel, modifiers, state, tuning);
+        let substeps = ((dt / tuning.mechanical_substep_s.max(1e-5)).ceil() as usize)
+            .clamp(1, 12);
+        let h = dt / substeps as f64;
+        let previous_velocity_metres_per_second = v;
+        let mut normal_impulse_newton_seconds = 0.0;
+        let mut suspension_impulse_newton_seconds = 0.0;
+        let mut travel_limit_impulse_newton_seconds = 0.0;
+        for _ in 0..substeps {
+            let result = integrate_vertical_suspension(
+                use_implicit_integration,
+                x, v, unsprung_mass, h,
+                (0.0, spring_len + tuning.hard_stop_overtravel_m),
+                contact,
+                |compression_metres, velocity_metres_per_second| {
+                    let (spring_force_newtons, damping_force_newtons, stop_force_newtons) =
+                        suspension_element_forces(config, wheel, compression_metres,
+                            velocity_metres_per_second, spring_k, spring_len, tuning);
+                    spring_force_newtons + damping_force_newtons + antiroll_force_newtons + stop_force_newtons
+                        + unsprung_mass * crate::wheel_mechanics::GRAVITY_M_S2
+                },
+            );
+            x = result.compression_metres;
+            v = result.velocity_metres_per_second;
+            normal_impulse_newton_seconds += result.normal_contact_impulse_newton_seconds;
+            suspension_impulse_newton_seconds += result.suspension_impulse_newton_seconds;
+            travel_limit_impulse_newton_seconds += result.travel_limit_impulse_newton_seconds;
+            let (_, damping_force_newtons, _) =
+                suspension_element_forces(config, wheel, x, v, spring_k, spring_len, tuning);
+            state.damper_dissipated_j += (damping_force_newtons * v * h).max(0.0);
+        }
+        let acceleration = (v - previous_velocity_metres_per_second) / dt;
+        let arb_force = antiroll_force_newtons;
+        let tire_force = normal_impulse_newton_seconds / dt;
+        let tire_deflection = empirical_carcass_deflection(tuning, tire_force);
+        let tire_deflection_velocity = 0.0;
+
+        // Re-evaluate final suspension values after integration for telemetry and next tick.
+        let (sf, df, bf) = suspension_element_forces(
+            config,
+            wheel,
+            x,
+            v,
+            spring_k,
+            spring_len,
+            tuning,
+        );
+        let spring_force = sf;
+        let damping_force = df;
+        let bottom_force = bf;
+
+        state.previous_compression_mm = previous_compression * 1000.0;
+        state.suspension_compression_m = finite_or_zero(x);
+        state.unsprung_velocity_m_s = finite_or_zero(v);
+        state.unsprung_acceleration_m_s2 = finite_or_zero(acceleration);
+        state.compression_mm = state.suspension_compression_m * 1000.0;
+        state.spring_speed_mm_s = state.unsprung_velocity_m_s * 1000.0;
+        state.spring_current_length = spring_len - state.suspension_compression_m;
+        state.max_spring_length = state.spring_current_length.clamp(0.0, spring_len);
+        state.spring_force = finite_or_zero(spring_force);
+        state.damping_force = finite_or_zero(damping_force);
+        state.antiroll_force = finite_or_zero(arb_force);
+        state.bottom_out_force = finite_or_zero(bottom_force);
+        state.chassis_suspension_force = finite_or_zero(
+            state.spring_force + state.damping_force + state.antiroll_force + state.bottom_out_force,
+        );
+        state.tire_deflection_m = finite_or_zero(tire_deflection);
+        state.tire_deflection_velocity_m_s = finite_or_zero(tire_deflection_velocity);
+        state.tire_vertical_force = finite_or_zero(tire_force).max(0.0);
+        state.normal_impulse_newton_seconds = finite_or_zero(normal_impulse_newton_seconds).max(0.0);
+        state.suspension_impulse_newton_seconds = finite_or_zero(suspension_impulse_newton_seconds);
+        state.travel_limit_impulse_newton_seconds = finite_or_zero(travel_limit_impulse_newton_seconds);
+        state.total_normal_force = if use_implicit_integration {
+            state.normal_impulse_newton_seconds / dt
+        } else {
+            state.tire_vertical_force
+        };
+        state.is_grounded = state.contact_fraction > 0.0 && state.total_normal_force > if use_implicit_integration { 0.0 } else { 1.0 };
+        // Legacy leaves geometric diagnostics neutral.
+        state.damper_compression_m = 0.0;
+        state.damper_velocity_m_s = 0.0;
+        state.motion_ratio = 1.0;
+        state.motion_ratio_rate_per_m = 0.0;
+        state.tangent_wheel_rate_n_per_m = spring_k.max(1.0);
+        state.rod_axial_force_n = 0.0;
+        state.geometric_clamped = false;
+        state.geometric_max_residual_m = 0.0;
+        state.geometric_camber_rad = 0.0;
+        state.geometric_toe_rad = 0.0;
+        state.hub_lateral_m = 0.0;
+        state.hub_long_m = 0.0;
+        state.load_path_element_n = 0.0;
+        state.load_path_wishbone_n = 0.0;
+        state.load_path_other_n = 0.0;
+        state.balance_residual_n = 0.0;
+        state.rod_mismatch_n = 0.0;
+        state.link_singular = false;
+        state.link_singular = false;
+        // Energy audit (both modes): analytic spring storage + dissipated.
+        state.spring_energy_j = 0.5 * spring_k.max(0.0) * x.max(0.0) * x.max(0.0);
+
+    }
+
+    /// SUS-GEO-04 geometric path: explicit spring/damper via kinematics and
+    /// virtual work. Tire carcass/filter integration is shared with legacy
+    /// (same road target, coverage, substeps); only the suspension element,
+    /// ARB, stops and travel limits are geometric. No generic force cuts hide
+    /// invalid geometry: unreachable/clamped/wrong-sign states set
+    /// `geometric_clamped` and apply hard travel stops.
+    fn solve_force_geometric(
+        &mut self,
+        config: &VehicleConfig,
+        wheel: WheelIndex,
+        modifiers: TireMechanicalModifiers,
+        opposite_compression_m: f64,
+        dt: f64,
+        use_implicit_integration: bool,
+        coupled_integration: Option<&GeometricAxleCornerIntegration>,
+    ) {
+        let geo = match config.suspension.geometric_suspension.as_ref() {
+            Some(g) => g,
+            None => return,
+        };
+        let tuning = WheelMechanicalTuning::for_wheel(config, wheel);
+        let unsprung_mass = tuning.unsprung_mass_kg.max(1.0);
+        let spring_len = spring_length(config, wheel);
+        let rest_legacy = spring_len * resting_ratio(config, wheel);
+        let axle = geo.axle(wheel);
+        let selected_antiroll_configuration = self.backend.effective_antiroll_configuration(
+            *geo.arb(wheel.is_front()),
+            if wheel.is_front() {
+                config.suspension.front_arb_ratio
+            } else {
+                config.suspension.rear_arb_ratio
+            },
+        );
+        // SUS-GEO-11: geometry-only envelope prepared once per configuration.
+        // Fallback recomputes the same values if the state arrived without
+        // prepared data (defensive; `solve_force` ensures it beforehand).
+        let prepared = self
+            .geometric_prepared
+            .as_ref()
+            .map(|p| p.for_wheel(wheel))
+            .unwrap_or_else(|| PreparedWheelEnvelope {
+                q_min: geometric_q_limits(geo, wheel).0,
+                q_max: geometric_q_limits(geo, wheel).1,
+                k_wheel_rest_n_per_m: geometric_k_wheel_rest(geo, wheel).max(1.0),
+            });
+        let state = &mut self.wheels[wheel as usize];
+        let previous_compression = state.suspension_compression_m;
+        let mut x = state.suspension_compression_m;
+        let mut v = state.unsprung_velocity_m_s;
+
+        // Wheel travel from design (hub_center): q = x - rest_legacy.
+        let q_of = |xx: f64| xx - rest_legacy;
+        // Rest wheel rate for ARB/stops explicit approximation (prepared).
+        let k_wheel_rest = prepared.k_wheel_rest_n_per_m;
+        let q_opp = opposite_compression_m - rest_legacy;
+        // Tick-start linearization (SUS-GEO-03 cost study): one exact solve +
+        // Jacobian at q0; substeps use s â‰ˆ s0 + r0*(q-q0), vs = r0*v. The
+        // second-order error is O(d2s*(dq)^2) with |dq| < 1 mm per tick,
+        // negligible vs the 1e-4 link tolerance. Final telemetry re-solves
+        // exactly at the settled q.
+        let q0 = q_of(x);
+        let axle0 = geo.axle(wheel);
+        let preload_def0 = axle0.spring_free_length_m - axle0.spring_installed_length_m;
+        let (s0, r0, invalid0) = if let Some(integration) = coupled_integration {
+            (integration.initial_spring_compression_metres,
+                integration.initial_motion_ratio, integration.initial_geometry_invalid)
+        } else {
+            let prepared_start = self.simplified_prepared.as_ref()
+                .filter(|_| self.backend == SuspensionBackend::Simplified)
+                .and_then(|prepared| prepared.vertical_reference_at(wheel, q0));
+            if let Some(counts) = &self.benchmark_evaluation_counts {
+                counts[0].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                if prepared_start.is_some() { counts[1].fetch_add(1, std::sync::atomic::Ordering::Relaxed); }
+            }
+            if let Some((spring_compression_metres, motion_ratio)) = prepared_start {
+                (spring_compression_metres, motion_ratio, false)
+            } else { match (
+                solve_corner(
+                    geo.corners.get(wheel),
+                    q0,
+                    0.0,
+                    wheel.is_front(),
+                    0.0,
+                    0.0,
+                    1.0,
+                ),
+                jacobian(geo.corners.get(wheel), q0, 0.0, wheel.is_front()),
+            ) {
+                (Some(sol), Some(jac))
+                    if jac.motion_ratio.is_finite() && jac.motion_ratio > 0.0 =>
+                {
+                    (sol.damper_compression, jac.motion_ratio, false)
+                }
+                _ => (0.0, 0.0, true),
+            } }
+        };
+        let k_s0 = axle0.spring_rate_N_per_m;
+        // Per-substep element via linearization (no solves in the loop).
+        let elem_at = |q: f64, v: f64| -> (f64, f64, f64, bool) {
+            if invalid0 {
+                return (0.0, 0.0, s0, true);
+            }
+            let s = s0 + r0 * (q - q0);
+            let total = preload_def0 + s;
+            let f_s = if total <= 0.0 {
+                0.0
+            } else {
+                k_s0 * total
+            };
+            let v_s = r0 * v;
+            let f_d = geometric_damper_element(axle0, v_s);
+            (f_s * r0, f_d * r0, s, false)
+        };
+
+        let substeps = ((dt / tuning.mechanical_substep_s.max(1e-5)).ceil() as usize)
+            .clamp(1, 12);
+        let h = dt / substeps as f64;
+        let contact = ground_contact_constraint(config, wheel, modifiers, state, tuning);
+        let previous_velocity_metres_per_second = v;
+        let mut normal_impulse_newton_seconds = 0.0;
+        let mut suspension_impulse_newton_seconds = 0.0;
+        let mut travel_limit_impulse_newton_seconds = 0.0;
+        let (minimum_compression_metres, maximum_compression_metres) =
+            geometric_travel_bounds(prepared, rest_legacy);
+        let mut clamped_tick = invalid0;
+        let mut last_normal_force_newtons = 0.0;
+        if let Some(integration) = coupled_integration {
+            x = integration.compression_metres;
+            v = integration.velocity_metres_per_second;
+            normal_impulse_newton_seconds = integration.normal_impulse_newton_seconds;
+            suspension_impulse_newton_seconds = integration.suspension_impulse_newton_seconds;
+            travel_limit_impulse_newton_seconds = integration.travel_limit_impulse_newton_seconds;
+            last_normal_force_newtons = integration.final_normal_force_newtons;
+            state.damper_dissipated_j += integration.damper_dissipated_joules;
+            clamped_tick |= integration.clamped;
+        } else {
+            for _ in 0..substeps {
+                let result = integrate_vertical_suspension(
+                    use_implicit_integration,
+                    x, v, unsprung_mass, h,
+                    (minimum_compression_metres - tuning.hard_stop_overtravel_m,
+                        maximum_compression_metres + tuning.hard_stop_overtravel_m),
+                    contact,
+                    |compression_metres, velocity_metres_per_second| {
+                        let (spring_force_newtons, damping_force_newtons, damper_compression_metres, invalid_element) =
+                            elem_at(q_of(compression_metres), velocity_metres_per_second);
+                        let (mut stop_force_newtons, invalid_stop) = geometric_stop_force(
+                            geo, wheel, compression_metres, rest_legacy, prepared,
+                            damper_compression_metres, r0, tuning);
+                        if !use_implicit_integration && (invalid_element || invalid_stop) {
+                            stop_force_newtons += if velocity_metres_per_second >= 0.0 {
+                                k_wheel_rest * 0.02
+                            } else {
+                                -k_wheel_rest * 0.02
+                            };
+                        }
+                        let antiroll_force_newtons = geometric_arb_force(
+                            &selected_antiroll_configuration, q_of(compression_metres), q_opp, k_wheel_rest);
+                        spring_force_newtons + damping_force_newtons + antiroll_force_newtons + stop_force_newtons
+                    },
+                );
+                x = result.compression_metres;
+                v = result.velocity_metres_per_second;
+                last_normal_force_newtons = if h > 0.0 {
+                    result.normal_contact_impulse_newton_seconds / h
+                } else { 0.0 };
+                normal_impulse_newton_seconds += result.normal_contact_impulse_newton_seconds;
+                suspension_impulse_newton_seconds += result.suspension_impulse_newton_seconds;
+                travel_limit_impulse_newton_seconds += result.travel_limit_impulse_newton_seconds;
+                let (_, damping_force_newtons, damper_compression_metres, invalid_element) = elem_at(q_of(x), v);
+                state.damper_dissipated_j += (damping_force_newtons * v * h).max(0.0);
+                clamped_tick |= invalid_element || geometric_stop_force(
+                    geo, wheel, x, rest_legacy, prepared, damper_compression_metres, r0, tuning).1;
+            }
+        }
+        let acceleration = (v - previous_velocity_metres_per_second) / dt;
+        if let Some(integration) = coupled_integration {
+            state.normal_force_application_compression_metres = integration.force_application_compression_metres;
+        }
+        let tire_force = last_normal_force_newtons;
+        let tire_deflection = empirical_carcass_deflection(tuning, tire_force);
+        let tire_deflection_velocity = 0.0;
+
+        // Final telemetry evaluation (exact re-solve at settled q; tangent via
+        // tick secant to avoid 4 extra solves per wheel per tick).
+        let q = q_of(x);
+        let (sf, df, s_fin, r_fin, rod_fin, clamped_fin, resid_fin, sol_fin) =
+            if self.backend == SuspensionBackend::Simplified {
+                self.simplified_prepared.as_ref()
+                    .expect("Equivalent suspension parameters must be prepared")
+                    .forces_at(geo, wheel, q, v)
+                    .expect("Equivalent suspension state must be finite")
+            } else {
+                geometric_wheel_forces(geo, wheel, q, v)
+            };
+        let spring_force = sf;
+        let damping_force = df;
+        let stop =
+            geometric_stop_force(geo, wheel, x, rest_legacy, prepared, s_fin, r_fin, tuning);
+        let bottom_force = stop.0;
+        let arb_now = coupled_integration.map(|integration| integration.antiroll_force_newtons)
+            .unwrap_or_else(|| geometric_arb_force(&selected_antiroll_configuration, q, q_opp, k_wheel_rest));
+        let dq = q - q0;
+        let table_motion_ratio_rate = self
+            .simplified_prepared
+            .as_ref()
+            .and_then(|prepared| prepared.motion_ratio_rate_at(wheel, q));
+        let drdq = if self.backend == SuspensionBackend::Simplified {
+            coupled_integration
+                .map(|integration| integration.motion_ratio_rate_per_m)
+                .or(table_motion_ratio_rate)
+                .unwrap_or(0.0)
+                .clamp(-10.0, 10.0)
+        } else if dq.abs() > 1e-9 && r0 > 0.0 && r_fin.is_finite() {
+            ((r_fin - r0) / dq).clamp(-10.0, 10.0)
+        } else {
+            0.0
+        };
+        let total_fin =
+            (axle.spring_free_length_m - axle.spring_installed_length_m) + s_fin;
+        let f_s_fin = if total_fin <= 0.0 {
+            0.0
+        } else {
+            axle.spring_rate_N_per_m * total_fin
+        };
+        let tangent = axle.spring_rate_N_per_m * r_fin * r_fin + f_s_fin * drdq;
+        // SUS-GEO-06/11: linkage pose reuses the exact solve already performed
+        // by `geometric_wheel_forces` at the same q (identical inputs: rack 0,
+        // static alignment 0, side 1.0; only `wheel_basis` depends on side, and
+        // camber/toe/hub are extracted from the side-independent `upright_basis`).
+        let (link_camber, link_toe, hub_lat, hub_long) = match sol_fin.as_ref() {
+            Some(sol) => {
+                let corner = geo.corners.get(wheel);
+                let side = if wheel.is_left() { 1.0 } else { -1.0 };
+                let cl = side * sol.upright_basis.x.y.clamp(-1.0, 1.0).asin();
+                let tl = side * sol.upright_basis.z.x.clamp(-1.0, 1.0).asin();
+                let hl = sol.hub.x - corner.hub_center.x;
+                let hlo = sol.hub.z - corner.hub_center.z;
+                (cl, tl, hl, hlo)
+            }
+            None => (0.0, 0.0, 0.0, 0.0),
+        };
+        let static_toe = if wheel.is_front() {
+            config.suspension.front_toe
+        } else {
+            config.suspension.rear_toe
+        };
+        state.geometric_camber_rad = camber(config, wheel) + link_camber;
+        state.geometric_toe_rad = static_toe + link_toe;
+        state.hub_lateral_m = finite_or_zero(hub_lat);
+        state.hub_long_m = finite_or_zero(hub_long);
+
+        state.previous_compression_mm = previous_compression * 1000.0;
+        state.suspension_compression_m = finite_or_zero(x);
+        state.unsprung_velocity_m_s = finite_or_zero(v);
+        state.unsprung_acceleration_m_s2 = finite_or_zero(acceleration);
+        state.compression_mm = state.suspension_compression_m * 1000.0;
+        state.spring_speed_mm_s = state.unsprung_velocity_m_s * 1000.0;
+        state.spring_current_length = spring_len - state.suspension_compression_m;
+        state.max_spring_length = state.spring_current_length.clamp(0.0, spring_len);
+        state.spring_force = finite_or_zero(spring_force);
+        state.damping_force = finite_or_zero(damping_force);
+        state.antiroll_force = finite_or_zero(arb_now);
+        state.bottom_out_force = finite_or_zero(bottom_force);
+        state.chassis_suspension_force = finite_or_zero(
+            state.spring_force + state.damping_force + state.antiroll_force + state.bottom_out_force,
+        );
+        state.damper_compression_m = finite_or_zero(s_fin);
+        if let Some(integration) = coupled_integration {
+            state.chassis_suspension_force = (integration.suspension_impulse_newton_seconds
+                - integration.travel_limit_impulse_newton_seconds) / dt;
+        }
+        state.damper_velocity_m_s = finite_or_zero(r_fin * v);
+        state.motion_ratio = finite_or_zero(r_fin);
+        state.motion_ratio_rate_per_m = finite_or_zero(drdq);
+        state.tangent_wheel_rate_n_per_m = finite_or_zero(tangent).max(1.0);
+        state.rod_axial_force_n = finite_or_zero(rod_fin);
+        if self.backend == SuspensionBackend::Simplified {
+            state.load_path_element_n = 0.0;
+            state.load_path_wishbone_n = 0.0;
+            state.load_path_other_n = 0.0;
+            state.balance_residual_n = 0.0;
+            state.rod_mismatch_n = 0.0;
+            state.link_singular = false;
+        }
+        state.geometric_clamped = clamped_fin || stop.1 || clamped_tick;
+        state.geometric_max_residual_m = finite_or_zero(resid_fin);
+        // Energy audit: analytic spring storage from total deflection,
+        // dissipated damper energy accumulated (F_d * v >= 0 by construction).
+        let total_def = (axle.spring_free_length_m - axle.spring_installed_length_m) + s_fin;
+        state.spring_energy_j = if total_def > 0.0 {
+            0.5 * axle.spring_rate_N_per_m * total_def * total_def
+        } else {
+            0.0
+        };
+        state.tire_deflection_m = finite_or_zero(tire_deflection);
+        state.tire_deflection_velocity_m_s = finite_or_zero(tire_deflection_velocity);
+        state.tire_vertical_force = finite_or_zero(tire_force).max(0.0);
+        state.normal_impulse_newton_seconds = finite_or_zero(normal_impulse_newton_seconds).max(0.0);
+        state.suspension_impulse_newton_seconds = finite_or_zero(suspension_impulse_newton_seconds);
+        state.travel_limit_impulse_newton_seconds = finite_or_zero(travel_limit_impulse_newton_seconds);
+        if coupled_integration.is_some() {
+            state.normal_impulse_newton_seconds /= state.normal_contact_projection.max(1e-3);
+        }
+        state.total_normal_force = if use_implicit_integration {
+            state.normal_impulse_newton_seconds / dt
+        } else {
+            state.tire_vertical_force
+        };
+        state.is_grounded = state.contact_fraction > 0.0 && state.total_normal_force > if use_implicit_integration { 0.0 } else { 1.0 };
+
+        // Element balance for the host log. The coupled axle solve already published
+        // the contact side (limits, demand, impulses, separation); only the elements
+        // are known here, so the merge is additive and never overwrites them.
+        let index = wheel as usize;
+        let element_balance = (
+            state.suspension_compression_m,
+            state.unsprung_velocity_m_s,
+            state.spring_force,
+            state.damping_force,
+            state.antiroll_force,
+            state.bottom_out_force,
+            state.motion_ratio,
+        );
+        let diagnostic = &mut self.vertical[index];
+        diagnostic.normal_force_n = state.total_normal_force;
+        diagnostic.contact_impulse_ns = state.normal_impulse_newton_seconds;
+        diagnostic.contact_point = state.effective_contact_point;
+        diagnostic.contact_normal = state.effective_normal;
+        diagnostic.ray_hit_mask = (state.ray_grounded[0] as u32) | ((state.ray_grounded[1] as u32) << 1) | ((state.ray_grounded[2] as u32) << 2);
+        diagnostic.compression_m = element_balance.0;
+        diagnostic.axial_velocity_m_s = element_balance.1;
+        diagnostic.spring_force_n = element_balance.2;
+        diagnostic.damper_force_n = element_balance.3;
+        diagnostic.antiroll_force_n = element_balance.4;
+        diagnostic.stop_force_n = element_balance.5;
+        diagnostic.motion_ratio = element_balance.6;
+        // Positive = pushes the wheel down. A negative sum with no ground reaction
+        // means the corner is being lifted, not lowered.
+        diagnostic.element_force_sum_n =
+            element_balance.2 + element_balance.3 + element_balance.4 + element_balance.5;
+    }
+}
+
+/// SUS-GEO-04 helpers: explicit element + virtual work (geometric only).
+
+/// Rest wheel rate k_s * r0^2 at design (q = 0, straight) for the explicit
+/// ARB/stop approximation. Returns 1.0 floor on degenerate solves.
+fn geometric_k_wheel_rest(geo: &GeometricSuspensionConfig, wheel: WheelIndex) -> f64 {
+    let corner = geo.corners.get(wheel);
+    let axle = geo.axle(wheel);
+    match jacobian(corner, 0.0, 0.0, wheel.is_front()) {
+        Some(j) if j.motion_ratio.is_finite() && j.motion_ratio > 0.0 => {
+            (axle.spring_rate_N_per_m * j.motion_ratio * j.motion_ratio).max(1.0)
+        }
+        _ => axle.spring_rate_N_per_m.max(1.0),
+    }
+}
+
+/// (q_min, q_max) reachable travel from design: element droop/bump
+/// intersected with the kinematics branch connected to rest.
+fn geometric_q_limits(geo: &GeometricSuspensionConfig, wheel: WheelIndex) -> (f64, f64) {
+    let corner = geo.corners.get(wheel);
+    let axle = geo.axle(wheel);
+    let (lo, hi) = crate::suspension_kinematics::travel_envelope(
+        corner,
+        axle.wheel_droop_m,
+        axle.wheel_bump_m,
+        0.0,
+        wheel.is_front(),
+    );
+    let lo = lo.max(-axle.wheel_droop_m).min(0.0);
+    let hi = hi.min(axle.wheel_bump_m).max(0.0);
+    (lo, hi)
+}
+
+/// Travel bounds in legacy x units (x = rest_legacy + q) from prepared limits.
+fn geometric_travel_bounds(prepared: PreparedWheelEnvelope, rest_legacy: f64) -> (f64, f64) {
+    (rest_legacy + prepared.q_min, rest_legacy + prepared.q_max)
+}
+
+/// Digressive viscous element with explicit bump/rebound rates (no inferred
+/// critical damping). Mirrors the legacy knee/fast shape.
+fn geometric_damper_element(
+    axle: &crate::suspension_geo_config::AxlePhysicalElements,
+    v_s: f64,
+) -> f64 {
+    if !v_s.is_finite() {
+        return 0.0;
+    }
+    let knee = axle.damper_knee_m_per_s.max(1e-6);
+    let fast = axle.damper_fast_factor.clamp(0.05, 1.0);
+    if v_s >= 0.0 {
+        let c = axle.damper_bump_Ns_per_m.max(0.0);
+        if v_s > knee {
+            (v_s - knee) * c * fast + knee * c
+        } else {
+            v_s * c
+        }
+    } else if v_s < -knee {
+        let c = axle.damper_rebound_Ns_per_m.max(0.0);
+        (v_s + knee) * c * fast - knee * c
+    } else {
+        v_s * axle.damper_rebound_Ns_per_m.max(0.0)
+    }
+}
+
+/// Core SUS-GEO-04 mapping: (F_spring_wheel, F_damper_wheel, s, r, rod, clamped,
+/// resid, solution). The exact `KinematicSolution` is returned so callers can
+/// reuse the same pose (SUS-GEO-11) instead of solving the mechanism again.
+/// Virtual work: F_wheel = F_element * r. Spring cannot pull (unseat at 0).
+/// Wrong-sign (r <= 0), degenerate or clamped solves flag invalid and yield
+/// zero element forces so no grip is fabricated; the caller applies hard
+/// travel stops instead of generic force cuts.
+fn geometric_wheel_forces(
+    geo: &GeometricSuspensionConfig,
+    wheel: WheelIndex,
+    q: f64,
+    v: f64,
+) -> (
+    f64,
+    f64,
+    f64,
+    f64,
+    f64,
+    bool,
+    f64,
+    Option<crate::suspension_kinematics::KinematicSolution>,
+) {
+    let corner = geo.corners.get(wheel);
+    let axle = geo.axle(wheel);
+    let q = if q.is_finite() { q } else { 0.0 };
+    let v = if v.is_finite() { v } else { 0.0 };
+    let sol = match solve_corner(corner, q, 0.0, wheel.is_front(), 0.0, 0.0, 1.0) {
+        Some(s) => s,
+        None => return (0.0, 0.0, 0.0, 0.0, 0.0, true, f64::INFINITY, None),
+    };
+    let jac = match jacobian(corner, q, 0.0, wheel.is_front()) {
+        Some(j) => j,
+        None => {
+            return (
+                0.0,
+                0.0,
+                sol.damper_compression,
+                0.0,
+                0.0,
+                true,
+                sol.residuals.max_link(),
+                Some(sol),
+            )
+        }
+    };
+    let r = jac.motion_ratio;
+    let resid = sol.residuals.max_link().max(sol.residuals.hub_y);
+    let mut clamped = sol.rocker_clamped || sol.steering_clamped || !sol.converged;
+    if !r.is_finite() || r <= 0.0 {
+        // Wrong-sign/degenerate ratio: invalid for forces, do not fabricate.
+        return (
+            0.0,
+            0.0,
+            sol.damper_compression,
+            r,
+            0.0,
+            true,
+            resid,
+            Some(sol),
+        );
+    }
+    let s = sol.damper_compression;
+    // Spring cannot pull: total deflection from free must stay >= 0.
+    let total = (axle.spring_free_length_m - axle.spring_installed_length_m) + s;
+    let f_s = if total <= 0.0 {
+        clamped = true;
+        0.0
+    } else {
+        axle.spring_rate_N_per_m * total
+    };
+    let v_s = r * v;
+    let f_d = geometric_damper_element(axle, v_s);
+    // Rocker moment equilibrium for the rod (tension +).
+    let rod = rod_force_from_solution(corner, &sol, f_s + f_d);
+    let (rod_val, rod_sing) = rod;
+    clamped = clamped || rod_sing;
+    (f_s * r, f_d * r, s, r, rod_val, clamped, resid, Some(sol))
+}
+
+/// Moment equilibrium about the rocker axis. dir_damper points from chassis
+/// to arm (compression pushes arm away); dir_rod points from rocker_end to
+/// outer (tension pulls toward outer). F_rod = -F_elem * Md/Mr.
+fn rod_force_from_solution(
+    corner: &crate::suspension_geo_config::CornerHardpoints,
+    sol: &crate::suspension_kinematics::KinematicSolution,
+    f_elem: f64,
+) -> (f64, bool) {
+    if !f_elem.is_finite() {
+        return (0.0, true);
+    }
+    let axis = corner.rocker_axis;
+    if axis.length_squared() < 1e-12 {
+        return (0.0, true);
+    }
+    let ax = axis.normalized();
+    let dir_d = sol.damper_end - corner.damper_chassis;
+    let dir_r = sol.pushrod_outer - sol.rocker_end;
+    if dir_d.length_squared() < 1e-12 || dir_r.length_squared() < 1e-12 {
+        return (0.0, true);
+    }
+    let md = (sol.damper_end - corner.rocker_pivot)
+        .cross(dir_d.normalized())
+        .dot(ax);
+    let mr = (sol.rocker_end - corner.rocker_pivot)
+        .cross(dir_r.normalized())
+        .dot(ax);
+    if mr.abs() < 1e-9 {
+        return (0.0, true);
+    }
+    (-f_elem * md / mr, false)
+}
+
+/// Explicit ARB (no default spring-ratio fallback).
+fn geometric_arb_force(
+    antiroll_configuration: &AntiRollConfig,
+    q_self: f64,
+    q_opp: f64,
+    k_wheel_rest: f64,
+) -> f64 {
+    if !q_self.is_finite() || !q_opp.is_finite() {
+        return 0.0;
+    }
+    match *antiroll_configuration {
+        AntiRollConfig::LegacyRatio { ratio } => {
+            (q_self - q_opp) * k_wheel_rest * ratio
+        }
+        AntiRollConfig::MotionRatio {
+            bar_rate_N_per_m,
+            motion_ratio,
+        } => (q_self - q_opp) * bar_rate_N_per_m * motion_ratio * motion_ratio,
+    }
+}
+
+/// Physical stops: progressive wheel bump-stop + hard damper-stroke stops +
+/// mechanism-clamped travel stops. Returns (force_wheel, clamped_flag).
+/// The reachable limits come from the prepared per-wheel envelope; this
+/// function never searches the mechanism.
+#[allow(clippy::too_many_arguments)]
+fn geometric_stop_force(
+    geo: &GeometricSuspensionConfig,
+    wheel: WheelIndex,
+    x: f64,
+    rest_legacy: f64,
+    prepared: PreparedWheelEnvelope,
+    s: f64,
+    r: f64,
+    tuning: WheelMechanicalTuning,
+) -> (f64, bool) {
+    let axle = geo.axle(wheel);
+    let x_min = rest_legacy + prepared.q_min;
+    let x_max = rest_legacy + prepared.q_max;
+    let k_rest =
+        (axle.spring_rate_N_per_m * r.max(0.0) * r.max(0.0)).max(1.0);
+    let mult = axle.bump_stop_mult.max(0.0);
+    let mut force = 0.0;
+    let mut clamped = false;
+    // Explicit wheel-space working length when authored; existing profiles keep
+    // their last-18% law. The stop is separate from ride height and wheel stroke.
+    let span = (x_max - x_min).max(1e-4);
+    let working_length = axle.bump_stop_travel_m
+        .unwrap_or(span * (1.0 - tuning.bump_stop_start_ratio.clamp(0.5, 0.98)))
+        .min(span);
+    let bump_start = x_max - working_length;
+    if x > bump_start {
+        let excess = (x - bump_start).max(0.0);
+        let progress = ((x - bump_start) / (x_max - bump_start).max(1e-4)).clamp(0.0, 2.0);
+        force += k_rest * mult * excess * (1.0 + 3.0 * progress * progress);
+    }
+    // Hard wheel travel stops (measurable penetration, then the integrator
+    // clamps position/velocity like legacy).
+    if x > x_max {
+        let over = x - x_max;
+        force += k_rest * mult.max(1.0) * over * (12.0 + 24.0 * (over / tuning.hard_stop_overtravel_m.max(1e-4)));
+        clamped = true;
+    }
+    if x < x_min {
+        let over = x_min - x;
+        force -= k_rest * mult.max(1.0) * over * (12.0 + 24.0 * (over / tuning.hard_stop_overtravel_m.max(1e-4)));
+        clamped = true;
+    }
+    // Damper stroke stops, mapped to wheel via |r| so the sign always opposes
+    // the penetration.
+    let l_rest = axle.spring_installed_length_m;
+    let _ = l_rest;
+    // Reconstruct damper length from s: L = Lrest_kin - s, where Lrest_kin is
+    // the kinematics rest length (not the spring installed length). Use the
+    // axle damper limits directly on L via s limits is geometry-dependent;
+    // approximate with s range from q limits is already covered. Enforce the
+    // explicit damper_min/max by resolving L through the corner when needed
+    // is expensive per substep; instead enforce on s via the q-envelope which
+    // already embeds reachable damper lengths. Direct damper overtravel beyond
+    // the envelope is therefore already flagged via x clamp above.
+    let _ = (s, tuning);
+    (finite_or_zero(force), clamped)
+}
+
+/// Tangent wheel rate + dr/dq for telemetry (extra solves, once per tick).
+/// The hot path uses the cheaper tick secant; this exact central-difference
+/// form is kept for unit validation and SUS-GEO-08 telemetry sweeps.
+#[allow(dead_code)]
+fn geometric_tangent(
+    geo: &GeometricSuspensionConfig,
+    wheel: WheelIndex,
+    q: f64,
+) -> (f64, f64) {
+    let corner = geo.corners.get(wheel);
+    let axle = geo.axle(wheel);
+    let e = 1e-4;
+    let r0 = jacobian(corner, q, 0.0, wheel.is_front())
+        .map(|j| j.motion_ratio)
+        .unwrap_or(0.0);
+    let r_plus = jacobian(corner, q + e, 0.0, wheel.is_front())
+        .map(|j| j.motion_ratio)
+        .unwrap_or(r0);
+    let r_minus = jacobian(corner, q - e, 0.0, wheel.is_front())
+        .map(|j| j.motion_ratio)
+        .unwrap_or(r0);
+    let drdq = if r_plus.is_finite() && r_minus.is_finite() {
+        (r_plus - r_minus) / (2.0 * e)
+    } else {
+        0.0
+    };
+    let s = solve_corner(corner, q, 0.0, wheel.is_front(), 0.0, 0.0, 1.0)
+        .map(|sol| sol.damper_compression)
+        .unwrap_or(0.0);
+    let total = (axle.spring_free_length_m - axle.spring_installed_length_m) + s;
+    let f_s = if total <= 0.0 {
+        0.0
+    } else {
+        axle.spring_rate_N_per_m * total
+    };
+    let tangent = axle.spring_rate_N_per_m * r0 * r0 + f_s * drdq;
+    (tangent, drdq)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn suspension_element_forces(
+    config: &VehicleConfig,
+    wheel: WheelIndex,
+    compression_m: f64,
+    compression_velocity_m_s: f64,
+    spring_k: f64,
+    spring_len: f64,
+    tuning: WheelMechanicalTuning,
+) -> (f64, f64, f64) {
+    let mass = config.chassis.mass_over_wheel(&config.tires, &config.fuel, wheel).max(1.0);
+    let damping_ratio = if wheel.is_front() {
+        config.suspension.front_damping_ratio
+    } else {
+        config.suspension.rear_damping_ratio
+    };
+    let bump_mult = if wheel.is_front() {
+        config.suspension.front_bump_damp_multiplier
+    } else {
+        config.suspension.rear_bump_damp_multiplier
+    };
+    let rebound_mult = if wheel.is_front() {
+        config.suspension.front_rebound_damp_multiplier
+    } else {
+        config.suspension.rear_rebound_damp_multiplier
+    };
+    let bump_stop_mult = if wheel.is_front() {
+        config.suspension.front_bump_stop_multiplier
+    } else {
+        config.suspension.rear_bump_stop_multiplier
+    };
+
+    let spring_force = compression_m.max(0.0) * spring_k;
+
+    let critical_c = 2.0 * (spring_k * mass).sqrt();
+    let base_c = critical_c * damping_ratio;
+    let fast_threshold = 0.127; // m/s
+    let slow_bump = base_c * bump_mult;
+    let fast_bump = slow_bump * 0.5;
+    let slow_rebound = base_c * rebound_mult;
+    let fast_rebound = slow_rebound * 0.5;
+    let damping_force = if compression_velocity_m_s > fast_threshold {
+        (compression_velocity_m_s - fast_threshold) * fast_bump
+            + fast_threshold * slow_bump
+    } else if compression_velocity_m_s >= 0.0 {
+        compression_velocity_m_s * slow_bump
+    } else if compression_velocity_m_s < -fast_threshold {
+        (compression_velocity_m_s + fast_threshold) * fast_rebound
+            - fast_threshold * slow_rebound
+    } else {
+        compression_velocity_m_s * slow_rebound
+    };
+
+    // Progressive bump stop starts before full geometric travel. Unlike the old code,
+    // compression may also exceed spring_len, so true bottom-out penetration is measurable.
+    let bump_start = spring_len * tuning.bump_stop_start_ratio.clamp(0.5, 0.98);
+    let bump_range = (spring_len - bump_start).max(1e-4);
+    let bump_excess = (compression_m - bump_start).max(0.0);
+    let progress = (bump_excess / bump_range).clamp(0.0, 2.0);
+    let soft_stop = spring_k
+        * bump_stop_mult
+        * bump_excess
+        * (1.0 + 3.0 * progress * progress);
+    let hard_overtravel = (compression_m - spring_len).max(0.0);
+    let hard_stop = if hard_overtravel > 0.0 {
+        spring_k * bump_stop_mult * hard_overtravel
+            * (12.0 + 24.0 * (hard_overtravel / tuning.hard_stop_overtravel_m.max(1e-4)))
+    } else {
+        0.0
+    };
+
+    (
+        finite_or_zero(spring_force),
+        finite_or_zero(damping_force),
+        finite_or_zero(soft_stop + hard_stop),
+    )
+}
+
+/// Rigid unilateral ground constraint for the vertical integrator. The tyre carcass
+/// contributes no stiffness and no damping here: pressure, temperature and contact
+/// coverage modifiers only scale the algebraic carcass estimate below.
+fn ground_contact_constraint(
+    config: &VehicleConfig,
+    wheel: WheelIndex,
+    modifiers: TireMechanicalModifiers,
+    state: &WheelSuspensionState,
+    tuning: WheelMechanicalTuning,
+) -> GroundContactConstraint {
+    let _ = (config, wheel, modifiers, tuning);
+    if state.contact_fraction <= 0.0 {
+        return GroundContactConstraint::inactive();
+    }
+    let projection = state.normal_contact_projection.clamp(1e-3, 1.0);
+    GroundContactConstraint {
+        limit_compression_metres: state.normal_road_compression_metres / projection,
+        limit_velocity_metres_per_second: state.normal_road_velocity_metres_per_second / projection,
+        active: true,
+    }
+}
+
+/// Quasi-static carcass deflection used only for contact patch, rolling radius and gas
+/// volume. It never feeds the vertical solver and stores no elastic energy.
+fn empirical_carcass_deflection(tuning: WheelMechanicalTuning, normal_force_newtons: f64) -> f64 {
+    let compliance = if tuning.tire_vertical_stiffness_n_m > 1.0 {
+        1.0 / tuning.tire_vertical_stiffness_n_m
+    } else {
+        0.0
+    };
+    (normal_force_newtons.max(0.0) * compliance).min(tuning.max_tire_deflection_m)
+}
+
+fn spring_length(config: &VehicleConfig, wheel: WheelIndex) -> f64 {
+    if wheel.is_front() {
+        config.suspension.front_spring_length
+    } else {
+        config.suspension.rear_spring_length
+    }
+}
+fn resting_ratio(config: &VehicleConfig, wheel: WheelIndex) -> f64 {
+    if wheel.is_front() {
+        config.suspension.front_resting_ratio
+    } else {
+        config.suspension.rear_resting_ratio
+    }
+}
+fn camber(config: &VehicleConfig, wheel: WheelIndex) -> f64 {
+    if wheel.is_front() {
+        config.suspension.front_camber
+    } else {
+        config.suspension.rear_camber
+    }
+}
+fn camber_gain(config: &VehicleConfig, wheel: WheelIndex) -> f64 {
+    if wheel.is_front() {
+        config.suspension.front_camber_gain_rad_per_m
+    } else {
+        config.suspension.rear_camber_gain_rad_per_m
+    }
+}
+
+/// Static/rest suspension compression (m): spring length x resting ratio.
+/// `suspension_compression_m - rest_compression_m` is the travel delta consumed by
+/// the camber/toe gain terms. Positive delta = bump, negative delta = rebound.
+pub fn rest_compression_m(config: &VehicleConfig, wheel: WheelIndex) -> f64 {
+    spring_length(config, wheel) * resting_ratio(config, wheel)
+}
+
+/// SUS-GEO-06: true when the validated geometric path drives this wheel.
+fn is_geometric(config: &VehicleConfig) -> bool {
+    matches!(
+        config.suspension.suspension_model,
+        crate::suspension_geo_config::SuspensionModelKind::Geometric
+    ) && config.suspension.geometric_suspension.is_some()
+}
+
+fn ray_compression(hit: &RaycastHit, max_ray_length: f64) -> f64 {
+    if hit.is_colliding {
+        (max_ray_length - hit.distance).max(0.0)
+    } else {
+        0.0
+    }
+}
+
+/// Distance the rays still had to travel beyond their own length to reach ground.
+///
+/// Positive = no ground was found within the ray (the corner is above everything the
+/// proximity query can see); negative = ground was found that far inside the ray.
+/// This is what tells "the wheel has not arrived yet" apart from "the wheel is
+/// already past the plane".
+fn ray_shortfall(sample: &TriRaycastSample, max_ray_length: f64) -> f64 {
+    let hits = [&sample.inner, &sample.center, &sample.outer];
+    if hits.iter().any(|hit| hit.is_colliding) {
+        return hits
+            .iter()
+            .filter(|hit| hit.is_colliding)
+            .map(|hit| hit.distance - max_ray_length)
+            .fold(f64::NEG_INFINITY, f64::max);
+    }
+    hits.iter()
+        .map(|hit| {
+            if hit.distance.is_finite() {
+                hit.distance - max_ray_length
+            } else {
+                f64::INFINITY
+            }
+        })
+        .fold(f64::INFINITY, f64::min)
+}
+
+fn tricast_contact_fraction(sample: &TriRaycastSample) -> f64 {
+    let mut weights = 0.0;
+    if sample.inner.is_colliding {
+        weights += 1.0;
+    }
+    if sample.center.is_colliding {
+        weights += 2.0;
+    }
+    if sample.outer.is_colliding {
+        weights += 1.0;
+    }
+    weights / 4.0
+}
+
+fn weighted_point(sample: &TriRaycastSample) -> Vec3 {
+    let mut sum = Vec3::ZERO;
+    let mut weights = 0.0;
+    add_point(&mut sum, &mut weights, &sample.inner, 1.0);
+    add_point(&mut sum, &mut weights, &sample.center, 2.0);
+    add_point(&mut sum, &mut weights, &sample.outer, 1.0);
+    if weights > 0.0 {
+        sum / weights
+    } else {
+        Vec3::ZERO
+    }
+}
+
+fn add_point(sum: &mut Vec3, weights: &mut f64, hit: &RaycastHit, weight: f64) {
+    if hit.is_colliding {
+        *sum += hit.point * weight;
+        *weights += weight;
+    }
+}
+
+fn dominant_surface(sample: &TriRaycastSample) -> SurfaceType {
+    if sample.center.is_colliding {
+        sample.center.surface
+    } else if sample.inner.is_colliding && sample.outer.is_colliding {
+        if sample.inner.distance <= sample.outer.distance {
+            sample.inner.surface
+        } else {
+            sample.outer.surface
+        }
+    } else if sample.inner.is_colliding {
+        sample.inner.surface
+    } else {
+        sample.outer.surface
+    }
+}
+
+fn blended_surface(
+    sample: &TriRaycastSample,
+    map: &std::collections::HashMap<SurfaceType, f64>,
+    fallback: f64,
+) -> f64 {
+    let mut sum = 0.0;
+    let mut weights = 0.0;
+    if sample.inner.is_colliding {
+        sum += surface_value(map, sample.inner.surface, fallback);
+        weights += 1.0;
+    }
+    if sample.center.is_colliding {
+        sum += 2.0 * surface_value(map, sample.center.surface, fallback);
+        weights += 2.0;
+    }
+    if sample.outer.is_colliding {
+        sum += surface_value(map, sample.outer.surface, fallback);
+        weights += 1.0;
+    }
+    if weights > 0.0 {
+        sum / weights
+    } else {
+        fallback
+    }
+}
+
+fn surface_value(
+    map: &std::collections::HashMap<SurfaceType, f64>,
+    surface: SurfaceType,
+    fallback: f64,
+) -> f64 {
+    *map.get(&surface).unwrap_or(&fallback)
+}
+
+fn finite_or_zero(v: f64) -> f64 {
+    if v.is_finite() { v } else { 0.0 }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn flat_hit(distance: f64) -> RaycastHit {
+        RaycastHit {
+            is_colliding: true,
+            distance,
+            point: Vec3::ZERO,
+            normal: Vec3::UP,
+            surface: SurfaceType::Road,
+        }
+    }
+
+    #[test]
+    fn arb_loads_more_compressed_wheel_and_is_axle_neutral() {
+        let mut cfg = VehicleConfig::f1_94_canonical();
+        cfg.suspension.front_arb_ratio = 0.20;
+        let mut sus = SuspensionSystem::new(&cfg);
+        sus.wheels[WheelIndex::FrontLeft as usize].suspension_compression_m = 0.050;
+        sus.wheels[WheelIndex::FrontRight as usize].suspension_compression_m = 0.090;
+        sus.solve_force(&cfg, WheelIndex::FrontRight, TireMechanicalModifiers::identity(), 0.050, 1.0 / 120.0, false);
+        sus.solve_force(&cfg, WheelIndex::FrontLeft, TireMechanicalModifiers::identity(), 0.090, 1.0 / 120.0, false);
+        let right = sus.wheels[WheelIndex::FrontRight as usize].antiroll_force;
+        let left = sus.wheels[WheelIndex::FrontLeft as usize].antiroll_force;
+        assert!(right > 0.0, "outer/more-compressed wheel must gain ARB load: {right}");
+        assert!(left < 0.0, "inner/less-compressed wheel must lose ARB load: {left}");
+        assert!((right + left).abs() < 1e-6);
+    }
+
+    #[test]
+    fn bump_stop_activates_before_and_beyond_full_travel() {
+        let cfg = VehicleConfig::f1_94_canonical();
+        let wheel = WheelIndex::FrontLeft;
+        let spring_len = cfg.suspension.front_spring_length;
+        let k = cfg.suspension.calculate_spring_rate(&cfg.chassis, &cfg.tires, &cfg.fuel, wheel);
+        let tuning = WheelMechanicalTuning::for_wheel(&cfg, wheel);
+        let (_, _, before) = suspension_element_forces(
+            &cfg, wheel, spring_len * 0.70, 0.0, k, spring_len, tuning,
+        );
+        let (_, _, near) = suspension_element_forces(
+            &cfg, wheel, spring_len * 0.95, 0.0, k, spring_len, tuning,
+        );
+        let (_, _, over) = suspension_element_forces(
+            &cfg, wheel, spring_len + 0.010, 0.0, k, spring_len, tuning,
+        );
+        assert_eq!(before, 0.0);
+        assert!(near > 0.0);
+        assert!(over > near);
+    }
+
+    #[test]
+    fn surface_filter_ramps_and_respects_zero_tau() {
+        let mut cfg = VehicleConfig::f1_94_canonical();
+        let wheel = WheelIndex::FrontLeft;
+
+        // tau = 0.0 is an exact pass-through.
+        cfg.tires.surface_transition_tau_s = 0.0;
+        let mut pass = WheelSuspensionState::new(&cfg, wheel);
+        filter_surface_values(&cfg, &mut pass, 0.5, 2.0, 2.0, 1.0 / 120.0);
+        assert_eq!(pass.effective_friction, 0.5);
+        assert_eq!(pass.effective_stiffness, 2.0);
+        assert_eq!(pass.effective_rolling_resistance, 2.0);
+
+        // A positive tau eases from the current values toward the raw sample.
+        cfg.tires.surface_transition_tau_s = 0.08;
+        let mut filtered = WheelSuspensionState::new(&cfg, wheel);
+        let start = filtered.effective_friction;
+        assert!(start > 0.5, "test assumes the road value is above grass");
+        filter_surface_values(&cfg, &mut filtered, 0.5, 2.0, 2.0, 1.0 / 120.0);
+        assert!(filtered.effective_friction < start);
+        assert!(
+            filtered.effective_friction > 0.5,
+            "one tick must not jump to the raw value: {}",
+            filtered.effective_friction
+        );
+        for _ in 0..60 {
+            filter_surface_values(&cfg, &mut filtered, 0.5, 2.0, 2.0, 1.0 / 120.0);
+        }
+        assert!((filtered.effective_friction - 0.5).abs() < 0.02);
+    }
+
+    #[test]
+    fn tricast_retains_partial_contact_fraction() {
+        let sample = TriRaycastSample {
+            inner: RaycastHit::default(),
+            center: flat_hit(0.4),
+            outer: flat_hit(0.4),
+        };
+        assert!((tricast_contact_fraction(&sample) - 0.75).abs() < 1e-9);
+    }
+
+    #[test]
+    fn static_equilibrium_matches_wheel_load_and_rest_travel() {
+        let cfg = VehicleConfig::f1_94_canonical();
+        let mut suspension = SuspensionSystem::new(&cfg);
+        let dt = 1.0 / 120.0;
+        // Model the settled body: rays sit at nominal rest distance minus the static
+        // carcass deflection (the body settles ~8 mm lower because the tire squashes).
+        let static_deflection = static_wheel_load(&cfg, WheelIndex::FrontLeft)
+            / WheelMechanicalTuning::for_wheel(&cfg, WheelIndex::FrontLeft)
+                .tire_vertical_stiffness_n_m;
+        let rest_fl = cfg.suspension.front_spring_length * (1.0 - cfg.suspension.front_resting_ratio)
+            + cfg.tires.front_tire_radius
+            - static_deflection;
+        let rest_rl = cfg.suspension.rear_spring_length * (1.0 - cfg.suspension.rear_resting_ratio)
+            + cfg.tires.rear_tire_radius
+            - static_deflection;
+        let samples = [
+            TriRaycastSample { inner: flat_hit(rest_fl), center: flat_hit(rest_fl), outer: flat_hit(rest_fl) },
+            TriRaycastSample { inner: flat_hit(rest_fl), center: flat_hit(rest_fl), outer: flat_hit(rest_fl) },
+            TriRaycastSample { inner: flat_hit(rest_rl), center: flat_hit(rest_rl), outer: flat_hit(rest_rl) },
+            TriRaycastSample { inner: flat_hit(rest_rl), center: flat_hit(rest_rl), outer: flat_hit(rest_rl) },
+        ];
+        for _ in 0..240 {
+            suspension.step(&cfg, &samples, dt);
+        }
+        for wheel in WheelIndex::ALL {
+            let s = &suspension.wheels[wheel as usize];
+            let static_load = static_wheel_load(&cfg, wheel);
+            assert!(
+                (s.total_normal_force - static_load).abs() < static_load * 0.02,
+                "wheel {:?} Fz {} must approach static load {}",
+                wheel, s.total_normal_force, static_load
+            );
+            // Suspension settles at rest travel; the carcass absorbs the static deflection.
+            let rest_travel = if wheel.is_front() { cfg.suspension.front_spring_length * cfg.suspension.front_resting_ratio } else { cfg.suspension.rear_spring_length * cfg.suspension.rear_resting_ratio };
+            assert!(
+                (s.compression_mm - rest_travel * 1000.0).abs() < 2.0,
+                "wheel {:?} compression {}mm must approach rest travel {}mm",
+                wheel, s.compression_mm, rest_travel * 1000.0
+            );
+            assert!(
+                s.tire_deflection_m > 0.004 && s.tire_deflection_m < 0.020,
+                "wheel {:?} tire deflection {}m must be in the compliant carcass range",
+                wheel, s.tire_deflection_m
+            );
+        }
+    }
+
+    #[test]
+    fn curb_strike_deflects_tire_before_suspension_compresses() {
+        let cfg = VehicleConfig::f1_94_canonical();
+        let mut suspension = SuspensionSystem::new(&cfg);
+        let dt = 1.0 / 120.0;
+        let rest_fl = cfg.suspension.front_spring_length * (1.0 - cfg.suspension.front_resting_ratio) + cfg.tires.front_tire_radius;
+        let rest_rl = cfg.suspension.rear_spring_length * (1.0 - cfg.suspension.rear_resting_ratio) + cfg.tires.rear_tire_radius;
+        let flat = [
+            TriRaycastSample { inner: flat_hit(rest_fl), center: flat_hit(rest_fl), outer: flat_hit(rest_fl) },
+            TriRaycastSample { inner: flat_hit(rest_fl), center: flat_hit(rest_fl), outer: flat_hit(rest_fl) },
+            TriRaycastSample { inner: flat_hit(rest_rl), center: flat_hit(rest_rl), outer: flat_hit(rest_rl) },
+            TriRaycastSample { inner: flat_hit(rest_rl), center: flat_hit(rest_rl), outer: flat_hit(rest_rl) },
+        ];
+        for _ in 0..120 {
+            suspension.step(&cfg, &flat, dt);
+        }
+        let comp_before = suspension.wheels[0].compression_mm;
+        let deflection_before = suspension.wheels[0].tire_deflection_m;
+
+        // 40 mm curb under the front-left wheel.
+        let mut bump = flat.clone();
+        bump[0].inner.distance -= 0.040;
+        bump[0].center.distance -= 0.040;
+        bump[0].outer.distance -= 0.040;
+        suspension.step(&cfg, &bump, dt);
+
+        let s = &suspension.wheels[0];
+        let d_deflection = s.tire_deflection_m - deflection_before;
+        let d_compression = (s.compression_mm - comp_before) * 0.001;
+        // The carcass must absorb the first tick of the strike: deflection leads,
+        // and suspension compression must not jump the full 40 mm in one tick.
+        assert!(d_deflection > 0.0, "tire deflection must grow on first curb tick");
+        assert!(
+            d_compression < 0.040 * 0.5,
+            "suspension must lag the curb strike on the first tick, compression delta {}m",
+            d_compression
+        );
+        assert!(s.total_normal_force > static_wheel_load(&cfg, WheelIndex::FrontLeft));
+    }
+
+    #[test]
+    fn camber_gain_zero_preserves_legacy_static_camber() {
+        let cfg = VehicleConfig::f1_94_canonical();
+        let mut sus = SuspensionSystem::new(&cfg);
+        let wheel = WheelIndex::FrontLeft;
+        let max_len = cfg.suspension.front_spring_length + cfg.tires.front_tire_radius;
+        let rest = rest_compression_m(&cfg, wheel);
+        let dt = 1.0 / 120.0;
+        let sample = TriRaycastSample {
+            inner: flat_hit(max_len - rest),
+            center: flat_hit(max_len - rest),
+            outer: flat_hit(max_len - rest),
+        };
+        // First call performs the one-shot snapshot initialization; afterwards the
+        // state compression feeds the travel delta directly.
+        sus.sample_contact(&cfg, wheel, &sample, dt, Mat3::IDENTITY);
+        sus.wheels[wheel as usize].suspension_compression_m = rest;
+        sus.sample_contact(&cfg, wheel, &sample, dt, Mat3::IDENTITY);
+        let s = &sus.wheels[wheel as usize];
+        assert!(
+            (s.kinematic_camber_rad - cfg.suspension.front_camber).abs() < 1e-12,
+            "kinematic camber at rest must equal static camber, got {}",
+            s.kinematic_camber_rad
+        );
+        assert!((s.effective_contact_camber_rad - cfg.suspension.front_camber).abs() < 1e-12);
+        assert!((s.dynamic_camber - cfg.suspension.front_camber).abs() < 1e-12);
+    }
+
+    #[test]
+    fn camber_gain_bump_rebound_direction_and_flat_mirror_symmetry() {
+        let mut cfg = VehicleConfig::f1_94_canonical();
+        cfg.suspension.front_camber_gain_rad_per_m = -0.021;
+        cfg.suspension.rear_camber_gain_rad_per_m = 0.0;
+        let mut sus = SuspensionSystem::new(&cfg);
+        let dt = 1.0 / 120.0;
+        let max_len = cfg.suspension.front_spring_length + cfg.tires.front_tire_radius;
+        let rest = rest_compression_m(&cfg, WheelIndex::FrontLeft);
+        let sample_at =
+            |x: f64| TriRaycastSample {
+                inner: flat_hit(max_len - x),
+                center: flat_hit(max_len - x),
+                outer: flat_hit(max_len - x),
+            };
+        // Initialize both wheels with a rest-time contact snapshot, then drive the
+        // state compression directly so the travel delta is exact.
+        for wheel in [WheelIndex::FrontLeft, WheelIndex::FrontRight] {
+            sus.sample_contact(&cfg, wheel, &sample_at(rest), dt, Mat3::IDENTITY);
+        }
+
+        // Bump: +20 mm travel => camber shifts by gain * travel (negative direction).
+        let bump = rest + 0.020;
+        sus.wheels[WheelIndex::FrontLeft as usize].suspension_compression_m = bump;
+        sus.wheels[WheelIndex::FrontRight as usize].suspension_compression_m = bump;
+        sus.sample_contact(&cfg, WheelIndex::FrontLeft, &sample_at(bump), dt, Mat3::IDENTITY);
+        sus.sample_contact(&cfg, WheelIndex::FrontRight, &sample_at(bump), dt, Mat3::IDENTITY);
+        let fl = &sus.wheels[WheelIndex::FrontLeft as usize];
+        let fr = &sus.wheels[WheelIndex::FrontRight as usize];
+        let expected = cfg.suspension.front_camber + (-0.021 * 0.020);
+        assert!(
+            (fl.kinematic_camber_rad - expected).abs() < 1e-9,
+            "bump must shift kinematic camber by gain*travel, got {} expected {}",
+            fl.kinematic_camber_rad,
+            expected
+        );
+        assert!(
+            (fr.kinematic_camber_rad - fl.kinematic_camber_rad).abs() < 1e-12,
+            "flat road must keep left/right kinematic camber symmetric"
+        );
+
+        // Rebound: -10 mm travel shifts opposite direction; mirror symmetry holds.
+        let rebound = rest - 0.010;
+        sus.wheels[WheelIndex::FrontLeft as usize].suspension_compression_m = rebound;
+        sus.wheels[WheelIndex::FrontRight as usize].suspension_compression_m = rebound;
+        sus.sample_contact(&cfg, WheelIndex::FrontLeft, &sample_at(rebound), dt, Mat3::IDENTITY);
+        sus.sample_contact(&cfg, WheelIndex::FrontRight, &sample_at(rebound), dt, Mat3::IDENTITY);
+        let rl = &sus.wheels[WheelIndex::FrontLeft as usize];
+        let rr = &sus.wheels[WheelIndex::FrontRight as usize];
+        let expected_rebound = cfg.suspension.front_camber + (-0.021 * -0.010);
+        assert!(
+            (rl.kinematic_camber_rad - expected_rebound).abs() < 1e-9,
+            "rebound must shift camber opposite to bump, got {}",
+            rl.kinematic_camber_rad
+        );
+        assert!((rl.dynamic_camber - rr.dynamic_camber).abs() < 1e-12);
+    }
+
+    #[test]
+    fn banked_road_splits_kinematic_camber_from_effective_contact_camber() {
+        let cfg = VehicleConfig::f1_94_canonical();
+        let mut sus = SuspensionSystem::new(&cfg);
+        let dt = 1.0 / 120.0;
+        let max_len = cfg.suspension.front_spring_length + cfg.tires.front_tire_radius;
+        let rest = rest_compression_m(&cfg, WheelIndex::FrontLeft);
+        let span = cfg.tires.front_tire_width * cfg.suspension.tri_ray_spacing_ratio * 2.0;
+        // Inner ray 10 mm closer than the outer: a road-plane incline of atan(0.010/span).
+        let sample = TriRaycastSample {
+            inner: flat_hit(max_len - rest - 0.010),
+            center: flat_hit(max_len - rest),
+            outer: flat_hit(max_len - rest),
+        };
+        sus.sample_contact(&cfg, WheelIndex::FrontLeft, &sample, dt, Mat3::IDENTITY);
+        let fl = &sus.wheels[WheelIndex::FrontLeft as usize];
+        assert!(
+            (fl.kinematic_camber_rad - cfg.suspension.front_camber).abs() < 1e-12,
+            "kinematic camber must ignore the road plane"
+        );
+        let incline = (0.010_f64 / span).atan();
+        let expected_effective = cfg.suspension.front_camber - incline;
+        assert!(
+            (fl.effective_contact_camber_rad - expected_effective).abs() < 1e-9,
+            "effective camber must combine kinematic camber with the road incline"
+        );
+        assert!((fl.dynamic_camber - expected_effective).abs() < 1e-9);
+        let fl_kinematic = fl.kinematic_camber_rad;
+        let fl_dynamic = fl.dynamic_camber;
+
+        // Same geometric relationship on the right wheel mirrors the incline sign,
+        // keeping the axle symmetric across identical (mirrored) road shapes.
+        sus.sample_contact(&cfg, WheelIndex::FrontRight, &sample, dt, Mat3::IDENTITY);
+        let fr = &sus.wheels[WheelIndex::FrontRight as usize];
+        let expected_right = cfg.suspension.front_camber + incline;
+        assert!(
+            (fr.effective_contact_camber_rad - expected_right).abs() < 1e-9,
+            "right wheel must mirror the incline, got {}",
+            fr.effective_contact_camber_rad
+        );
+        assert!((fl_kinematic - fr.kinematic_camber_rad).abs() < 1e-12);
+        assert!(
+            (fl_dynamic + fr.dynamic_camber - 2.0 * cfg.suspension.front_camber).abs() < 1e-9,
+            "symmetric banked samples must keep the axle camber neutral"
+        );
+    }
+
+    #[test]
+    fn curb_strike_camber_stays_continuous() {
+        let mut cfg = VehicleConfig::f1_94_canonical();
+        cfg.suspension.front_camber_gain_rad_per_m = -0.021;
+        cfg.suspension.rear_camber_gain_rad_per_m = -0.015;
+        let mut suspension = SuspensionSystem::new(&cfg);
+        let dt = 1.0 / 120.0;
+        let rest_fl =
+            cfg.suspension.front_spring_length * (1.0 - cfg.suspension.front_resting_ratio) + cfg.tires.front_tire_radius;
+        let rest_rl =
+            cfg.suspension.rear_spring_length * (1.0 - cfg.suspension.rear_resting_ratio) + cfg.tires.rear_tire_radius;
+        let flat = [
+            TriRaycastSample { inner: flat_hit(rest_fl), center: flat_hit(rest_fl), outer: flat_hit(rest_fl) },
+            TriRaycastSample { inner: flat_hit(rest_fl), center: flat_hit(rest_fl), outer: flat_hit(rest_fl) },
+            TriRaycastSample { inner: flat_hit(rest_rl), center: flat_hit(rest_rl), outer: flat_hit(rest_rl) },
+            TriRaycastSample { inner: flat_hit(rest_rl), center: flat_hit(rest_rl), outer: flat_hit(rest_rl) },
+        ];
+        for _ in 0..120 {
+            suspension.step(&cfg, &flat, dt);
+        }
+        let static_camber = suspension.wheels[0].dynamic_camber;
+
+        // 40 mm curb under the front-left wheel.
+        let mut bump = flat.clone();
+        bump[0].inner.distance -= 0.040;
+        bump[0].center.distance -= 0.040;
+        bump[0].outer.distance -= 0.040;
+        for _ in 0..60 {
+            suspension.step(&cfg, &bump, dt);
+            let s = &suspension.wheels[0];
+            assert!(
+                (s.dynamic_camber - static_camber).abs() < 0.03,
+                "camber must not jump on a curb strike, delta {}",
+                s.dynamic_camber - static_camber
+            );
+            assert!(
+                (s.dynamic_camber - s.effective_contact_camber_rad).abs() < 1e-12,
+                "effective contact camber must stay in sync with the tire feed"
+            );
+        }
+        assert!(
+            suspension.wheels[0].kinematic_camber_rad < cfg.suspension.front_camber,
+            "negative gain on a bump must shift camber toward negative"
+        );
+    }
+
+    // --- SUS-GEO-11: prepared envelopes, invalidation and pose reuse ---
+
+    fn f1_2030_geometric_config() -> VehicleConfig {
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../data/vehicles/f1_2030/f1_2030_v10_geometric.json");
+        VehicleConfig::from_json_str(&std::fs::read_to_string(path).unwrap()).unwrap()
+    }
+
+    /// Settled-flat samples at the static stance (same helper shape used by the
+    /// integration suite) so the geometric path is exercised with valid contact.
+    fn settled_flat_samples(cfg: &VehicleConfig) -> [TriRaycastSample; 4] {
+        let stat = |wheel: WheelIndex| {
+            static_wheel_load(cfg, wheel)
+                / WheelMechanicalTuning::for_wheel(cfg, wheel).tire_vertical_stiffness_n_m
+        };
+        let mk = |d: f64| TriRaycastSample {
+            inner: flat_hit(d),
+            center: flat_hit(d),
+            outer: flat_hit(d),
+        };
+        let rest_f = cfg.suspension.front_spring_length * (1.0 - cfg.suspension.front_resting_ratio)
+            + cfg.tires.front_tire_radius
+            - stat(WheelIndex::FrontLeft);
+        let rest_r = cfg.suspension.rear_spring_length * (1.0 - cfg.suspension.rear_resting_ratio)
+            + cfg.tires.rear_tire_radius
+            - stat(WheelIndex::RearLeft);
+        [mk(rest_f), mk(rest_f), mk(rest_r), mk(rest_r)]
+    }
+
+    fn direct_q_limits(geo: &GeometricSuspensionConfig, wheel: WheelIndex) -> (f64, f64) {
+        let axle = geo.axle(wheel);
+        let (lo, hi) = crate::suspension_kinematics::travel_envelope(
+            geo.corners.get(wheel),
+            axle.wheel_droop_m,
+            axle.wheel_bump_m,
+            0.0,
+            wheel.is_front(),
+        );
+        (
+            lo.max(-axle.wheel_droop_m).min(0.0),
+            hi.min(axle.wheel_bump_m).max(0.0),
+        )
+    }
+
+    #[test]
+    fn prepared_envelopes_match_direct_search_and_hot_flow_does_not_search() {
+        use crate::suspension_kinematics::counters;
+
+        let cfg = f1_2030_geometric_config();
+        let geo = cfg.suspension.geometric_suspension.as_ref().unwrap();
+
+        counters::reset();
+        let mut sus = SuspensionSystem::new(&cfg);
+        assert_eq!(
+            counters::travel_envelope_calls(),
+            WheelIndex::ALL.len() as u64,
+            "preparation must search each wheel envelope exactly once"
+        );
+
+        let prepared = sus.prepared_geometric().expect("prepared data");
+        for wheel in WheelIndex::ALL {
+            let p = prepared.for_wheel(wheel);
+            let (lo, hi) = direct_q_limits(geo, wheel);
+            assert_eq!(
+                p.q_min.to_bits(),
+                lo.to_bits(),
+                "{wheel:?} prepared q_min must match the direct search exactly"
+            );
+            assert_eq!(
+                p.q_max.to_bits(),
+                hi.to_bits(),
+                "{wheel:?} prepared q_max must match the direct search exactly"
+            );
+            let j = jacobian(geo.corners.get(wheel), 0.0, 0.0, wheel.is_front()).unwrap();
+            let expected_k =
+                (geo.axle(wheel).spring_rate_N_per_m * j.motion_ratio * j.motion_ratio).max(1.0);
+            assert_eq!(
+                p.k_wheel_rest_n_per_m.to_bits(),
+                expected_k.to_bits(),
+                "{wheel:?} prepared k_wheel_rest must match the rest Jacobian exactly"
+            );
+        }
+
+        // Stable geometric stepping must not touch the envelope search again.
+        let samples = settled_flat_samples(&cfg);
+        counters::reset();
+        for _ in 0..60 {
+            sus.step(&cfg, &samples, 1.0 / 120.0);
+        }
+        assert_eq!(
+            counters::travel_envelope_calls(),
+            0,
+            "stable per-substep flow must not search the mechanical envelope"
+        );
+        assert_eq!(
+            counters::solve_corner_calls(),
+            60 * 24,
+            "stable geometric tick must use 6 exact solves per wheel (24 per tick)"
+        );
+    }
+
+    #[test]
+    fn prepared_rebuilds_when_geometry_inputs_change() {
+        let mut cfg = f1_2030_geometric_config();
+        let before = SuspensionSystem::new(&cfg)
+            .prepared_geometric()
+            .unwrap()
+            .for_wheel(WheelIndex::FrontLeft);
+
+        // Halve the front bump travel: the prepared envelope must follow the
+        // new configuration, not the cached original.
+        cfg.suspension.geometric_suspension.as_mut().unwrap().front.wheel_bump_m *= 0.5;
+        let after = SuspensionSystem::new(&cfg)
+            .prepared_geometric()
+            .unwrap()
+            .for_wheel(WheelIndex::FrontLeft);
+        let geo = cfg.suspension.geometric_suspension.as_ref().unwrap();
+        let (lo, hi) = direct_q_limits(geo, WheelIndex::FrontLeft);
+        assert_eq!(after.q_min.to_bits(), lo.to_bits());
+        assert_eq!(after.q_max.to_bits(), hi.to_bits());
+        assert!(
+            after.q_max < before.q_max,
+            "changing bump travel must change the prepared limit"
+        );
+
+        // Explicit invalidation hook rebuilds from the current configuration.
+        let mut sus = SuspensionSystem::new(&f1_2030_geometric_config());
+        sus.rebuild_geometric_prepared(&cfg);
+        let rebuilt = sus
+            .prepared_geometric()
+            .unwrap()
+            .for_wheel(WheelIndex::FrontLeft);
+        assert_eq!(rebuilt.q_max.to_bits(), after.q_max.to_bits());
+    }
+
+    #[test]
+    fn legacy_profile_carries_no_prepared_geometry() {
+        use crate::suspension_kinematics::counters;
+
+        let cfg = VehicleConfig::f1_94_canonical();
+        let mut sus = SuspensionSystem::new(&cfg);
+        assert!(sus.prepared_geometric().is_none());
+
+        let samples = settled_flat_samples(&cfg);
+        counters::reset();
+        for _ in 0..10 {
+            sus.step(&cfg, &samples, 1.0 / 120.0);
+        }
+        assert_eq!(counters::travel_envelope_calls(), 0);
+    }
+
+    #[test]
+    fn geometric_pose_matches_explicit_solve_after_step() {
+        let cfg = f1_2030_geometric_config();
+        let mut sus = SuspensionSystem::new(&cfg);
+        let samples = settled_flat_samples(&cfg);
+        let dt = 1.0 / 120.0;
+        for _ in 0..40 {
+            sus.step(&cfg, &samples, dt);
+        }
+        let geo = cfg.suspension.geometric_suspension.as_ref().unwrap();
+        for wheel in WheelIndex::ALL {
+            let st = &sus.wheels[wheel as usize];
+            let q = st.suspension_compression_m - rest_compression_m(&cfg, wheel);
+            let corner = geo.corners.get(wheel);
+            let sol = solve_corner(corner, q, 0.0, wheel.is_front(), 0.0, 0.0, 1.0).unwrap();
+            let side = if wheel.is_left() { 1.0 } else { -1.0 };
+            let cl = side * sol.upright_basis.x.y.clamp(-1.0, 1.0).asin();
+            let tl = side * sol.upright_basis.z.x.clamp(-1.0, 1.0).asin();
+            let expected_camber = camber(&cfg, wheel) + cl;
+            let expected_toe = if wheel.is_front() {
+                cfg.suspension.front_toe
+            } else {
+                cfg.suspension.rear_toe
+            } + tl;
+            assert!(
+                (st.geometric_camber_rad - expected_camber).abs() < 1e-12,
+                "{wheel:?} reused pose camber must match the explicit solve"
+            );
+            assert!(
+                (st.geometric_toe_rad - expected_toe).abs() < 1e-12,
+                "{wheel:?} reused pose toe must match the explicit solve"
+            );
+            assert!(
+                (st.hub_lateral_m - finite_or_zero(sol.hub.x - corner.hub_center.x)).abs() < 1e-12
+            );
+            assert!(
+                (st.hub_long_m - finite_or_zero(sol.hub.z - corner.hub_center.z)).abs() < 1e-12
+            );
+        }
+    }
+}

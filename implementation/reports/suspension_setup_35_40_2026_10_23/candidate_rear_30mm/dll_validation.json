@@ -1,0 +1,29 @@
+{
+  "passed": true,
+  "candidate": "D:\\open-formula\\rust\\target\\release\\vehicle_physics_engine.dll",
+  "sha256": "de2792eef66f9b1a6504105a9458a0604872667bd67d6b74e1c3fd7f174aa4a7",
+  "abi_version": 7,
+  "abi_signature": "0xa91cdeba9d3fe775",
+  "accepted_steps": 2000,
+  "ride_height_m": [
+    0.03501417390890281,
+    0.03999325132332546
+  ],
+  "normal_loads_n": [
+    1335.8412423043696,
+    1335.8412554950405,
+    1667.9083865862476,
+    1667.908399859596
+  ],
+  "stop_forces_n": [
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "floor_impulse_ns": [
+    0.0,
+    0.0
+  ],
+  "source_profile_sha256": "675dc9e7b60633995b1332e1b4dc491ad04ad060a47658da75e7b8c8d67fca77"
+}

@@ -1,0 +1,16 @@
+    Blocking waiting for file lock on artifact directory
+   Compiling vehicle_physics_engine v0.1.0 (D:\open-formula\rust\vehicle-physics-engine)
+    Finished `release` profile [optimized] target(s) in 2m 02s
+     Running tests\vertical_telemetry.rs (rust\target\release\deps\vertical_telemetry-44c140fd619458a6.exe)
+
+running 7 tests
+test vertical_diagnostics::regression_tests::seeing_ground_does_not_mean_support ... ok
+test vertical_diagnostics::tests::failure_labels_are_stable ... ok
+test vertical_diagnostics::tests::csv_header_matches_row_field_count ... ok
+test vertical_diagnostics::regression_tests::loss_of_support_triggers_even_when_all_rays_see_ground ... ok
+test vertical_diagnostics::tests::ring_keeps_the_newest_capacity ... ok
+test vertical_diagnostics::regression_tests::overflow_is_counted ... ok
+test exhausted_body_iterations_keep_candidate_without_test_solver_overrides ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+

@@ -1,0 +1,52 @@
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+SLOW_STATE_BACKEND_READY backend=simplified tires_hertz=20 brakes_hertz=10 powertrain_hertz=10
+SUSPENSION_BACKEND_READY backend=simplified contact_rays=12 prepared=true
+implementation\reports\garage_setups\garage_ui_bench.cpp: In function 'bool SaveEditorSetup(bool)':
+implementation\reports\garage_setups\garage_ui_bench.cpp:649:69: warning: ignoring return value of 'const _CharT* std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::c_str() const [with _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]', declared with attribute 'nodiscard' [-Wunused-result]
+  649 |     GfLogInfo("Formula setup saved: %s fields=%u\n", setupFile.c_str(), (unsigned)setup.values.size());
+      |                                                      ~~~~~~~~~~~~~~~^~
+In file included from C:/Users/bill/open-formula-build-tools/msys64/ucrt64/include/c++/16.2.0/string:58,
+                 from C:/Users/bill/open-formula-build-tools/msys64/ucrt64/include/c++/16.2.0/bits/locale_classes.h:43,
+                 from C:/Users/bill/open-formula-build-tools/msys64/ucrt64/include/c++/16.2.0/bits/ios_base.h:43,
+                 from C:/Users/bill/open-formula-build-tools/msys64/ucrt64/include/c++/16.2.0/ios:46,
+                 from C:/Users/bill/open-formula-build-tools/msys64/ucrt64/include/c++/16.2.0/bits/ostream.h:43,
+                 from C:/Users/bill/open-formula-build-tools/msys64/ucrt64/include/c++/16.2.0/ostream:42,
+                 from C:/Users/bill/open-formula-build-tools/msys64/ucrt64/include/osg/Notify:20,
+                 from C:/Users/bill/open-formula-build-tools/msys64/ucrt64/include/osg/Object:20,
+                 from C:/Users/bill/open-formula-build-tools/msys64/ucrt64/include/osg/Node:18,
+                 from C:/Users/bill/open-formula-build-tools/msys64/ucrt64/include/osg/Group:17,
+                 from D:\open-formula\src\modules\graphic\osggraph\Car/OsgGaragePreview.h:4,
+                 from implementation\reports\garage_setups\garage_ui_bench.cpp:3:
+C:/Users/bill/open-formula-build-tools/msys64/ucrt64/include/c++/16.2.0/bits/basic_string.h:2897:7: note: declared here
+ 2897 |       c_str() const _GLIBCXX_NOEXCEPT
+      |       ^~~~~
+implementation\reports\garage_setups\garage_ui_bench.cpp: In function 'void ExecuteSetupAction(const std::string&, const std::string&)':
+implementation\reports\garage_setups\garage_ui_bench.cpp:672:74: warning: ignoring return value of 'const _CharT* std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::c_str() const [with _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]', declared with attribute 'nodiscard' [-Wunused-result]
+  672 |     GfLogInfo("Formula setup loaded in editor: %s fields=%u\n",file.c_str(),(unsigned)loaded.values.size());
+      |                                                                ~~~~~~~~~~^~
+C:/Users/bill/open-formula-build-tools/msys64/ucrt64/include/c++/16.2.0/bits/basic_string.h:2897:7: note: declared here
+ 2897 |       c_str() const _GLIBCXX_NOEXCEPT
+      |       ^~~~~
+D:\open-formula\src\modules\userinterface\legacymenu\racescreens\formula_garage_music.cpp: In member function 'bool FormulaGarageMusic::start(const std::string&, float)':
+D:\open-formula\src\modules\userinterface\legacymenu\racescreens\formula_garage_music.cpp:27:76: warning: ignoring return value of 'const _CharT* std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::c_str() const [with _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]', declared with attribute 'nodiscard' [-Wunused-result]
+   27 |             GfLogWarning("Garage music: cannot decode %s: %s\n", path.c_str(), Mix_GetError());
+      |                                                                  ~~~~~~~~~~^~
+In file included from C:/Users/bill/open-formula-build-tools/msys64/ucrt64/include/c++/16.2.0/string:58,
+                 from D:\open-formula\src\modules\userinterface\legacymenu\racescreens\formula_garage_music.h:5,
+                 from D:\open-formula\src\modules\userinterface\legacymenu\racescreens\formula_garage_music.cpp:1:
+C:/Users/bill/open-formula-build-tools/msys64/ucrt64/include/c++/16.2.0/bits/basic_string.h:2897:7: note: declared here
+ 2897 |       c_str() const _GLIBCXX_NOEXCEPT
+      |       ^~~~~
+D:\open-formula\src\modules\userinterface\legacymenu\racescreens\formula_garage_music.cpp:30:76: warning: ignoring return value of 'const _CharT* std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::c_str() const [with _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]', declared with attribute 'nodiscard' [-Wunused-result]
+   30 |         GfLogInfo("Garage music: loaded %s, decoded %u bytes\n", path.c_str(), track->alen);
+      |                                                                  ~~~~~~~~~~^~
+C:/Users/bill/open-formula-build-tools/msys64/ucrt64/include/c++/16.2.0/bits/basic_string.h:2897:7: note: declared here
+ 2897 |       c_str() const _GLIBCXX_NOEXCEPT
+      |       ^~~~~
+preview triangles=91155 dimensions=4.4443,1.9891,1.1793 m
+tab=0 controls=106
+tab=1 controls=58
+tab=2 controls=50
+tab=3 controls=12
+tab=4 controls=7
+checks=9263 failures=0

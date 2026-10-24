@@ -1,0 +1,265 @@
+[0/1] Re-running CMake...
+-- CMAKE_VERSION=4.4.4
+-- Build configuration : Release
+fatal: not a git repository (or any of the parent directories): .git
+-- Data directory: D:/open-formula/speed-dreams-data/data (in-tree)
+-- SOLID not found. Using in-tree submodule.
+-- Looking for library plib/ul - found
+-- Looking for library plib/js - found
+-- Looking for library plib/sg - found
+-- Looking for library plib/sl - found
+-- Looking for library plib/ssg - found
+-- Looking for library plib/ssgaux - found
+-- Looking for library OpenAL - found
+-- Looking for library Ogg - found
+-- Looking for library Vorbis - found
+-- Looking for library VorbisFile - found
+-- Looking for library ENet - found
+-- Found OpenGL: opengl32 (Required is at least version "2.1.0")
+-- Looking for library OpenGL - found
+-- Looking for library OpenGL/GLU - found
+-- Looking for library Zlib - found
+-- Looking for library PNG - found
+-- Looking for library JPEG - found
+-- Looking for library SDL2 - found
+-- Looking for library SDL2_mixer - found
+-- Found Brotli (via pkg-config): C:/Users/bill/open-formula-build-tools/msys64/ucrt64/include (found version "1.2.0")
+-- Found Libidn2 (via pkg-config): C:/Users/bill/open-formula-build-tools/msys64/ucrt64/include (found version "2.3.8")
+-- Found Libpsl (via pkg-config): C:/Users/bill/open-formula-build-tools/msys64/ucrt64/include (found version "0.21.5")
+-- Found Libssh2 (via pkg-config): C:/Users/bill/open-formula-build-tools/msys64/ucrt64/include (found version "1.11.1")
+-- Found NGHTTP2 (via pkg-config): C:/Users/bill/open-formula-build-tools/msys64/ucrt64/include (found version "1.70.0")
+-- Found NGHTTP3 (via pkg-config): C:/Users/bill/open-formula-build-tools/msys64/ucrt64/include (found version "1.18.0")
+-- Found NGTCP2 (via pkg-config): C:/Users/bill/open-formula-build-tools/msys64/ucrt64/include (found version "1.25.0")
+-- Found Zstd (via pkg-config): C:/Users/bill/open-formula-build-tools/msys64/ucrt64/include (found version "1.5.7")
+-- Looking for library CURL - found
+-- Looking for library OpenScenGraph - found
+-- Looking for library Expat - found
+-- Looking for library GLM - found
+-- Could NOT find TinyGLTF (missing: TINYGLTF_LIBRARY TINYGLTF_INCLUDE_DIR) 
+-- Looking for library TinyGLTF - NOT found
+-- Looking for library cJSON - found
+-- Looking for library minizip - found
+fatal: not a git repository (or any of the parent directories): .git
+-- SDL2_MIXER_INCLUDE_DIR = 'C:/Users/bill/open-formula-build-tools/msys64/ucrt64/include/SDL2'
+-- SDL2_MIXER_LIBRARY = 'C:/Users/bill/open-formula-build-tools/msys64/ucrt64/lib/libSDL2_mixer.dll.a'
+-- Found OpenGL: opengl32
+-- SDL2_MIXER_INCLUDE_DIR = 'C:/Users/bill/open-formula-build-tools/msys64/ucrt64/include/SDL2'
+-- SDL2_MIXER_LIBRARY = 'C:/Users/bill/open-formula-build-tools/msys64/ucrt64/lib/libSDL2_mixer.dll.a'
+CMake Warning (policy) at CMakeLists.txt:298 (add_custom_command):
+  Exactly one of PRE_BUILD, PRE_LINK, or POST_BUILD must be given.  Assuming
+  POST_BUILD to preserve backward compatibility.
+
+  Policy CMP0175 is not set: add_custom_command() rejects invalid arguments.
+  Run "cmake --help-policy CMP0175" for policy details.  Use the cmake_policy
+  command to set the policy and suppress this warning.
+Call Stack (most recent call first):
+  CMakeLists.txt:305 (copy_dll)
+This warning is for project developers.  Use -Wno-author or -Wno-policy to
+suppress it.
+
+CMake Warning (policy) at CMakeLists.txt:298 (add_custom_command):
+  Exactly one of PRE_BUILD, PRE_LINK, or POST_BUILD must be given.  Assuming
+  POST_BUILD to preserve backward compatibility.
+
+  Policy CMP0175 is not set: add_custom_command() rejects invalid arguments.
+  Run "cmake --help-policy CMP0175" for policy details.  Use the cmake_policy
+  command to set the policy and suppress this warning.
+Call Stack (most recent call first):
+  CMakeLists.txt:306 (copy_dll)
+This warning is for project developers.  Use -Wno-author or -Wno-policy to
+suppress it.
+
+CMake Warning (policy) at CMakeLists.txt:298 (add_custom_command):
+  Exactly one of PRE_BUILD, PRE_LINK, or POST_BUILD must be given.  Assuming
+  POST_BUILD to preserve backward compatibility.
+
+  Policy CMP0175 is not set: add_custom_command() rejects invalid arguments.
+  Run "cmake --help-policy CMP0175" for policy details.  Use the cmake_policy
+  command to set the policy and suppress this warning.
+Call Stack (most recent call first):
+  CMakeLists.txt:307 (copy_dll)
+This warning is for project developers.  Use -Wno-author or -Wno-policy to
+suppress it.
+
+CMake Warning (policy) at packaging/CMakeLists.txt:115 (ADD_CUSTOM_COMMAND):
+  Exactly one of PRE_BUILD, PRE_LINK, or POST_BUILD must be given.  Assuming
+  POST_BUILD to preserve backward compatibility.
+
+  Policy CMP0175 is not set: add_custom_command() rejects invalid arguments.
+  Run "cmake --help-policy CMP0175" for policy details.  Use the cmake_policy
+  command to set the policy and suppress this warning.
+This warning is for project developers.  Use -Wno-author or -Wno-policy to
+suppress it.
+
+-- Configuring done (3.2s)
+-- Generating done (1.4s)
+-- Build files have been written to: C:/Users/bill/open-formula-build/engine
+[1/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/mainscreens/exitmenu.cpp.obj
+[2/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/mainscreens/mainmenu.cpp.obj
+[3/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/confscreens/playerconfig.cpp.obj
+D:/open-formula/src/modules/userinterface/legacymenu/confscreens/playerconfig.cpp: In function 'void UpdtScrollList()':
+D:/open-formula/src/modules/userinterface/legacymenu/confscreens/playerconfig.cpp:453:91: warning: cast to pointer from integer of different size [-Wint-to-pointer-cast]
+  453 |         GfuiScrollListInsertElement(ScrHandle, ScrollList, PlayersInfo[i]->dispName(), i, (void*)(long)i);
+      |                                                                                           ^~~~~~~~~~~~~~
+[4/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/confscreens/controlconfig.cpp.obj
+[5/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/confscreens/displayconfig.cpp.obj
+[6/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/confscreens/openglconfig.cpp.obj
+[7/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/confscreens/monitorconfig.cpp.obj
+[8/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/confscreens/simuconfig.cpp.obj
+[9/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/confscreens/soundconfig.cpp.obj
+[10/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/confscreens/hostsettingsmenu.cpp.obj
+[11/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/confscreens/forcefeedbackconfig.cpp.obj
+[12/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/confscreens/languageconfig.cpp.obj
+[13/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/racescreens/raceselectmenu.cpp.obj
+[14/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/racescreens/racemanmenu.cpp.obj
+[15/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/racescreens/fileselect.cpp.obj
+[16/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/racescreens/raceconfigstate.cpp.obj
+[17/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/racescreens/trackselect.cpp.obj
+[18/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/racescreens/driverselect.cpp.obj
+[19/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/racescreens/raceparamsmenu.cpp.obj
+[20/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/racescreens/raceloadingmenu.cpp.obj
+[21/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/racescreens/racerunningmenus.cpp.obj
+D:/open-formula/src/modules/userinterface/legacymenu/racescreens/racerunningmenus.cpp: In function 'void rmRedisplay()':
+D:/open-formula/src/modules/userinterface/legacymenu/racescreens/racerunningmenus.cpp:286:5: warning: this 'if' clause does not guard... [-Wmisleading-indentation]
+  286 |     if (FormulaGarageCheckArrival())
+      |     ^~
+D:/open-formula/src/modules/userinterface/legacymenu/racescreens/racerunningmenus.cpp:289:9: note: ...this statement, but the latter is misleadingly indented as if it were guarded by the 'if'
+  289 |         const bool bPitRequested = RmCheckPitRequest();
+      |         ^~~~~
+D:/open-formula/src/modules/userinterface/legacymenu/racescreens/racerunningmenus.cpp: At global scope:
+D:/open-formula/src/modules/userinterface/legacymenu/racescreens/racerunningmenus.cpp:468:1: warning: 'void rmToggleSound(void*)' defined but not used [-Wunused-function]
+  468 | rmToggleSound(void * /* dummy */)
+      | ^~~~~~~~~~~~~
+[22/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/racescreens/raceoptimizationmenu.cpp.obj
+[23/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/racescreens/racestopmenu.cpp.obj
+[24/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/racescreens/racestartmenu.cpp.obj
+[25/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/racescreens/racepitmenu.cpp.obj
+[26/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/racescreens/raceresultsmenus.cpp.obj
+[27/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/racescreens/racenexteventmenu.cpp.obj
+[28/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/racescreens/csnetclientsettings.cpp.obj
+[29/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/racescreens/csnetworkingmenu.cpp.obj
+D:/open-formula/src/modules/userinterface/legacymenu/racescreens/csnetworkingmenu.cpp: In function 'void NetworkRaceInfo()':
+D:/open-formula/src/modules/userinterface/legacymenu/racescreens/csnetworkingmenu.cpp:600:26: warning: unused variable 'pRaceMan' [-Wunused-variable]
+  600 |     const GfRaceManager* pRaceMan = pRace->getManager();
+      |                          ^~~~~~~~
+D:/open-formula/src/modules/userinterface/legacymenu/racescreens/csnetworkingmenu.cpp: At global scope:
+D:/open-formula/src/modules/userinterface/legacymenu/racescreens/csnetworkingmenu.cpp:1072:1: warning: 'void LookupPlayerSetup(std::string&, std::string&)' defined but not used [-Wunused-function]
+ 1072 | LookupPlayerSetup(std::string & strDriver,std::string & strCar)
+      | ^~~~~~~~~~~~~~~~~
+D:/open-formula/src/modules/userinterface/legacymenu/racescreens/csnetworkingmenu.cpp:1061:1: warning: 'void ChangeIP(void*)' defined but not used [-Wunused-function]
+ 1061 | ChangeIP(void * /* dummy */)
+      | ^~~~~~~~
+D:/open-formula/src/modules/userinterface/legacymenu/racescreens/csnetworkingmenu.cpp:1051:1: warning: 'void ChangeName(void*)' defined but not used [-Wunused-function]
+ 1051 | ChangeName(void * /*dummy*/)
+      | ^~~~~~~~~~
+D:/open-formula/src/modules/userinterface/legacymenu/racescreens/csnetworkingmenu.cpp:956:1: warning: 'void ShowWaitingToConnectScreen()' defined but not used [-Wunused-function]
+  956 | ShowWaitingToConnectScreen()
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~
+D:/open-formula/src/modules/userinterface/legacymenu/racescreens/csnetworkingmenu.cpp:115:13: warning: 'void onHostPlayerReady(tCheckBoxInfo*)' defined but not used [-Wunused-function]
+  115 | static void onHostPlayerReady(tCheckBoxInfo* pInfo)
+      |             ^~~~~~~~~~~~~~~~~
+[30/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/racescreens/csnetserversettings.cpp.obj
+[31/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/racescreens/formula_garage_menu.cpp.obj
+[32/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/legacymenu.cpp.obj
+[33/38] Building CXX object src/modules/userinterface/legacymenu/CMakeFiles/legacymenu.dir/racescreens/formula_setup_store.cpp.obj
+[34/38] Linking CXX shared module lib\games\speed-dreams-2\modules\userinterface\legacymenu.dll
+[35/38] Checking and building Rust physics dependencies with Cargo
+   Compiling vehicle_audio_engine v0.1.0 (D:\open-formula\rust\vehicle-audio-engine)
+warning: unused imports: `ModularVoiceConfig` and `Waveform`
+  --> vehicle-audio-engine\src\synth\mod.rs:13:35
+   |
+13 |     LimiterConfig, ModularConfig, ModularVoiceConfig, QualityProfile, RaspConfig, TcConfig,
+   |                                   ^^^^^^^^^^^^^^^^^^
+14 |     Waveform,
+   |     ^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: type `CDiagnostics` is more private than the item `DspRuntime::diagnostics`
+   --> vehicle-audio-engine\src\dsp_runtime.rs:397:5
+    |
+397 |     pub(crate) fn diagnostics(&self) -> CDiagnostics {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method `DspRuntime::diagnostics` is reachable at visibility `pub(crate)`
+    |
+note: but type `CDiagnostics` is only usable at visibility `pub(self)`
+   --> vehicle-audio-engine\src\dsp_runtime.rs:114:1
+    |
+114 | struct CDiagnostics {
+    | ^^^^^^^^^^^^^^^^^^^
+    = note: `#[warn(private_interfaces)]` on by default
+
+warning: fields `layer_keys`, `layer_cursors`, `exhaust_key`, and `exhaust_cursor` are never read
+   --> vehicle-audio-engine\src\mixer.rs:438:5
+    |
+435 | pub struct VehicleAudioEngine {
+    |            ------------------ fields in this struct
+...
+438 |     layer_keys: Vec<String>,
+    |     ^^^^^^^^^^
+439 |     layer_cursors: Vec<f64>,
+    |     ^^^^^^^^^^^^^
+...
+518 |     exhaust_key: String,
+    |     ^^^^^^^^^^^
+519 |     exhaust_cursor: f64,
+    |     ^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `vehicle_audio_engine` (lib) generated 3 warnings (run `cargo fix --lib -p vehicle_audio_engine` to apply 1 suggestion)
+   Compiling open_formula_audio v0.1.0 (D:\open-formula\rust\open-formula-audio)
+warning: unused variable: `k`
+   --> vehicle-audio-engine\src\bin\va_probe.rs:172:13
+    |
+172 |         for k in 0..3 {
+    |             ^ help: if this is intentional, prefix it with an underscore: `_k`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `k`
+   --> vehicle-audio-engine\src\bin\va_probe.rs:251:13
+    |
+251 |         for k in 0..3 {
+    |             ^ help: if this is intentional, prefix it with an underscore: `_k`
+
+warning: unused variable: `k`
+   --> vehicle-audio-engine\src\bin\va_probe.rs:268:13
+    |
+268 |         for k in 0..3 {
+    |             ^ help: if this is intentional, prefix it with an underscore: `_k`
+
+warning: unused variable: `k`
+   --> vehicle-audio-engine\src\bin\va_probe.rs:303:13
+    |
+303 |         for k in 0..3 {
+    |             ^ help: if this is intentional, prefix it with an underscore: `_k`
+
+warning: unused variable: `k`
+   --> vehicle-audio-engine\src\bin\va_probe.rs:332:13
+    |
+332 |         for k in 0..3 {
+    |             ^ help: if this is intentional, prefix it with an underscore: `_k`
+
+warning: fields `assets_root`, `commons_dir`, `v10_dir`, and `create_error` are never read
+   --> open-formula-audio\src\lib.rs:194:5
+    |
+192 | pub struct OfpAudioHandle {
+    |            -------------- fields in this struct
+193 |     engine: VehicleAudioEngine,
+194 |     assets_root: PathBuf,
+    |     ^^^^^^^^^^^
+195 |     commons_dir: PathBuf,
+    |     ^^^^^^^^^^^
+196 |     v10_dir: PathBuf,
+    |     ^^^^^^^
+...
+201 |     create_error: String,
+    |     ^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `open_formula_audio` (lib) generated 1 warning
+warning: `vehicle_audio_engine` (bin "va_probe") generated 5 warnings (run `cargo fix --bin "va_probe" -p vehicle_audio_engine` to apply 5 suggestions)
+    Finished `release` profile [optimized] target(s) in 56.94s
+[36/38] Building CXX object src/modules/simu/rustphysics/CMakeFiles/rustphysics.dir/rustphysics.cpp.obj
+[37/38] Linking CXX shared module lib\games\speed-dreams-2\modules\simu\rustphysics.dll

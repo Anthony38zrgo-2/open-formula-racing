@@ -1,0 +1,10 @@
+SUSPENSION_BACKEND_READY backend=simplified contact_rays=12 prepared=true
+ENVELOPE FrontLeft q_min=-0.085 q_max=0.025 k_reference=103040.42247332628
+ENVELOPE FrontRight q_min=-0.085 q_max=0.025 k_reference=103040.42247332628
+ENVELOPE RearLeft q_min=-0.09 q_max=0.03 k_reference=19601.889886816527
+ENVELOPE RearRight q_min=-0.09 q_max=0.03 k_reference=19601.889886816527
+SUSPENSION_BACKEND_READY backend=simplified contact_rays=12 prepared=true
+SUSPENSION_BACKEND_READY backend=simplified contact_rays=12 prepared=true
+SUSPENSION_BACKEND_READY backend=simplified contact_rays=12 prepared=true
+SUSPENSION_BACKEND_READY backend=simplified contact_rays=12 prepared=true
+SUSPENSION_BACKEND_READY backend=simplified contact_rays=12 prepared=true

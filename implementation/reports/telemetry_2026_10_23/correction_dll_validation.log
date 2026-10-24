@@ -1,0 +1,64 @@
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+SLOW_STATE_BACKEND_READY backend=simplified tires_hertz=20 brakes_hertz=10 powertrain_hertz=10
+SUSPENSION_BACKEND_READY backend=simplified contact_rays=12 prepared=true
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+SLOW_STATE_BACKEND_READY backend=simplified tires_hertz=20 brakes_hertz=10 powertrain_hertz=10
+SUSPENSION_BACKEND_READY backend=simplified contact_rays=12 prepared=true
+MECHANICAL_STEP_REJECTED time=0 reason=Ground constraint is incompatible with suspension bump limit
+RUSTTRACE reason=rejection trigger_t=0.000 wheel=2 code=1 rows=2 csv=D:\open-formula\implementation\reports\telemetry_2026_10_23\telemetry_validation\trace\rustphysics_rejection_w2_t0000.000.csv
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+SLOW_STATE_BACKEND_READY backend=simplified tires_hertz=20 brakes_hertz=10 powertrain_hertz=10
+SUSPENSION_BACKEND_READY backend=simplified contact_rays=12 prepared=true
+RUSTTRACE reason=contact_loss trigger_t=0.254 wheel=0 rows=8927 csv=D:\open-formula\implementation\reports\telemetry_2026_10_23\telemetry_validation\trace\rustphysics_contact_loss_w0_t0000.254.csv
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+SLOW_STATE_BACKEND_READY backend=simplified tires_hertz=20 brakes_hertz=10 powertrain_hertz=10
+SUSPENSION_BACKEND_READY backend=simplified contact_rays=12 prepared=true
+PASS  library ABI version is 7  [reports 7]
+PASS  host-computed layout signature matches the library  [host=0xa91cdeba9d3fe775 library=0xa91cdeba9d3fe775]
+PASS  OfpSnapshot is 3480 bytes  [3480 bytes]
+PASS  OfpWheelDiagnostics is 264 bytes and anchor_position at 184  [264 bytes, offset 184]
+PASS  Melbourne ground mesh loads  [16601 triangles]
+PASS  trace ring configures into a directory
+PASS  vehicle handle created
+PASS  240 accepted steps (two seconds of settling)  [480 accepted]
+PASS  snapshot reads back
+PASS  every corner reports a ground plane on flat ground  [4/4 corners grounded]
+PASS  every corner reports finite compression and a finite gap  [+0.0000, +0.0000, +0.0000, +0.0000]
+PASS  grounded corners sit within a millimetre of the plane  [+0.00mm, +0.00mm, +0.00mm, +0.00mm]
+PASS  compression limits bracket the current compression  [[-0.020,0.150], [-0.020,0.150], [-0.011,0.169], [-0.011,0.169]]
+PASS  each corner reports spring, damper, anti-roll and stop forces
+PASS  the element sum is the signed sum of the four elements
+PASS  each corner reports a positive motion ratio  [0.499, 0.499, 0.547, 0.548]
+PASS  each corner reports anchor position, velocity and acceleration
+PASS  the static normal load is shared by the four corners  [total impulse 25.0311 N s]
+PASS  both axles report a converged solve  [iters=0 resid=0.00e+00, iters=1 resid=0.00e+00]
+PASS  both axles report anti-roll stiffness and load  [k_arb=103040N/m, k_arb=15682N/m]
+PASS  chassis angular acceleration is published
+PASS  no failure is published while the car is settled
+PASS  the trace ring is filling  [11880 records buffered]
+PASS  the trace dump contains every record  [11880 rows, 11880 written]
+PASS  the trace has per-corner columns for all four wheels  [164 columns]
+PASS  the trace keeps accepted ticks and body/corner iterations  [kinds present: ['1', '2', '3']]
+PASS  the effective setup report lists the editable fields  [38 FIELD lines]
+PASS  each field line carries value, unit and admitted limits
+PASS  the derived block states the solver coefficients  [8 DERIVED lines]
+PASS  an impossible ground demand is rejected  [start offset -0.12 m]
+PASS  the rejection is flagged on the published state
+PASS  the rejection names a concrete corner and axle  [wheel=2 axle=1]
+PASS  the incompatible ground/bump limit is reported numerically  [code=1 demand=0.1804 limit=0.1694 excess=0.0110]
+PASS  the rejection counter advances instead of staying at zero  [rejected=1]
+PASS  the published state stays frozen at the last accepted step  [state_time=0.000000]
+PASS  the rejection dump keeps the rejected candidate row  [kinds present: ['4', '5']]
+PASS  the rejected candidate row names the axle and the wheel  [axle=1 wheel=2]
+PASS  airborne handle created
+PASS  a sustained loss of contact writes its own window  [1 window(s) in trace/]
+PASS  the contact-loss window carries records from before the event  [rows=8927 from -2.746 s to trigger 0.254 s]
+PASS  the contact-loss window records corners with no ground contact  [1719 airborne corner rows]
+PASS  CSV normal force is contact impulse over interval, not element sum
+PASS  CSV separately persists element sum and ray geometry
+PASS  trace contains actual axle intervals
+PASS  rejection includes restored accepted state
+PASS  airborne wheel with visible ground reports positive separation
+PASS  host subdivision uses real dt rather than host dt
+
+47 passed, 0 failed

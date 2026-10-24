@@ -1,7 +1,7 @@
 //! Physical acceptance gates for the Williams 35/40-mm suspension candidate.
 use std::{path::PathBuf, sync::OnceLock};
 use vehicle_physics_engine::{
-    open_formula::{set_track_ground_mesh, OpenFormulaSimulation},
+    open_formula::{install_track_ground_mesh, OpenFormulaSimulation},
     open_formula_ffi::OfpControlInput,
     simulation::default_spawn_height,
     suspension::{rest_compression_m, SuspensionSystem},
@@ -22,7 +22,9 @@ fn plane() {
     INIT.get_or_init(|| {
         let p: PathBuf = std::env::temp_dir().join(format!("ofp-35-40-plane-{}.txt", std::process::id()));
         std::fs::write(&p, "FORMULA_GROUND_1 2\n1.0 0.001 -1000 -1000 0 1000 -1000 0 1000 1000 0\n1.0 0.001 -1000 -1000 0 1000 1000 0 -1000 1000 0\n").unwrap();
-        assert_eq!(set_track_ground_mesh(p.to_str().unwrap()).unwrap(), 2);
+        let (identity, _generation) =
+            install_track_ground_mesh(p.to_str().unwrap(), Some("acceptance-plane"), Some(1)).unwrap();
+        assert_eq!(identity.triangle_count, 2);
     });
 }
 

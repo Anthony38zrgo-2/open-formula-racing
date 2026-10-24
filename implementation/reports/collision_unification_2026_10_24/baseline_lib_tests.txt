@@ -1,0 +1,430 @@
+﻿cargo :    Compiling vehicle_physics_engine v0.1.0 (D:\ofp-baseline\rust\vehicle-physics-engine)
+En línea: 2 Carácter: 1
++ cargo test -p vehicle_physics_engine --lib 2>&1 | Out-File -Encoding  ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (   Compiling ve...physics-engine):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+warning: variable `gR` should have a snake case name
+    --> vehicle-physics-engine\src\simulation.rs:2042:13
+     |
+2042 |         let gR = step_to_gear(&mut sim, -1, 2000);
+     |             ^^ help: convert the identifier to snake case: `g_r`
+     |
+     = note: `#[warn(non_snake_case)]` (part of `#[warn(nonstandard_style)]`) on by default
+
+warning: `vehicle_physics_engine` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 18.60s
+     Running unittests src\lib.rs (target\debug\deps\vehicle_physics_engine-bd92e885f94c808c.exe)
+
+running 176 tests
+test aero::tests::floor_chokes_near_ground ... ok
+test aero::tests::polar_interpolates_and_clamps ... ok
+test brake_thermals::tests::compact_axle_resolves_lumped_rotor_from_physical_inputs ... ok
+test brake_thermals::tests::closed_duct_has_no_dynamic_cooling_conductance ... ok
+test brake_thermals::tests::brake_power_matches_actual_torque_times_omega ... ok
+test brake_thermals::tests::compact_axle_has_no_speed_cooling_at_standstill ... ok
+test aero::tests::underfloor_map_axes_require_2_to_16_increasing_positive_heights ... ok
+test brake_thermals::tests::duct_drag_scales_with_speed_squared ... ok
+test brake_thermals::tests::duct_opening_controls_shared_flow_and_drag ... ok
+test brake_thermals::tests::dynamic_cooling_is_limited_by_air_capacity_rate ... ok
+test brake_thermals::tests::fade_reduces_efficiency_after_critical_temperature ... ok
+test aero::tests::f1_2030_wheel_drag_reference_matches_profile_geometry ... FAILED
+test brake_thermals::tests::reference_speed_changes_diagnostic_ratio_not_physical_cooling ... ok
+test brake_thermals::tests::hard_braking_heats_rotor_before_rim ... ok
+test brake_thermals::tests::rotor_before_rim_lag_is_preserved_after_short_burst ... ok
+test brake_thermals::tests::rim_heat_enters_tire_carcass_and_gas_nodes ... ok
+test brake_thermals::tests::zero_torque_generates_no_brake_power ... ok
+test brake_thermals::tests::rotor_cooling_fraction_splits_duct_airflow ... ok
+test brake_thermals::tests::single_stop_energy_is_conserved_through_rotor_and_rim ... ok
+test aero::tests::era_limiter_never_exceeds_hard_cap ... ok
+test ffi::layout_tests::ffi_telemetry_output_layout_locked ... ok
+test aero::tests::localized_bottoming_collapses_floor_before_wings ... ok
+test calibration::tests::lateral_slope_is_positive_near_zero ... ok
+test calibration::tests::steady_slips_match_requested_targets ... ok
+test open_formula::audio_presentation_tests::abi_is_v6_and_specs_carry_audio_references ... FAILED
+test aero::tests::wheel_drag_is_independent_and_preserves_reference_total ... ok
+test coupled_vehicle_dynamics::projected_travel_localization_tests::projecting_one_wheel_localizes_a_second_wheel_crossing ... ok
+test powertrain::engine_torque_attack_tests::attack_rate_caps_torque_rise_on_first_tick ... ok
+test ffi::layout_tests::ffi_reset_preserves_runtime_aids_mask ... ok
+test calibration::tests::steady_lateral_force_is_antisymmetric ... ok
+test powertrain::engine_torque_attack_tests::limiter_reports_positive_torque_removed_at_the_integration_ceiling ... ok
+test powertrain::engine_torque_attack_tests::wheels_backdriving_the_engine_at_the_ceiling_do_not_report_combustion_cuts ... ok
+test powertrain::engine_torque_attack_tests::zero_rate_preserves_legacy_instant_delivery ... ok
+test powertrain::tc_tests::applied_torque_matches_reported_cut ... ok
+test powertrain::tc_tests::fourth_to_fifth_respects_the_lower_fifth_gear_cap ... ok
+test powertrain::tc_tests::tc_remains_eligible_but_mild_in_fifth_and_sixth ... ok
+test powertrain::engine_torque_attack_tests::attack_rate_ramps_toward_target_then_release_is_instant ... ok
+test simulation::authored_startup_tests::williams_steering_stays_monotonic_and_faces_forward ... FAILED
+test simulation::authored_startup_tests::authored_spawn_places_all_williams_tires_on_ground ... FAILED
+test simulation::tests::stability_yaw_torque_engages_when_reference_is_unreachable ... ok
+test powertrain::tc_tests::tc_authority_falls_monotonically_through_sixth ... ok
+test simulation::tests::stability_yaw_torque_ignores_straight_line_command ... ok
+test simulation::tests::stability_yaw_torque_leaves_yaw_inside_bounded_reference_alone ... ok
+test suspension::simplified_axle_integration::telemetry_gap_tests::airborne_is_positive_and_penetration_negative ... ok
+test simulation::tests::stability_yaw_torque_only_corrects_excess ... ok
+test suspension::simplified_axle_integration::tests::ground_reaction_closes_momentum_on_a_rigid_contact ... ok
+test suspension::tests::arb_loads_more_compressed_wheel_and_is_axle_neutral ... ok
+test suspension::simplified_suspension::tests::equivalent_travel_table_interpolates_between_valid_samples ... FAILED
+test suspension::simplified_suspension::tests::equivalent_vertical_steps_never_solve_mechanical_geometry ... FAILED
+test suspension::tests::banked_road_splits_kinematic_camber_from_effective_contact_camber ... ok
+test suspension::tests::bump_stop_activates_before_and_beyond_full_travel ... ok
+test suspension::tests::camber_gain_bump_rebound_direction_and_flat_mirror_symmetry ... ok
+test suspension::tests::camber_gain_zero_preserves_legacy_static_camber ... ok
+test suspension::tests::prepared_envelopes_match_direct_search_and_hot_flow_does_not_search ... FAILED
+test suspension::tests::geometric_pose_matches_explicit_solve_after_step ... FAILED
+test suspension::tests::prepared_rebuilds_when_geometry_inputs_change ... FAILED
+test suspension::tests::legacy_profile_carries_no_prepared_geometry ... ok
+test aero::tests::floor_ignores_probe_5_and_responds_to_rake ... ok
+test suspension::tests::surface_filter_ramps_and_respects_zero_tau ... ok
+test suspension::tests::tricast_retains_partial_contact_fraction ... ok
+test suspension::vertical_suspension_integration::tests::impact_is_inelastic_and_conserves_momentum ... ok
+test suspension::vertical_suspension_integration::tests::resting_wheel_gets_the_static_reaction_and_never_penetrates ... ok
+test suspension::vertical_suspension_integration::tests::wheel_above_the_ground_carries_no_reaction ... ok
+test suspension_geo_config::tests::mirror_negates_x ... ok
+test suspension_geo_config::tests::rod_label_does_not_affect_validation_shape ... ok
+test suspension_kinematics::self_tests::rest_solve_is_converged_and_identity ... ok
+test suspension_loads::tests::singular_pose_falls_back_finite ... ok
+test suspension_loads::tests::reactions_balance_whole_wheel_load ... ok
+test suspension_loads::tests::symmetric_vertical_load_gives_symmetric_reactions ... ok
+test telemetry::tests::csv_header_matches_serialized_field_count ... ok
+test suspension::tests::curb_strike_deflects_tire_before_suspension_compresses ... FAILED
+test tire::contact_integration_tests::contact_impulse_matches_wheel_angular_momentum ... FAILED
+test tire::contact_integration_tests::loaded_free_wheel_recovery_is_stable_across_host_steps ... FAILED
+test tire::contact_integration_tests::reverse_rolling_and_brake_release_remain_physical ... FAILED
+test tire::contact_integration_tests::unbraked_forward_recovery_remains_forward_under_load_and_speed_changes ... FAILED
+test tire::tests::budget_scale_is_c1_at_band_edges ... ok
+test tire::tests::aligning_torque_opposes_lateral_force_and_collapses_at_saturation ... ok
+test tire::tests::budget_scale_zero_width_is_exact_legacy_clip ... ok
+test suspension::tests::curb_strike_camber_stays_continuous ... ok
+test tire::tests::budget_scale_is_monotone_and_never_exceeds_the_budget ... ok
+test suspension::simplified_axle_integration::tests::differential_mode_dissipates_energy_and_preserves_axle_momentum ... ok
+test tire::tests::contact_blend_is_frequency_consistent ... ok
+test tire::tests::combined_slip_forces_are_odd_symmetric ... ok
+test tire::tests::contact_blend_is_legacy_with_zero_tau ... ok
+test tire::tests::contact_blend_ramps_force_when_load_returns ... FAILED
+test tire::tests::combined_peak_migration_shifts_only_the_loaded_axis ... FAILED
+test calibration::tests::grid_is_finite_and_sign_correct ... ok
+test tire::tests::falloff_sharpness_shapes_post_peak_without_touching_pre_peak ... ok
+test tire::tests::legacy_callers_without_mechanical_state_still_produce_forces ... ok
+test tire::tests::load_sensitivity_reduces_mu_scale_at_high_load ... ok
+test tire::tests::limit_spin_and_regime_reflect_post_peak_state ... ok
+test tire::tests::mirrored_static_camber_thrust_cancels_on_straight_line ... ok
+test tire::tests::near_zero_speed_produces_no_nan_and_keeps_finite_forces ... ok
+test tire::tests::pure_curve_is_smooth_at_peak_boundary ... ok
+test tire::tests::power_exit_consumes_longitudinal_capacity ... ok
+test tire::tests::pure_curve_reaches_peak_then_decays_to_plateau ... ok
+test suspension::tests::static_equilibrium_matches_wheel_load_and_rest_travel ... FAILED
+test tire::tests::regularized_wheel_lock_parks_and_holds ... ok
+test tire::tests::regularized_wheel_lock_releases_without_snap ... ok
+test suspension_table::tests::table_clamps_to_envelope ... ok
+test tire::tests::relaxation_min_tau_bounds_high_speed_build ... FAILED
+test tire::tests::regularized_wheel_lock_removes_the_zero_snap ... ok
+test tire::tests::profile_budget_blend_width_only_affects_the_knee_band ... ok
+test tire::tests::relaxation_recovery_is_slower_than_build ... FAILED
+test tire::tests::relaxation_remains_continuous_and_frequency_consistent ... FAILED
+test tire::tests::sliding_memory_cannot_create_force_at_zero_slip ... ok
+test tire::tests::sliding_memory_delays_loss_and_slows_recovery ... FAILED
+test tire::tests::sliding_memory_preserves_steady_state_envelope ... ok
+test tire::tests::sliding_memory_is_axis_independent ... ok
+test tire::tests::slip_relaxation_builds_force_over_distance ... ok
+test tire::tests::sliding_memory_recovery_is_slower_than_loss ... FAILED
+test tire::tests::tire_deflection_reduces_rolling_radius_and_grows_patch ... ok
+test tire_thermals::tests::axle_profiles_are_applied_to_the_correct_wheels ... ok
+test tire::tests::trail_braking_consumes_lateral_capacity ... ok
+test tire_thermals::tests::damping_follows_stiffness_keeping_ratio_consistent ... ok
+test tire_thermals::tests::hot_tire_over_optimum_loses_grip ... ok
+test tire_thermals::tests::ideal_gas_pressure_rises_with_temperature ... ok
+test tire_thermals::tests::lower_pressure_softens_vertical_tire ... ok
+test tire_thermals::tests::pressure_only_drives_three_mechanical_knobs ... ok
+test tire_wear::tests::default_config_is_disabled_and_identity_grip ... ok
+test tire_thermals::tests::slip_heat_efficiency_above_one_scales_tread_heating ... ok
+test tire_wear::tests::temperature_multiplier_is_monotone_and_bounded ... ok
+test tire::tests::combined_peak_migration_is_continuous_across_kappa ... FAILED
+test tire_wear::tests::wear_grip_scale_is_monotone_bounded_and_cliffs ... ok
+test tire::tests::sliding_memory_timing_is_frequency_consistent ... ok
+test vehicle_configuration::legacy_profile::tests::brake_thermal_opening_is_validated ... ok
+test vehicle_configuration::legacy_profile::tests::brake_thermal_partial_json_keeps_omitted_defaults ... ok
+test vehicle_configuration::legacy_profile::tests::brake_thermal_nested_typos_are_rejected ... ok
+test vehicle_configuration::legacy_profile::tests::brake_thermal_v2_deprecated_fields_are_accepted_and_ignored ... ok
+test vehicle_configuration::legacy_profile::tests::canonical_uses_f1_94_pressure_and_thermal_defaults ... ok
+test vehicle_configuration::legacy_profile::tests::brake_thermal_v2_lumping_maps_into_compact_v3 ... ok
+test vehicle_configuration::legacy_profile::tests::contact_and_surface_ramp_parameters_are_validated ... ok
+test vehicle_configuration::legacy_profile::tests::fidelity_fields_consumed_from_json ... ok
+test vehicle_configuration::legacy_profile::tests::deny_unknown_fields_rejects_tire_pressure_typo ... ok
+test vehicle_configuration::legacy_profile::tests::f1_2026_2008_physics_json_is_data_driven_seven_gears ... FAILED
+test vehicle_configuration::legacy_profile::tests::deny_unknown_fields_rejects_typos ... ok
+test vehicle_configuration::legacy_profile::tests::golden_json_schema_2_aids_present ... ok
+test vehicle_configuration::legacy_profile::tests::minimal_json_uses_defaults ... ok
+test vehicle_configuration::legacy_profile::tests::fl_only_pressure_change_does_not_alter_other_wheels ... ok
+test vehicle_configuration::legacy_profile::tests::missing_thermal_section_uses_stable_defaults ... ok
+test vehicle_configuration::legacy_profile::tests::rejects_invalid_schema_version ... ok
+test vehicle_configuration::legacy_profile::tests::rejects_non_positive_mass ... ok
+test vehicle_configuration::legacy_profile::tests::relaxation_parameters_are_validated ... ok
+test vehicle_configuration::legacy_profile::tests::schema_v3_absent_sections_use_parser_defaults ... ok
+test vehicle_configuration::legacy_profile::tests::schema_v3_invalid_force_model_values_rejected ... ok
+test vehicle_configuration::legacy_profile::tests::schema_v3_invalid_pressure_mechanics_and_gains_rejected ... ok
+test vehicle_configuration::legacy_profile::tests::brake_thermal_round_trip_preserves_axle_openings ... ok
+test vehicle_configuration::legacy_profile::tests::schema_v4_is_rejected ... ok
+test vehicle_configuration::legacy_profile::tests::schema_version_2_aids_round_trip ... ok
+test vehicle_configuration::legacy_profile::tests::surface_type_name_covers_all_variants ... ok
+test vehicle_configuration::legacy_profile::tests::tc_gear_curve_accepts_mild_authority_in_fifth_and_sixth ... ok
+test vehicle_configuration::legacy_profile::tests::schema_v2_emission_does_not_include_v3_sections ... ok
+test vehicle_configuration::legacy_profile::tests::tc_gear_curve_accepts_seven_gears_data_driven ... ok
+test vehicle_configuration::legacy_profile::tests::tc_gear_curve_defaults_are_progressive_through_sixth ... ok
+test vehicle_configuration::legacy_profile::tests::suspension_geometry_parser_only_accepted_and_ignored ... ok
+test vehicle_configuration::legacy_profile::tests::tire_pressure_validation_rejects_invalid_values ... ok
+test vehicle_configuration::legacy_profile::tests::round_trip_preserves_all_fields ... ok
+test vehicle_configuration::tires::configuration::authored_wheel_center_tests::williams_solver_anchors_preserve_authored_wheel_centers ... FAILED
+test vehicle_configuration::legacy_profile::tests::wheel_lock_parameters_are_validated ... ok
+test vehicle_configuration::legacy_profile::tests::schema_v3_full_profile_parses_and_round_trips ... ok
+test vehicle_configuration::legacy_profile::tests::tire_thermal_front_and_rear_profiles_are_independent ... ok
+test vertical_diagnostics::regression_tests::seeing_ground_does_not_mean_support ... ok
+test vertical_diagnostics::tests::csv_header_matches_row_field_count ... ok
+test vehicle_configuration::legacy_profile::tests::tire_pressure_thermal_json_round_trip ... ok
+test vertical_diagnostics::tests::failure_labels_are_stable ... ok
+test vertical_diagnostics::regression_tests::loss_of_support_triggers_even_when_all_rays_see_ground ... ok
+test vertical_diagnostics::async_writer_tests::sustained_loss_does_not_retrigger_until_stable_support ... ok
+test brake_thermals::tests::repeated_braking_produces_measurable_tire_heat_soak ... ok
+test vertical_diagnostics::regression_tests::overflow_is_counted ... ok
+test vertical_diagnostics::tests::ring_keeps_the_newest_capacity ... ok
+test vertical_diagnostics::async_writer_tests::bounded_writer_never_waits_for_io_and_owns_immutable_snapshot ... ok
+test suspension_table::tests::table_parity_within_tolerance ... ok
+test open_formula::audio_presentation_tests::accepted_steps_publish_sequence_dt_and_raw_mechanical_state ... FAILED
+test open_formula::audio_presentation_tests::low_fps_step_keeps_its_own_clock_for_cut_windows ... FAILED
+test tire::tests::effective_force_respects_budget_with_smoothing_enabled ... ok
+test simulation::tests::gear_request_sentinel_neutral_and_reverse ... ok
+
+failures:
+
+---- aero::tests::f1_2030_wheel_drag_reference_matches_profile_geometry stdout ----
+
+thread 'aero::tests::f1_2030_wheel_drag_reference_matches_profile_geometry' (7484) panicked at vehicle-physics-engine\src\aero.rs:1647:74:
+called `Result::unwrap()` on an `Err` value: "Failed to read D:\\ofp-baseline\\rust\\vehicle-physics-engine\\../../data/vehicles/f1_2030/f1_2030_v10_geometric.json: El sistema no puede encontrar la ruta especificada. (os error 3)"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- open_formula::audio_presentation_tests::abi_is_v6_and_specs_carry_audio_references stdout ----
+
+thread 'open_formula::audio_presentation_tests::abi_is_v6_and_specs_carry_audio_references' (14508) panicked at vehicle-physics-engine\src\open_formula.rs:1704:9:
+assertion `left == right` failed
+  left: 7
+ right: 6
+
+---- simulation::authored_startup_tests::williams_steering_stays_monotonic_and_faces_forward stdout ----
+
+thread 'simulation::authored_startup_tests::williams_steering_stays_monotonic_and_faces_forward' (11076) panicked at vehicle-physics-engine\src\simulation.rs:2183:11:
+Williams configuration: "vehicle configuration D:\\ofp-baseline\\rust\\vehicle-physics-engine\\../../..\\game/data/vehicles/f1_1997/williams/profiles/hockenheim/vehicle.json is not accessible: El sistema no puede encontrar la ruta especificada. (os error 3)"
+
+---- simulation::authored_startup_tests::authored_spawn_places_all_williams_tires_on_ground stdout ----
+
+thread 'simulation::authored_startup_tests::authored_spawn_places_all_williams_tires_on_ground' (22072) panicked at vehicle-physics-engine\src\simulation.rs:2183:11:
+Williams configuration: "vehicle configuration D:\\ofp-baseline\\rust\\vehicle-physics-engine\\../../..\\game/data/vehicles/f1_1997/williams/profiles/hockenheim/vehicle.json is not accessible: El sistema no puede encontrar la ruta especificada. (os error 3)"
+
+---- suspension::simplified_suspension::tests::equivalent_travel_table_interpolates_between_valid_samples stdout ----
+
+thread 'suspension::simplified_suspension::tests::equivalent_travel_table_interpolates_between_valid_samples' (20108) panicked at vehicle-physics-engine\src\simplified_suspension.rs:320:10:
+called `Result::unwrap()` on an `Err` value: "vehicle configuration D:\\ofp-baseline\\rust\\vehicle-physics-engine\\../../..\\game/data/vehicles/f1_1997/williams/profiles/hockenheim/vehicle.json is not accessible: El sistema no puede encontrar la ruta especificada. (os error 3)"
+
+---- suspension::simplified_suspension::tests::equivalent_vertical_steps_never_solve_mechanical_geometry stdout ----
+
+thread 'suspension::simplified_suspension::tests::equivalent_vertical_steps_never_solve_mechanical_geometry' (13736) panicked at vehicle-physics-engine\src\simplified_suspension.rs:272:10:
+called `Result::unwrap()` on an `Err` value: "vehicle configuration D:\\ofp-baseline\\rust\\vehicle-physics-engine\\../../..\\game/data/vehicles/f1_2030/profiles/geometric/vehicle.json is not accessible: El sistema no puede encontrar la ruta especificada. (os error 3)"
+
+---- suspension::tests::prepared_envelopes_match_direct_search_and_hot_flow_does_not_search stdout ----
+
+thread 'suspension::tests::prepared_envelopes_match_direct_search_and_hot_flow_does_not_search' (21340) panicked at vehicle-physics-engine\src\suspension.rs:2390:69:
+called `Result::unwrap()` on an `Err` value: Os { code: 3, kind: NotFound, message: "El sistema no puede encontrar la ruta especificada." }
+
+---- suspension::tests::geometric_pose_matches_explicit_solve_after_step stdout ----
+
+thread 'suspension::tests::geometric_pose_matches_explicit_solve_after_step' (14068) panicked at vehicle-physics-engine\src\suspension.rs:2390:69:
+called `Result::unwrap()` on an `Err` value: Os { code: 3, kind: NotFound, message: "El sistema no puede encontrar la ruta especificada." }
+
+---- suspension::tests::prepared_rebuilds_when_geometry_inputs_change stdout ----
+
+thread 'suspension::tests::prepared_rebuilds_when_geometry_inputs_change' (11068) panicked at vehicle-physics-engine\src\suspension.rs:2390:69:
+called `Result::unwrap()` on an `Err` value: Os { code: 3, kind: NotFound, message: "El sistema no puede encontrar la ruta especificada." }
+
+---- suspension::tests::curb_strike_deflects_tire_before_suspension_compresses stdout ----
+SUSPENSION_BACKEND_READY backend=simplified contact_rays=12 prepared=false
+
+thread 'suspension::tests::curb_strike_deflects_tire_before_suspension_compresses' (23856) panicked at vehicle-physics-engine\src\suspension.rs:2198:9:
+suspension must lag the curb strike on the first tick, compression delta 0.14998226397380557m
+
+---- tire::contact_integration_tests::contact_impulse_matches_wheel_angular_momentum stdout ----
+
+thread 'tire::contact_integration_tests::contact_impulse_matches_wheel_angular_momentum' (4920) panicked at vehicle-physics-engine\src\tire.rs:2470:11:
+Williams configuration: "vehicle configuration D:\\ofp-baseline\\rust\\vehicle-physics-engine\\../../..\\game/data/vehicles/f1_1997/williams/profiles/hockenheim/vehicle.json is not accessible: El sistema no puede encontrar la ruta especificada. (os error 3)"
+
+---- tire::contact_integration_tests::loaded_free_wheel_recovery_is_stable_across_host_steps stdout ----
+
+thread 'tire::contact_integration_tests::loaded_free_wheel_recovery_is_stable_across_host_steps' (25364) panicked at vehicle-physics-engine\src\tire.rs:2470:11:
+Williams configuration: "vehicle configuration D:\\ofp-baseline\\rust\\vehicle-physics-engine\\../../..\\game/data/vehicles/f1_1997/williams/profiles/hockenheim/vehicle.json is not accessible: El sistema no puede encontrar la ruta especificada. (os error 3)"
+
+---- tire::contact_integration_tests::reverse_rolling_and_brake_release_remain_physical stdout ----
+
+thread 'tire::contact_integration_tests::reverse_rolling_and_brake_release_remain_physical' (15512) panicked at vehicle-physics-engine\src\tire.rs:2470:11:
+Williams configuration: "vehicle configuration D:\\ofp-baseline\\rust\\vehicle-physics-engine\\../../..\\game/data/vehicles/f1_1997/williams/profiles/hockenheim/vehicle.json is not accessible: El sistema no puede encontrar la ruta especificada. (os error 3)"
+
+---- tire::contact_integration_tests::unbraked_forward_recovery_remains_forward_under_load_and_speed_changes stdout ----
+
+thread 'tire::contact_integration_tests::unbraked_forward_recovery_remains_forward_under_load_and_speed_changes' (24604) panicked at vehicle-physics-engine\src\tire.rs:2470:11:
+Williams configuration: "vehicle configuration D:\\ofp-baseline\\rust\\vehicle-physics-engine\\../../..\\game/data/vehicles/f1_1997/williams/profiles/hockenheim/vehicle.json is not accessible: El sistema no puede encontrar la ruta especificada. (os error 3)"
+
+---- tire::tests::contact_blend_ramps_force_when_load_returns stdout ----
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+
+thread 'tire::tests::contact_blend_ramps_force_when_load_returns' (24852) panicked at vehicle-physics-engine\src\tire.rs:2024:9:
+first tick must ramp the force: 2655.314566498674 vs 3679.3324968749994
+
+---- tire::tests::combined_peak_migration_shifts_only_the_loaded_axis stdout ----
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+
+thread 'tire::tests::combined_peak_migration_shifts_only_the_loaded_axis' (17332) panicked at vehicle-physics-engine\src\tire.rs:1795:9:
+lateral peak must migrate under longitudinal demand: 0.1
+
+---- suspension::tests::static_equilibrium_matches_wheel_load_and_rest_travel stdout ----
+SUSPENSION_BACKEND_READY backend=simplified contact_rays=12 prepared=false
+
+thread 'suspension::tests::static_equilibrium_matches_wheel_load_and_rest_travel' (16248) panicked at vehicle-physics-engine\src\suspension.rs:2146:13:
+wheel FrontLeft Fz 1572.601398750001 must approach static load 1268.7353437499999
+
+---- tire::tests::relaxation_min_tau_bounds_high_speed_build stdout ----
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+
+thread 'tire::tests::relaxation_min_tau_bounds_high_speed_build' (23680) panicked at vehicle-physics-engine\src\tire.rs:1893:9:
+min tau must slow the high-speed build: 0.09995450433117689 vs 0.09995450433117689
+
+---- tire::tests::relaxation_recovery_is_slower_than_build stdout ----
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+
+thread 'tire::tests::relaxation_recovery_is_slower_than_build' (18380) panicked at vehicle-physics-engine\src\tire.rs:1928:9:
+asymmetric recovery must lag: 0.0005610542656037371 vs 0.0005610542656037371
+
+---- tire::tests::relaxation_remains_continuous_and_frequency_consistent stdout ----
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+
+thread 'tire::tests::relaxation_remains_continuous_and_frequency_consistent' (12952) panicked at vehicle-physics-engine\src\tire.rs:1957:13:
+effective slip must not jump: 0.1 -> 0.021623861777226874
+
+---- tire::tests::sliding_memory_delays_loss_and_slows_recovery stdout ----
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+
+thread 'tire::tests::sliding_memory_delays_loss_and_slows_recovery' (14488) panicked at vehicle-physics-engine\src\tire.rs:1542:9:
+loss must be delayed: hyst=1958.230647988187 legacy=1958.230647988187
+
+---- tire::tests::sliding_memory_recovery_is_slower_than_loss stdout ----
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+
+thread 'tire::tests::sliding_memory_recovery_is_slower_than_loss' (4444) panicked at vehicle-physics-engine\src\tire.rs:1602:9:
+recovery must be clearly slower than loss: loss=2 ticks recovery=2 ticks
+
+---- tire::tests::combined_peak_migration_is_continuous_across_kappa stdout ----
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+
+thread 'tire::tests::combined_peak_migration_is_continuous_across_kappa' (26560) panicked at vehicle-physics-engine\src\tire.rs:1840:9:
+full longitudinal demand must shrink the lateral peak: 0.1
+
+---- vehicle_configuration::legacy_profile::tests::f1_2026_2008_physics_json_is_data_driven_seven_gears stdout ----
+
+thread 'vehicle_configuration::legacy_profile::tests::f1_2026_2008_physics_json_is_data_driven_seven_gears' (21148) panicked at vehicle-physics-engine\src\vehicle_configuration\legacy_profile\tests.rs:498:29:
+cannot read D:\ofp-baseline\rust\vehicle-physics-engine\../../../game/data/vehicles/f1_2026_2008/f1_2026_2008_physics.json: El sistema no puede encontrar la ruta especificada. (os error 3)
+
+---- vehicle_configuration::tires::configuration::authored_wheel_center_tests::williams_solver_anchors_preserve_authored_wheel_centers stdout ----
+
+thread 'vehicle_configuration::tires::configuration::authored_wheel_center_tests::williams_solver_anchors_preserve_authored_wheel_centers' (5676) panicked at vehicle-physics-engine\src\vehicle_configuration\tires\configuration.rs:196:14:
+Williams profile: "vehicle configuration D:\\ofp-baseline\\rust\\vehicle-physics-engine\\../../..\\game/data/vehicles/f1_1997/williams/profiles/hockenheim/vehicle.json is not accessible: El sistema no puede encontrar la ruta especificada. (os error 3)"
+
+---- open_formula::audio_presentation_tests::accepted_steps_publish_sequence_dt_and_raw_mechanical_state stdout ----
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+SLOW_STATE_BACKEND_READY backend=simplified tires_hertz=20 brakes_hertz=10 powertrain_hertz=10
+SUSPENSION_BACKEND_READY backend=simplified contact_rays=12 prepared=true
+
+thread 'open_formula::audio_presentation_tests::accepted_steps_publish_sequence_dt_and_raw_mechanical_state' (18756) panicked at vehicle-physics-engine\src\open_formula.rs:1724:9:
+assertion `left == right` failed
+  left: 7
+ right: 6
+
+---- open_formula::audio_presentation_tests::low_fps_step_keeps_its_own_clock_for_cut_windows stdout ----
+TIRE_BACKEND_READY backend=simplified relaxation=single_distance_based
+SLOW_STATE_BACKEND_READY backend=simplified tires_hertz=20 brakes_hertz=10 powertrain_hertz=10
+SUSPENSION_BACKEND_READY backend=simplified contact_rays=12 prepared=true
+
+thread 'open_formula::audio_presentation_tests::low_fps_step_keeps_its_own_clock_for_cut_windows' (8076) panicked at vehicle-physics-engine\src\open_formula.rs:1752:9:
+assertion `left == right` failed
+  left: 240
+ right: 20
+
+
+failures:
+    aero::tests::f1_2030_wheel_drag_reference_matches_profile_geometry
+    open_formula::audio_presentation_tests::abi_is_v6_and_specs_carry_audio_references
+    open_formula::audio_presentation_tests::accepted_steps_publish_sequence_dt_and_raw_mechanical_state
+    open_formula::audio_presentation_tests::low_fps_step_keeps_its_own_clock_for_cut_windows
+    simulation::authored_startup_tests::authored_spawn_places_all_williams_tires_on_ground
+    simulation::authored_startup_tests::williams_steering_stays_monotonic_and_faces_forward
+    suspension::simplified_suspension::tests::equivalent_travel_table_interpolates_between_valid_samples
+    suspension::simplified_suspension::tests::equivalent_vertical_steps_never_solve_mechanical_geometry
+    suspension::tests::curb_strike_deflects_tire_before_suspension_compresses
+    suspension::tests::geometric_pose_matches_explicit_solve_after_step
+    suspension::tests::prepared_envelopes_match_direct_search_and_hot_flow_does_not_search
+    suspension::tests::prepared_rebuilds_when_geometry_inputs_change
+    suspension::tests::static_equilibrium_matches_wheel_load_and_rest_travel
+    tire::contact_integration_tests::contact_impulse_matches_wheel_angular_momentum
+    tire::contact_integration_tests::loaded_free_wheel_recovery_is_stable_across_host_steps
+    tire::contact_integration_tests::reverse_rolling_and_brake_release_remain_physical
+    tire::contact_integration_tests::unbraked_forward_recovery_remains_forward_under_load_and_speed_changes
+    tire::tests::combined_peak_migration_is_continuous_across_kappa
+    tire::tests::combined_peak_migration_shifts_only_the_loaded_axis
+    tire::tests::contact_blend_ramps_force_when_load_returns
+    tire::tests::relaxation_min_tau_bounds_high_speed_build
+    tire::tests::relaxation_recovery_is_slower_than_build
+    tire::tests::relaxation_remains_continuous_and_frequency_consistent
+    tire::tests::sliding_memory_delays_loss_and_slows_recovery
+    tire::tests::sliding_memory_recovery_is_slower_than_loss
+    vehicle_configuration::legacy_profile::tests::f1_2026_2008_physics_json_is_data_driven_seven_gears
+    vehicle_configuration::tires::configuration::authored_wheel_center_tests::williams_solver_anchors_preserve_authored_wheel_centers
+
+test result: FAILED. 149 passed; 27 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+
+error: test failed, to rerun pass `-p vehicle_physics_engine --lib`

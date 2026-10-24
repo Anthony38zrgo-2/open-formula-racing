@@ -707,8 +707,15 @@ impl VehicleSimulator {
             // in the body state, so it uses the value produced by the previous step.
             st.suspension.body_acceleration_world = st.linear_acceleration;
             st.suspension.body_angular_acceleration_world = st.angular_acceleration;
+            // The rays were cast at the start of the host step. Move their wheel-centre
+            // context to this substep's body pose before the contact solve, so a body
+            // that travels vertically during the interval is not solved against the
+            // geometry of a pose that no longer exists. The correction is applied to a
+            // copy: it is recomputed from the sampled value on every trial, so it can
+            // never accumulate across iterations.
+            let contact_samples = predicted_contact_samples(cfg, st, samples);
             st.suspension.step_with_modifiers_and_body_kinematics(
-                cfg, &thermal_modifiers, samples, dt, BodyKinematics { transform: st.transform, orientation: st.orientation,
+                cfg, &thermal_modifiers, &contact_samples, dt, BodyKinematics { transform: st.transform, orientation: st.orientation,
                     linear_velocity: st.linear_velocity, angular_velocity: st.angular_velocity },
             );
         }
@@ -1663,6 +1670,45 @@ impl VehicleSimulator {
 pub fn center_of_mass_local(config: &VehicleConfig) -> Vec3 {
     crate::vehicle_mass_properties::resolve_vehicle_mass_properties(config)
         .center_of_mass_local_metres
+}
+
+/// Projects the sampled wheel-centre context onto the current substep pose.
+///
+/// The three rays of a corner were cast once, at the start of the host step, from the
+/// physical wheel centre of that instant. Between the cast and this substep the body
+/// (and therefore the chassis attachment point) has moved. The signed gap was measured
+/// against a fixed road, so the compression that closes it moves by exactly the drop of
+/// the attachment point along the suspension axis:
+///
+/// `demand = compression_at_sample + (h_anchor_sampled - h_anchor_now) - gap`
+///
+/// This keeps the contact solve consistent with the pose it integrates without casting
+/// twelve extra rays per substep, and without applying any force twice: the correction
+/// changes the *target* of the constraint, not an applied impulse. The correction is
+/// recomputed from the sampled context on every trial, so it never accumulates.
+fn predicted_contact_samples(
+    config: &VehicleConfig,
+    state: &VehicleState,
+    samples: &[TriRaycastSample; 4],
+) -> [TriRaycastSample; 4] {
+    let mut corrected = *samples;
+    for wheel in WheelIndex::ALL {
+        let index = wheel as usize;
+        let context = corrected[index].context;
+        if !context.from_wheel_centre {
+            continue;
+        }
+        let anchor_local =
+            config
+                .tires
+                .wheel_anchor_local(&config.chassis, &config.suspension, wheel);
+        let anchor_now = state.transform.transform_point(anchor_local);
+        let delta = (context.anchor_world - anchor_now).dot(context.up);
+        if delta.is_finite() {
+            corrected[index].context.compression_m += delta;
+        }
+    }
+    corrected
 }
 
 pub fn center_of_mass_local_for_suspension_backend(

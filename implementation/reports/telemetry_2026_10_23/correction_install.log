@@ -1,0 +1,31 @@
+{
+  "installed": {
+    "lib/games/speed-dreams-2/modules/simu/vehicle_physics_engine.dll": {
+      "sha256": "e76faab4b13139b0dc48c4ea20766d705ce9b268a71c0001787ededb76c212b7",
+      "size": 4918784
+    },
+    "lib/games/speed-dreams-2/modules/simu/rustphysics.dll": {
+      "sha256": "5d4ee69fa9361619edde7cef28f424382bb33b436fded8ea7825ae739e928c26",
+      "size": 174345
+    }
+  },
+  "previous_sha256": {
+    "lib/games/speed-dreams-2/modules/simu/vehicle_physics_engine.dll": "91dc8c9c765093a05c15121aaab8e04f6f587b0b179ae7a59d697dc33c7e6198",
+    "lib/games/speed-dreams-2/modules/simu/rustphysics.dll": "569577736ddb112d9ceecd71f39d5e617a8a60e21bff77c292516bb713087e73"
+  },
+  "backup": "C:\\Users\\bill\\open-formula-backups\\2026-10-23-telemetry-38ea21ad",
+  "rollback": "C:\\Users\\bill\\open-formula-backups\\2026-10-23-telemetry-38ea21ad\\rollback.ps1",
+  "abi_version": 7,
+  "abi_signature": "0xa91cdeba9d3fe775",
+  "verification": {
+    "passed": 47,
+    "failed": 0,
+    "report": "D:\\open-formula\\implementation\\reports\\telemetry_2026_10_23\\telemetry_validation\\telemetry_validation.json"
+  },
+  "configuration": {
+    "summary_hz": "50 (diagnostic interval seconds = 0.02)",
+    "trace": "enabled in user-settings/config/rust_physics.xml; requests 3 s pre / 1 s post; metadata reports overwritten history",
+    "trace_directory": "user-settings/rustphysics/"
+  },
+  "manual_T3_acceptance": "pending_user"
+}

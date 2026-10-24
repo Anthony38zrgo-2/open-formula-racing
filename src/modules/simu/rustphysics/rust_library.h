@@ -43,6 +43,19 @@ public:
     typedef int (*TraceDumpFn)(const char* path);
     typedef std::uint32_t (*TraceBufferedFn)();
     typedef int (*EffectiveSetupFn)(const OfpHandle handle, char* buffer, std::uint32_t capacity);
+    //! Session collision-world entry points. Appended after ABI v7, resolved optionally:
+    //! a library built before the session-world refactor still loads, and the adapter
+    //! falls back to the single-argument loader. When `ofp_load_track_ground_mesh_v2`
+    //! is present the host also passes the circuit identity, so two circuits can never
+    //! be confused inside one process.
+    typedef int (*LoadTrackGroundMeshV2Fn)(const char* path, const char* circuit_id,
+                                          std::uint32_t revision);
+    typedef int (*ReleaseTrackGroundMeshFn)();
+    typedef std::uint64_t (*WorldGenerationFn)();
+    typedef std::uint64_t (*WorldInstallCountFn)();
+    typedef int (*WorldIdentityJsonFn)(char* buffer, std::uint32_t capacity);
+    typedef int (*WorldLastErrorFn)(char* buffer, std::uint32_t capacity);
+    typedef int (*ContactReportFn)(const OfpHandle handle, char* buffer, std::uint32_t capacity);
 
     RustPhysicsLibrary();
     ~RustPhysicsLibrary();
@@ -80,6 +93,13 @@ public:
     TraceDumpFn traceDump;
     TraceBufferedFn traceBuffered;
     EffectiveSetupFn effectiveSetup;
+    LoadTrackGroundMeshV2Fn loadTrackGroundMeshV2;
+    ReleaseTrackGroundMeshFn releaseTrackGroundMesh;
+    WorldGenerationFn worldGeneration;
+    WorldInstallCountFn worldInstallCount;
+    WorldIdentityJsonFn worldIdentityJson;
+    WorldLastErrorFn worldLastError;
+    ContactReportFn contactReport;
 
 private:
     void* _module;
