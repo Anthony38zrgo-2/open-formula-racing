@@ -384,14 +384,11 @@ impl TireSystem {
         let dt = dt.max(0.0);
         let tuning = WheelMechanicalTuning::for_wheel(config, wheel);
         let mut profile = *tire_force_profile(config, wheel);
-        if self.backend != TireBackend::Standard {
-            profile.slip_loss_tau_s = 0.0;
-            profile.slip_recovery_tau_s = 0.0;
-            profile.combined_lateral_peak_migration = 0.0;
-            profile.combined_longitudinal_peak_migration = 0.0;
-            profile.min_relaxation_tau_s = 0.0;
-            profile.relaxation_recovery_scale = 1.0;
-            profile.contact_ramp_tau_s = 0.0;
+        // GRIP-02/04/05/06: the profile domain may carry a dedicated transient
+        // document. It overrides the steady-state profile values without requiring a
+        // rebuild; an absent document keeps the values already in `tires.json`.
+        if let Some(filters) = config.tire_filters.as_ref() {
+            filters.for_wheel(wheel).apply_to_profile(&mut profile);
         }
 
         // GRIP-06: contact blend. With tau = 0.0 the blend snaps (legacy hard
@@ -485,14 +482,12 @@ impl TireSystem {
         if self.backend == TireBackend::SimplifiedWithoutRelaxation {
             state.effective_slip_angle_rad = target_alpha;
             state.effective_slip_ratio = target_kappa;
-        } else if self.backend == TireBackend::SimplifiedWithRelaxation {
-            let relaxation_fraction =
-                1.0 - (-dt * planar_speed.max(4.0) / relaxation_length.max(1e-6)).exp();
-            state.effective_slip_angle_rad +=
-                (target_alpha - state.effective_slip_angle_rad) * relaxation_fraction;
-            state.effective_slip_ratio +=
-                (target_kappa - state.effective_slip_ratio) * relaxation_fraction;
         } else {
+            // GRIP-05: distance-based relaxation with a configurable minimum time
+            // constant (readable transients at speed) and an asymmetric recovery
+            // scale so the carcass releases slip slower than it builds it. The
+            // production `SimplifiedWithRelaxation` backend now uses the same law as
+            // the reference implementation; `0.0`/`1.0` keep the legacy behaviour.
             let relaxation_tau = (relaxation_length / planar_speed.max(4.0))
                 .max(profile.min_relaxation_tau_s.clamp(0.0, 0.5));
             let recovery_scale = profile.relaxation_recovery_scale.clamp(0.1, 5.0);
@@ -661,33 +656,29 @@ impl TireSystem {
                 .max(0.1);
         state.effective_lateral_peak_slip_rad = lateral_peak;
         state.effective_longitudinal_peak_slip_ratio = longitudinal_peak;
-        let lat_response = if self.backend != TireBackend::Standard {
-            lat_base
-        } else {
-            pure_curve_coefficient(
-                alpha_with_camber.abs(),
-                lateral_peak,
-                profile.lateral_slide_mu_ratio,
-                rise_gamma,
-                profile.falloff_sharpness,
-            )
-        };
-        let lon_response = if self.backend != TireBackend::Standard {
-            lon_base
-        } else {
-            pure_curve_coefficient(
-                state.effective_slip_ratio.abs(),
-                longitudinal_peak,
-                profile.longitudinal_slide_mu_ratio,
-                rise_gamma,
-                profile.falloff_sharpness,
-            )
-        };
+        // GRIP-04: the migrated peaks are authoritative for every backend. The
+        // migration strength is profile data; `0.0` reproduces independent axes.
+        let lat_response = pure_curve_coefficient(
+            alpha_with_camber.abs(),
+            lateral_peak,
+            profile.lateral_slide_mu_ratio,
+            rise_gamma,
+            profile.falloff_sharpness,
+        );
+        let lon_response = pure_curve_coefficient(
+            state.effective_slip_ratio.abs(),
+            longitudinal_peak,
+            profile.longitudinal_slide_mu_ratio,
+            rise_gamma,
+            profile.falloff_sharpness,
+        );
 
         // GRIP-02 sliding memory, independent per axis. Each state follows its
         // own post-peak decay target with an asymmetric first order lag (loss
         // faster than recovery). Taus are profile data in seconds; `0.0` snaps
-        // to the target, exactly preserving the legacy instantaneous curve.
+        // to the target, exactly preserving the legacy instantaneous curve. The
+        // filter is active for every backend, including the production simplified
+        // one; the values come from `tires.json` or the `tire_filters` domain.
         let advance_memory = |state: f64, target: f64| -> f64 {
             let tau = if target > state {
                 profile.slip_loss_tau_s
@@ -701,35 +692,25 @@ impl TireSystem {
                 (state + (target - state) * relax).clamp(0.0, 1.0)
             }
         };
-        if self.backend == TireBackend::Standard {
-            state.post_peak_decay_lat =
-                advance_memory(state.post_peak_decay_lat, lat_response.decay_weight);
-            state.post_peak_decay_lon =
-                advance_memory(state.post_peak_decay_lon, lon_response.decay_weight);
-        } else {
-            state.post_peak_decay_lat = lat_response.decay_weight;
-            state.post_peak_decay_lon = lon_response.decay_weight;
-        }
+        state.post_peak_decay_lat =
+            advance_memory(state.post_peak_decay_lat, lat_response.decay_weight);
+        state.post_peak_decay_lon =
+            advance_memory(state.post_peak_decay_lon, lon_response.decay_weight);
 
         // With each memory at its target the effective coefficient is exactly the
         // pure envelope (steady state unchanged for any tau). During transients
         // the flat, slide-free curve is rescaled by its own memory state, which
         // delays the loss on entry and forces a progressive grip release on exit.
-        let (lat_coefficient, lon_coefficient) = if self.backend == TireBackend::Standard {
-            let lat_flat = lat_response.force_coefficient
-                / (1.0 - lat_response.decay_weight * (1.0 - profile.lateral_slide_mu_ratio))
-                    .max(1e-6);
-            let lon_flat = lon_response.force_coefficient
-                / (1.0 - lon_response.decay_weight * (1.0 - profile.longitudinal_slide_mu_ratio))
-                    .max(1e-6);
-            let lat_coefficient = lat_flat
-                * (1.0 - state.post_peak_decay_lat * (1.0 - profile.lateral_slide_mu_ratio));
-            let lon_coefficient = lon_flat
-                * (1.0 - state.post_peak_decay_lon * (1.0 - profile.longitudinal_slide_mu_ratio));
-            (lat_coefficient, lon_coefficient)
-        } else {
-            (lat_response.force_coefficient, lon_response.force_coefficient)
-        };
+        let lat_flat = lat_response.force_coefficient
+            / (1.0 - lat_response.decay_weight * (1.0 - profile.lateral_slide_mu_ratio))
+                .max(1e-6);
+        let lon_flat = lon_response.force_coefficient
+            / (1.0 - lon_response.decay_weight * (1.0 - profile.longitudinal_slide_mu_ratio))
+                .max(1e-6);
+        let lat_coefficient = lat_flat
+            * (1.0 - state.post_peak_decay_lat * (1.0 - profile.lateral_slide_mu_ratio));
+        let lon_coefficient = lon_flat
+            * (1.0 - state.post_peak_decay_lon * (1.0 - profile.longitudinal_slide_mu_ratio));
         let fx_candidate =
             fx_max * lon_coefficient * state.effective_slip_ratio.signum();
         let fy_candidate =

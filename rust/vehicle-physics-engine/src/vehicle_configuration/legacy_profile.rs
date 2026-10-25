@@ -62,6 +62,8 @@ pub(crate) struct JsonVehicleSpec {
     pub(crate) coupled_world: Option<CoupledVehicleWorldConfiguration>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) underfloor_contact: Option<UnderfloorContactConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) tire_filters: Option<TireFilterConfiguration>,
 }
 
 fn default_schema_version() -> u32 {
@@ -83,6 +85,9 @@ impl JsonVehicleSpec {
         super::fuel::validation::validate_fuel(&self.fuel)?;
         if let Some(configuration) = self.underfloor_contact.as_ref() {
             configuration.validate()?;
+        }
+        if let Some(filters) = self.tire_filters.as_ref() {
+            filters.validate()?;
         }
         self.tires.validate()?;
         self.suspension.validate_geometry()?;
@@ -445,6 +450,7 @@ impl JsonVehicleSpec {
             audio: self.audio.clone(),
             coupled_world: self.coupled_world.clone(),
             underfloor_contact: self.underfloor_contact,
+            tire_filters: self.tire_filters,
         }
     }
 
@@ -482,6 +488,7 @@ impl JsonVehicleSpec {
             physical_mass_inventory: cfg.chassis.physical_mass_inventory.clone(),
             coupled_world: cfg.coupled_world.clone(),
             underfloor_contact: cfg.underfloor_contact,
+            tire_filters: cfg.tire_filters,
             schema_version: cfg.schema_version,
             vehicle_id: "f1_94".to_string(),
             profile_name: cfg.chassis.vehicle_name.clone(),

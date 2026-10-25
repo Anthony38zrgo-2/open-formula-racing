@@ -5,7 +5,7 @@ use super::manifest::{
     is_physical_domain_name, VehicleProfileManifest, AERODYNAMICS_DOMAIN_NAME, BRAKES_DOMAIN_NAME,
     CHASSIS_DOMAIN_NAME, COUPLED_WORLD_DOMAIN_NAME, DRIVING_ASSISTANCE_DOMAIN_NAME,
     FUEL_DOMAIN_NAME, POWERTRAIN_DOMAIN_NAME, STEERING_DOMAIN_NAME, SUSPENSION_DOMAIN_NAME,
-    TIRES_DOMAIN_NAME, UNDERFLOOR_CONTACT_DOMAIN_NAME,
+    TIRES_DOMAIN_NAME, TIRE_FILTERS_DOMAIN_NAME, UNDERFLOOR_CONTACT_DOMAIN_NAME,
 };
 use super::resolved_profile::{
     sha256_hex, VehicleProfileDependencyDigest, VehicleProfileProvenance,
@@ -186,6 +186,13 @@ struct UnderfloorContactDomainDocument {
 #[serde(deny_unknown_fields)]
 struct CoupledWorldDomainDocument {
     coupled_world: crate::coupled_vehicle_world::CoupledVehicleWorldConfiguration,
+}
+
+#[allow(dead_code)]
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TireFiltersDomainDocument {
+    tire_filters: super::tire_filters::TireFilterConfiguration,
 }
 
 pub fn load_physical_configuration(
@@ -395,6 +402,16 @@ pub fn load_physical_configuration(
                         .at_document(&document_path)
                     })?;
                 insert_section(&mut merged_document, &document_value, "coupled_world");
+            }
+            TIRE_FILTERS_DOMAIN_NAME => {
+                let _typed: TireFiltersDomainDocument =
+                    serde_json::from_value(document_value.clone()).map_err(|error| {
+                        VehicleConfigurationLoadError::new(format!(
+                            "tire filters document does not match its contract: {error}"
+                        ))
+                        .at_document(&document_path)
+                    })?;
+                insert_section(&mut merged_document, &document_value, "tire_filters");
             }
             _ => {}
         }

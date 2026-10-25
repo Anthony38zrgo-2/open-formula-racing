@@ -37,6 +37,10 @@ pub struct VehicleConfiguration {
     pub coupled_world: Option<crate::coupled_vehicle_world::CoupledVehicleWorldConfiguration>,
     #[serde(default)]
     pub underfloor_contact: Option<crate::underfloor_contact_configuration::UnderfloorContactConfig>,
+    /// Optional transient-filter tuning (GRIP-02/04/05/06). Absent keeps the
+    /// values already carried by the steady-state tire profile.
+    #[serde(default)]
+    pub tire_filters: Option<TireFilterConfiguration>,
 }
 
 pub type VehicleConfig = VehicleConfiguration;
@@ -79,6 +83,12 @@ impl VehicleConfiguration {
     fn from_json_spec(spec: JsonVehicleSpec) -> Result<Self, String> {
         spec.validate()?;
         let mut config = spec.to_config();
+        if let Some(filters) = config.tire_filters.as_ref() {
+            filters.validate()?;
+            if let Some(tau) = filters.surface_transition_tau_s {
+                config.tires.surface_transition_tau_s = tau;
+            }
+        }
         config
             .chassis
             .bind_authored_wheel_centers(&config.suspension);

@@ -66,6 +66,12 @@
       "source": "Radial carcass damping ratio raised from the inherited 0.28 to 0.45 to settle the contact load after the simplified contact work correction"
     },
     {
+      "classification": "estimated",
+      "domain": "tire_filters.json",
+      "path": "tire_filters",
+      "source": "Transient-filter activation and time constants are tuning estimates derived from the inherited tire force profile; they are not historical FW19 measurements"
+    },
+    {
       "classification": "derived",
       "domain": "chassis.json",
       "path": "physical_mass_inventory.components[wheel_rotor].center_of_mass_in_attachment_metres",

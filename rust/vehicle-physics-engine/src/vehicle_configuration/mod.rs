@@ -10,6 +10,7 @@ pub(crate) mod legacy_profile;
 pub(crate) mod powertrain;
 pub(crate) mod steering;
 pub(crate) mod suspension;
+pub(crate) mod tire_filters;
 pub(crate) mod tires;
 pub(crate) mod underfloor_contact;
 pub(crate) mod vehicle_configuration;
@@ -22,6 +23,7 @@ pub use driving_assistance::configuration::AidsConfig;
 pub use fuel::configuration::FuelConfig;
 pub use powertrain::configuration::AutomaticShift;
 pub use tires::configuration::TireForceProfile;
+pub use tire_filters::{TireAxleFilterConfiguration, TireFilterConfiguration};
 pub use vehicle_configuration::{VehicleConfig, VehicleConfiguration};
 
 pub use aerodynamics::configuration::AerodynamicsConfiguration;
@@ -43,7 +45,8 @@ pub use manifest::{
     FUEL_DOMAIN_NAME, OPTIONAL_PHYSICAL_DOMAIN_NAMES, POWERTRAIN_DOMAIN_NAME,
     REQUIRED_PHYSICAL_DOMAIN_NAMES, STEERING_DOMAIN_NAME, SUPPORTED_UNITS,
     SUSPENSION_DOMAIN_NAME, SUSPENSION_PRESENTATION_DOMAIN_NAME, TIRES_DOMAIN_NAME,
-    UNDERFLOOR_CONTACT_DOMAIN_NAME, VEHICLE_PROFILE_MANIFEST_SCHEMA_VERSION,
+    TIRE_FILTERS_DOMAIN_NAME, UNDERFLOOR_CONTACT_DOMAIN_NAME,
+    VEHICLE_PROFILE_MANIFEST_SCHEMA_VERSION,
 };
 pub use resolved_profile::{
     sha256_hex, ResolvedVehicleConfiguration, VehicleProfileDependencyDigest,

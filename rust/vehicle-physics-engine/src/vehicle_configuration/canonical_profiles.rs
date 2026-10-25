@@ -1,4 +1,4 @@
-﻿use super::aerodynamics::configuration::{
+use super::aerodynamics::configuration::{
     default_aero_blend_full_speed, default_aero_blend_min_speed, default_aero_lag_tau,
 };
 use super::driving_assistance::configuration::default_aids;
@@ -138,6 +138,7 @@ impl VehicleConfiguration {
             audio: None,
             coupled_world: None,
             underfloor_contact: None,
+            tire_filters: None,
 
             suspension: SuspensionConfiguration {
                 front_spring_length: 0.250,
@@ -334,6 +335,7 @@ impl VehicleConfiguration {
             audio: None,
             coupled_world: None,
             underfloor_contact: None,
+            tire_filters: None,
 
             suspension: SuspensionConfiguration {
                 front_spring_length: 0.100,
