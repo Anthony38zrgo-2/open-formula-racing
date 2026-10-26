@@ -27,7 +27,7 @@ use std::time::UNIX_EPOCH;
 use crate::collision_world::TriangleMaterial;
 use crate::types::Vec3;
 
-const CACHE_MAGIC: &[u8; 16] = b"OFP_TRACK_CACHE3";
+const CACHE_MAGIC: &[u8; 16] = b"OFP_TRACK_CACHE5";
 
 /// One driveable ground triangle with physical tire interaction properties.
 #[derive(Debug, Clone, Copy, PartialEq)]

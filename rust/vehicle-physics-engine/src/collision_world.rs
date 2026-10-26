@@ -32,6 +32,7 @@ use parry3d_f64::shape::{SharedShape, TriMesh};
 use sha2::{Digest, Sha256};
 
 use crate::types::{SurfaceType, Vec3};
+use crate::wall_field::WallField;
 
 /// Signature of the transfer document produced by the track exporter.
 pub const GROUND_SIGNATURE: &str = "FORMULA_GROUND_1";
@@ -155,8 +156,8 @@ pub struct ObstacleHit {
 pub struct CollisionWorld {
     mesh: Option<SharedShape>,
     materials: Vec<TriangleMaterial>,
-    obstacles_mesh: Option<SharedShape>,
-    obstacles_materials: Vec<ObstacleMaterial>,
+    walls: WallField,
+    obstacle_triangle_count: usize,
     identity: WorldIdentity,
 }
 
@@ -353,8 +354,8 @@ impl CollisionWorld {
         Ok(Self {
             mesh: Some(SharedShape::new(mesh)),
             materials: materials.to_vec(),
-            obstacles_mesh: None,
-            obstacles_materials: Vec::new(),
+            walls: WallField::empty(),
+            obstacle_triangle_count: 0,
             identity: WorldIdentity {
                 circuit_id: circuit_id.to_string(),
                 revision,
@@ -433,41 +434,26 @@ impl CollisionWorld {
         let d_mesh = TriMesh::new(d_vertices, d_indices)
             .map_err(|e| format!("cannot build ground TriMesh: {e:?}"))?;
 
-        let (obs_mesh, obs_materials) = if !obstacles.is_empty() {
-            let mut o_vertices: Vec<Point3<f64>> = Vec::with_capacity(obstacles.len() * 3);
-            let mut o_indices: Vec<[u32; 3]> = Vec::with_capacity(obstacles.len());
-            let mut o_materials = Vec::with_capacity(obstacles.len());
-            for (index, tri) in obstacles.iter().enumerate() {
-                let base = (index * 3) as u32;
-                o_indices.push([base, base + 1, base + 2]);
-                o_materials.push(ObstacleMaterial {
-                    friction: tri.friction,
-                    restitution: tri.restitution,
-                    damage: tri.damage,
-                });
-                for corner in &tri.vertices {
-                    o_vertices.push(Point3::new(corner.x, corner.y, corner.z));
-                    aabb_min = Vec3::new(
-                        aabb_min.x.min(corner.x),
-                        aabb_min.y.min(corner.y),
-                        aabb_min.z.min(corner.z),
-                    );
-                    aabb_max = Vec3::new(
-                        aabb_max.x.max(corner.x),
-                        aabb_max.y.max(corner.y),
-                        aabb_max.z.max(corner.z),
-                    );
-                    hasher.update(corner.x.to_bits().to_be_bytes());
-                    hasher.update(corner.y.to_bits().to_be_bytes());
-                    hasher.update(corner.z.to_bits().to_be_bytes());
-                }
+        for tri in obstacles {
+            for corner in &tri.vertices {
+                aabb_min = Vec3::new(
+                    aabb_min.x.min(corner.x),
+                    aabb_min.y.min(corner.y),
+                    aabb_min.z.min(corner.z),
+                );
+                aabb_max = Vec3::new(
+                    aabb_max.x.max(corner.x),
+                    aabb_max.y.max(corner.y),
+                    aabb_max.z.max(corner.z),
+                );
+                hasher.update(corner.x.to_bits().to_be_bytes());
+                hasher.update(corner.y.to_bits().to_be_bytes());
+                hasher.update(corner.z.to_bits().to_be_bytes());
             }
-            let mesh = TriMesh::new(o_vertices, o_indices)
-                .map_err(|e| format!("cannot build obstacle TriMesh: {e:?}"))?;
-            (Some(SharedShape::new(mesh)), o_materials)
-        } else {
-            (None, Vec::new())
-        };
+        }
+
+        let walls = WallField::build(driveable, obstacles);
+        let (w_len, w_one, w_two) = (walls.len(), walls.one_sided_count, walls.two_sided_count);
 
         let geometry_sha256: String = hasher
             .finalize()
@@ -478,8 +464,8 @@ impl CollisionWorld {
         Ok(Self {
             mesh: Some(SharedShape::new(d_mesh)),
             materials: d_materials,
-            obstacles_mesh: obs_mesh,
-            obstacles_materials: obs_materials,
+            walls,
+            obstacle_triangle_count: obstacles.len(),
             identity: WorldIdentity {
                 circuit_id: circuit_id.to_string(),
                 revision,
@@ -489,122 +475,29 @@ impl CollisionWorld {
                 triangle_count: driveable.len(),
                 aabb_min,
                 aabb_max,
-                revision_note: format!("obstacles: {}", obstacles.len()),
+                revision_note: format!(
+                    "walls: segments={} one_sided={} two_sided={}",
+                    w_len,
+                    w_one,
+                    w_two
+                ),
             },
         })
     }
 
-    pub fn obstacles_mesh(&self) -> Option<&SharedShape> {
-        self.obstacles_mesh.as_ref()
+    pub fn walls(&self) -> &WallField {
+        &self.walls
     }
 
     pub fn obstacle_triangle_count(&self) -> usize {
-        self.obstacles_materials.len()
+        self.obstacle_triangle_count
     }
 
     pub fn has_obstacles(&self) -> bool {
-        self.obstacles_mesh.is_some()
+        !self.walls.is_empty()
     }
 
-    /// Queries the obstacle mesh against a body shape (e.g. OBB or sphere) at `shape_pose`.
-    /// Returns the contact hit if colliding or within `prediction` distance.
-    /// If `reference_center` is provided (e.g. vehicle chassis center), contact normal orientation
-    /// will always point towards that reference to guarantee repellent behavior away from barriers.
-    pub fn query_obstacle_contact(
-        &self,
-        shape_pose: &Isometry3<f64>,
-        shape: &dyn parry3d_f64::shape::Shape,
-        prediction: f64,
-        reference_center: Option<Vec3>,
-    ) -> Option<ObstacleHit> {
-        let obs_mesh = self.obstacles_mesh.as_ref()?;
-        let trimesh = obs_mesh.as_trimesh()?;
-        let num_triangles = trimesh.num_triangles();
-        let dispatcher = parry3d_f64::query::DefaultQueryDispatcher;
-        let mut generated: Vec<parry3d_f64::query::ContactManifold<(), ()>> = Vec::new();
-        let mut workspace = None;
-        let prediction_dist = prediction.max(0.001);
-
-        // Query contact manifolds between obstacles_mesh (at identity) and shape (at shape_pose)
-        parry3d_f64::query::PersistentQueryDispatcher::contact_manifolds(
-            &dispatcher,
-            shape_pose,
-            obs_mesh.as_ref(),
-            shape,
-            prediction_dist,
-            &mut generated,
-            &mut workspace,
-        )
-        .ok()?;
-
-        let shape_center = Vec3::new(
-            shape_pose.translation.vector.x,
-            shape_pose.translation.vector.y,
-            shape_pose.translation.vector.z,
-        );
-        let repel_target = reference_center.unwrap_or(shape_center);
-
-        let mut deepest: Option<ObstacleHit> = None;
-        for manifold in generated {
-            let tri_idx = manifold.subshape1 as usize;
-            if tri_idx >= num_triangles {
-                continue;
-            }
-            let tri = trimesh.triangle(manifold.subshape1);
-            let e1 = tri.b - tri.a;
-            let e2 = tri.c - tri.a;
-            let tri_n = e1.cross(&e2);
-            let horiz = Vec3::new(tri_n.x, 0.0, tri_n.z);
-            let horiz_len = horiz.length();
-            if horiz_len <= 1e-6 {
-                continue; // Ignore horizontal cap triangles
-            }
-            let mut effective_normal = horiz * (1.0 / horiz_len);
-
-            let tri_center = Vec3::new(
-                (tri.a.x + tri.b.x + tri.c.x) / 3.0,
-                (tri.a.y + tri.b.y + tri.c.y) / 3.0,
-                (tri.a.z + tri.b.z + tri.c.z) / 3.0,
-            );
-            let to_target = repel_target - tri_center;
-            if effective_normal.dot(to_target) < 0.0 {
-                effective_normal = -effective_normal;
-            }
-
-            // Verify that Parry's separating axis is reasonably aligned with the true triangle face normal,
-            // filtering out false internal-edge or top/bottom cuboid-face SAT axes when scraping along a wall.
-            let manifold_n = Vec3::new(
-                manifold.local_n1.x,
-                manifold.local_n1.y,
-                manifold.local_n1.z,
-            );
-            let alignment = manifold_n.dot(effective_normal).abs();
-            if alignment < 0.35 {
-                continue;
-            }
-
-            for pt in manifold.points {
-                let penetration_m = (-pt.dist) * alignment;
-                let point = Vec3::new(pt.local_p1.x, pt.local_p1.y, pt.local_p1.z);
-
-                if deepest.is_none()
-                    || penetration_m > deepest.as_ref().map(|d| d.penetration_m).unwrap_or(0.0)
-                {
-                    deepest = Some(ObstacleHit {
-                        point,
-                        normal: effective_normal,
-                        penetration_m,
-                        friction: 0.20,
-                        restitution: 0.15,
-                        damage: 1.0,
-                    });
-                }
-            }
-        }
-        deepest
-    }
-
-    pub fn identity(&self) -> &WorldIdentity {
+        pub fn identity(&self) -> &WorldIdentity {
         &self.identity
     }
 
@@ -1024,14 +917,29 @@ mod tests {
         assert!(world.has_obstacles());
         assert_eq!(world.obstacle_triangle_count(), 2);
 
-        // Test a cuboid at X = 5.2 with half-extent 0.5 (penetrating wall at X = 5.0 from the front face by 0.3m)
-        let box_shape = parry3d_f64::shape::Cuboid::new(parry3d_f64::na::Vector3::new(0.5, 0.5, 0.5));
-        let box_pose = parry3d_f64::na::Isometry3::translation(5.2, 1.0, 0.0);
-        let hit = world
-            .query_obstacle_contact(&box_pose, &box_shape, 0.1, None)
-            .expect("must hit wall");
-        assert!(hit.penetration_m > 0.1, "penetration was {}", hit.penetration_m);
-        // Normal pointing from wall toward box (+X direction)
-        assert!(hit.normal.x > 0.9, "normal was {:?}", hit.normal);
+        // Test a convex polygon (representing a cuboid) at X = 5.2 with half-extent 0.5 (penetrating wall at X = 5.0 by 0.3m)
+        let poly = crate::wall_field::ConvexPoly2::from_box(
+            Vec3::new(5.2, 1.0, 0.0),
+            Vec3::new(1.0, 0.0, 0.0),
+            Vec3::new(0.0, 1.0, 0.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            Vec3::new(0.5, 0.5, 0.5),
+        );
+        let mut side_mem = crate::wall_field::WallSideMemory::default();
+        let mut scratch = Vec::new();
+        let mut contacts = Vec::new();
+        world.walls().query_poly(
+            &poly,
+            0.1,
+            &mut side_mem,
+            Vec3::new(5.2, 1.0, 0.0),
+            0.0,
+            &mut scratch,
+            &mut contacts,
+        );
+        assert!(!contacts.is_empty(), "must detect wall contact");
+        let deepest = contacts.iter().min_by(|a, b| a.gap_m.partial_cmp(&b.gap_m).unwrap()).unwrap();
+        assert!(deepest.gap_m < -0.15, "gap was {}", deepest.gap_m);
+        assert!(deepest.normal.x.abs() > 0.9, "normal was {:?}", deepest.normal);
     }
 }
