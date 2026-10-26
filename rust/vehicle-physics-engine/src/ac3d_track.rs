@@ -27,7 +27,7 @@ use std::time::UNIX_EPOCH;
 use crate::collision_world::TriangleMaterial;
 use crate::types::Vec3;
 
-const CACHE_MAGIC: &[u8; 16] = b"OFP_TRACK_CACHE2";
+const CACHE_MAGIC: &[u8; 16] = b"OFP_TRACK_CACHE3";
 
 /// One driveable ground triangle with physical tire interaction properties.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -394,12 +394,14 @@ fn parse_ac3d_file(
                     let height_span = max_y - min_y;
 
                     if is_obstacle_kw {
-                        obstacles.push(ObstacleTriangle {
-                            vertices: [v0, v1, v2],
-                            friction: 0.50,
-                            restitution: 0.15,
-                            damage: 1.0,
-                        });
+                        if ny_abs < 0.55 {
+                            obstacles.push(ObstacleTriangle {
+                                vertices: [v0, v1, v2],
+                                friction: 0.50,
+                                restitution: 0.15,
+                                damage: 1.0,
+                            });
+                        }
                     } else if is_driveable_kw {
                         if ny_abs >= 0.55 {
                             let (friction, rolling) = surface_material_from_name(&name_lower);

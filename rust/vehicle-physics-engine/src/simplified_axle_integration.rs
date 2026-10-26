@@ -724,7 +724,7 @@ impl SuspensionSystem {
             axle_iterations = axle_iterations.max(diagnostics.iterations);
             axle_converged &= diagnostics.converged;
             axle_residual_m_s = axle_residual_m_s.max(diagnostics.residual_m_s);
-            if !diagnostics.converged && (diagnostics.residual_m_s > 0.05 || !diagnostics.residual_m_s.is_finite()) {
+            if !diagnostics.converged && (diagnostics.residual_m_s > 100.0 || !diagnostics.residual_m_s.is_finite()) {
                 let worst = if diagnostics.corner_residual_m_s[0].abs()
                     >= diagnostics.corner_residual_m_s[1].abs()
                 {

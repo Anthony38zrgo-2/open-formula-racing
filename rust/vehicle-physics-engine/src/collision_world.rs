@@ -508,13 +508,18 @@ impl CollisionWorld {
 
     /// Queries the obstacle mesh against a body shape (e.g. OBB or sphere) at `shape_pose`.
     /// Returns the contact hit if colliding or within `prediction` distance.
+    /// If `reference_center` is provided (e.g. vehicle chassis center), contact normal orientation
+    /// will always point towards that reference to guarantee repellent behavior away from barriers.
     pub fn query_obstacle_contact(
         &self,
         shape_pose: &Isometry3<f64>,
         shape: &dyn parry3d_f64::shape::Shape,
         prediction: f64,
+        reference_center: Option<Vec3>,
     ) -> Option<ObstacleHit> {
         let obs_mesh = self.obstacles_mesh.as_ref()?;
+        let trimesh = obs_mesh.as_trimesh()?;
+        let num_triangles = trimesh.num_triangles();
         let dispatcher = parry3d_f64::query::DefaultQueryDispatcher;
         let mut generated: Vec<parry3d_f64::query::ContactManifold<(), ()>> = Vec::new();
         let mut workspace = None;
@@ -537,41 +542,50 @@ impl CollisionWorld {
             shape_pose.translation.vector.y,
             shape_pose.translation.vector.z,
         );
+        let repel_target = reference_center.unwrap_or(shape_center);
 
         let mut deepest: Option<ObstacleHit> = None;
         for manifold in generated {
-            // manifold.local_n1 is the normal on obs_mesh (which is at identity, i.e. world space)
-            let mut normal = Vec3::new(
+            let tri_idx = manifold.subshape1 as usize;
+            if tri_idx >= num_triangles {
+                continue;
+            }
+            let tri = trimesh.triangle(manifold.subshape1);
+            let e1 = tri.b - tri.a;
+            let e2 = tri.c - tri.a;
+            let tri_n = e1.cross(&e2);
+            let horiz = Vec3::new(tri_n.x, 0.0, tri_n.z);
+            let horiz_len = horiz.length();
+            if horiz_len <= 1e-6 {
+                continue; // Ignore horizontal cap triangles
+            }
+            let mut effective_normal = horiz * (1.0 / horiz_len);
+
+            let tri_center = Vec3::new(
+                (tri.a.x + tri.b.x + tri.c.x) / 3.0,
+                (tri.a.y + tri.b.y + tri.c.y) / 3.0,
+                (tri.a.z + tri.b.z + tri.c.z) / 3.0,
+            );
+            let to_target = repel_target - tri_center;
+            if effective_normal.dot(to_target) < 0.0 {
+                effective_normal = -effective_normal;
+            }
+
+            // Verify that Parry's separating axis is reasonably aligned with the true triangle face normal,
+            // filtering out false internal-edge or top/bottom cuboid-face SAT axes when scraping along a wall.
+            let manifold_n = Vec3::new(
                 manifold.local_n1.x,
                 manifold.local_n1.y,
                 manifold.local_n1.z,
             );
+            let alignment = manifold_n.dot(effective_normal).abs();
+            if alignment < 0.35 {
+                continue;
+            }
 
             for pt in manifold.points {
-                let penetration_m = -pt.dist;
+                let penetration_m = (-pt.dist) * alignment;
                 let point = Vec3::new(pt.local_p1.x, pt.local_p1.y, pt.local_p1.z);
-
-                // Ensure the normal always repels the vehicle away from the obstacle
-                let to_shape = shape_center - point;
-                if normal.dot(to_shape) < 0.0 {
-                    normal = -normal;
-                }
-
-                // Project normal to horizontal plane for lateral barrier response
-                let horiz = Vec3::new(normal.x, 0.0, normal.z);
-                let horiz_len = horiz.length();
-                let effective_normal = if horiz_len > 1e-4 {
-                    horiz * (1.0 / horiz_len)
-                } else if to_shape.length() > 1e-4 {
-                    let h = Vec3::new(to_shape.x, 0.0, to_shape.z);
-                    if h.length() > 1e-4 {
-                        h.normalized()
-                    } else {
-                        Vec3::new(1.0, 0.0, 0.0)
-                    }
-                } else {
-                    Vec3::new(1.0, 0.0, 0.0)
-                };
 
                 if deepest.is_none()
                     || penetration_m > deepest.as_ref().map(|d| d.penetration_m).unwrap_or(0.0)
@@ -580,7 +594,7 @@ impl CollisionWorld {
                         point,
                         normal: effective_normal,
                         penetration_m,
-                        friction: 0.50,
+                        friction: 0.20,
                         restitution: 0.15,
                         damage: 1.0,
                     });
@@ -1014,7 +1028,7 @@ mod tests {
         let box_shape = parry3d_f64::shape::Cuboid::new(parry3d_f64::na::Vector3::new(0.5, 0.5, 0.5));
         let box_pose = parry3d_f64::na::Isometry3::translation(5.2, 1.0, 0.0);
         let hit = world
-            .query_obstacle_contact(&box_pose, &box_shape, 0.1)
+            .query_obstacle_contact(&box_pose, &box_shape, 0.1, None)
             .expect("must hit wall");
         assert!(hit.penetration_m > 0.1, "penetration was {}", hit.penetration_m);
         // Normal pointing from wall toward box (+X direction)

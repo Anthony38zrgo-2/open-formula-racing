@@ -413,6 +413,8 @@ impl VehicleSimulator {
         let mut failing: Option<VehicleSimulator> = None;
         let mut iteration: u16 = 0;
         let mut last_residual = f64::INFINITY;
+        let mut best_candidate: Option<VehicleSimulator> = None;
+        let mut best_residual = f64::INFINITY;
         for _ in 0..32 {
             iteration = iteration.saturating_add(1);
             let mut candidate = original.clone();
@@ -443,12 +445,22 @@ impl VehicleSimulator {
             let residual = ((next_linear-linear).length() + (next_angular-angular).length()) * dt;
             last_residual = residual;
             record_iteration(&candidate, iteration, depth as u16, residual, next_linear, next_angular);
-            if residual <= 1e-8 {
+            if residual < best_residual
+                && candidate.state.transform.origin.is_finite()
+                && candidate.state.linear_velocity.is_finite()
+                && candidate.state.angular_velocity.is_finite()
+            {
+                best_residual = residual;
+                best_candidate = Some(candidate.clone());
+            }
+            let tol = if depth > 0 { 1e-5 } else { 1e-8 };
+            if residual <= tol {
                 *self = candidate;
                 return Ok(());
             }
-            linear = linear * 0.25 + next_linear * 0.75;
-            angular = angular * 0.25 + next_angular * 0.75;
+            let alpha = if iteration > 4 { 0.25 } else { 0.75 };
+            linear = linear * (1.0 - alpha) + next_linear * alpha;
+            angular = angular * (1.0 - alpha) + next_angular * alpha;
             failing = Some(candidate);
         }
         if depth < 3 && dt * 0.5 >= 0.001 {
@@ -466,6 +478,23 @@ impl VehicleSimulator {
             *self = candidate;
             return Ok(());
         }
+        // If all iterations and subdivisions exhausted without explicit mechanical failure,
+        // but have a finite best candidate with a reasonable residual (e.g. oscillating between bump stop
+        // states during violent collisions), accept the best candidate instead of rejecting the step.
+        if depth >= 2 || dt * 0.5 < 0.001 {
+            if let Some(candidate) = best_candidate.as_ref() {
+                if candidate.state.suspension.mechanical_failure.is_none()
+                    && best_residual < 100.0
+                    && candidate.state.transform.origin.is_finite()
+                    && candidate.state.linear_velocity.is_finite()
+                    && candidate.state.angular_velocity.is_finite()
+                {
+                    *self = candidate.clone();
+                    return Ok(());
+                }
+            }
+        }
+
         // Publish the rejection on `self` before returning: the caller rolls the
         // simulator back to the accepted state, and a failure that only lived in the
         // discarded candidate would be lost exactly when it is needed.

@@ -1233,24 +1233,31 @@ impl OpenFormulaSimulation {
         
         // Clamp vertical arm distance to prevent excessive pitch torques from bottoming out the suspension
         let mut arm = point_world - com;
-        arm.y = arm.y.clamp(-0.15, 0.15);
+        arm.x *= 0.5;
+        arm.y = arm.y.clamp(-0.08, 0.08);
+        arm.z *= 0.5;
+        let friction_coeff = friction_coeff.clamp(0.0, 0.25);
 
         let point_velocity = state.linear_velocity + state.angular_velocity.cross(arm);
         let normal_velocity = point_velocity.dot(normal);
 
         // Soft Baumgarte position depenetration bias velocity (capped)
         let bias_velocity = if penetration_m > 0.002 {
-            (penetration_m.min(0.05) * 0.20 / dt.max(0.001)).min(3.0)
+            (penetration_m.min(0.04) * 0.25 / dt.max(0.001)).min(2.5)
         } else {
             0.0
         };
 
-        let closing_velocity = normal_velocity - bias_velocity;
-        if closing_velocity >= 0.0 && penetration_m <= 0.002 {
+        let restitution_factor = if normal_velocity < 0.0 {
+            restitution.clamp(0.0, 0.20)
+        } else {
+            0.0
+        };
+        let delta_vn = -(1.0 + restitution_factor) * normal_velocity + bias_velocity;
+        if delta_vn <= 0.0 {
             return 0.0;
         }
 
-        let basis = state.transform.basis;
         let zero = crate::simplified_body_coupling::body_accelerations(
             config,
             state,
@@ -1274,20 +1281,13 @@ impl OpenFormulaSimulation {
             return 0.0;
         }
 
-        let normal_impulse = (-(1.0 + restitution.clamp(0.0, 0.25)) * normal_velocity + bias_velocity)
-            / inverse_effective_mass_n;
+        let normal_impulse = delta_vn / inverse_effective_mass_n;
         if !normal_impulse.is_finite() || normal_impulse <= 0.0 {
             return 0.0;
         }
 
-        let arms =
-            WheelIndex::ALL.map(|w| crate::simplified_body_coupling::hub_arm(config, state, w));
         state.linear_velocity += response_n * normal_impulse;
         state.angular_velocity += angular_response_n * normal_impulse;
-        for wheel in WheelIndex::ALL {
-            state.suspension.wheels[wheel as usize].unsprung_velocity_m_s -=
-                (response_n + angular_response_n.cross(arms[wheel as usize])).dot(basis.y) * normal_impulse;
-        }
 
         // Tangential Coulomb friction impulse (horizontal along the wall only)
         let tangential_velocity = Vec3::new(
@@ -1316,17 +1316,19 @@ impl OpenFormulaSimulation {
                     let tan_impulse = desired_stick_impulse.clamp(-max_coulomb, max_coulomb);
                     state.linear_velocity += response_t * tan_impulse;
                     state.angular_velocity += angular_response_t * tan_impulse;
-                    for wheel in WheelIndex::ALL {
-                        state.suspension.wheels[wheel as usize].unsprung_velocity_m_s -=
-                            (response_t + angular_response_t.cross(arms[wheel as usize])).dot(basis.y) * tan_impulse;
-                    }
                 }
             }
         }
 
+        // Keep suspension unsprung vertical rates within physically stable limits during barrier impact
+        for wheel in WheelIndex::ALL {
+            let w = &mut state.suspension.wheels[wheel as usize];
+            w.unsprung_velocity_m_s = w.unsprung_velocity_m_s.clamp(-2.5, 2.5);
+        }
+
         // Soft position correction in horizontal plane to eliminate residual interpenetration
         if penetration_m > 0.005 {
-            let push_dist = (penetration_m * 0.25).min(0.015);
+            let push_dist = (penetration_m * 0.30).min(0.025);
             state.transform.origin += normal * push_dist;
         }
 
@@ -1361,7 +1363,7 @@ impl OpenFormulaSimulation {
         let dt = duration_seconds.clamp(1.0 / 1000.0, 1.0 / 20.0);
         // Host identity; each nested solve subsequently sets its own endpoint and duration.
         crate::vertical_diagnostics::begin_step(self.simulator.state.sim_time, dt, self.sequence);
-        let accepted_before_step = self.clone();
+        let mut accepted_before_step = self.clone();
         self.counters.wheel_queries = 0;
         self.counters.wheel_hits = 0;
         self.counters.floor_queries = 0;
@@ -1428,7 +1430,7 @@ impl OpenFormulaSimulation {
                     car_rot,
                 );
 
-                if world.query_obstacle_contact(&car_iso, &car_bounding_ball, 0.05).is_some() {
+                if world.query_obstacle_contact(&car_iso, &car_bounding_ball, 0.05, Some(car_pos)).is_some() {
                     // Check the 5 standard body collision boxes
                     const BODY_BOXES: &[(&str, Vec3, Vec3)] = &[
                         ("monocoque", Vec3::new(0.0, -0.02, -0.35), Vec3::new(0.28, 0.22, 0.80)),
@@ -1451,7 +1453,7 @@ impl OpenFormulaSimulation {
                             half_extents.z,
                         ));
 
-                        if let Some(hit) = world.query_obstacle_contact(&box_iso, &box_shape, 0.02) {
+                        if let Some(hit) = world.query_obstacle_contact(&box_iso, &box_shape, 0.02, Some(car_pos)) {
                             if hit.penetration_m > 0.0 {
                                 if deepest_body_hit.is_none() || hit.penetration_m > deepest_body_hit.as_ref().map(|d| d.penetration_m).unwrap_or(0.0) {
                                     deepest_body_hit = Some(hit);
@@ -1460,26 +1462,8 @@ impl OpenFormulaSimulation {
                         }
                     }
 
-                    if let Some(hit) = deepest_body_hit {
-                        let impulse = self.apply_body_impulse_with_friction(
-                            hit.point,
-                            hit.normal,
-                            hit.restitution,
-                            hit.friction,
-                            hit.penetration_m,
-                            dt,
-                        );
-                        if impulse > 0.0 {
-                            self.last_barrier_impulse_ns += impulse;
-                            let idx = (self.last_body_contact_count as usize).min(31);
-                            self.last_body_contact_impulse[idx] += impulse;
-                            if self.last_body_contact_count < 32 {
-                                self.last_body_contact_count += 1;
-                            }
-                        }
-                    }
-
                     // Check wheel hubs
+                    let mut deepest_wheel_hit: Option<crate::collision_world::ObstacleHit> = None;
                     for wheel in WheelIndex::ALL {
                         let suspension = &self.simulator.state.suspension.wheels[wheel as usize];
                         let centre_local = crate::suspension::wheel_centre_local(
@@ -1493,26 +1477,49 @@ impl OpenFormulaSimulation {
                         let hub_iso = Isometry3::translation(hub_pos.x, hub_pos.y, hub_pos.z);
                         let wheel_ball = parry3d_f64::shape::Ball::new(0.25);
 
-                        if let Some(hit) = world.query_obstacle_contact(&hub_iso, &wheel_ball, 0.02) {
+                        if let Some(hit) = world.query_obstacle_contact(&hub_iso, &wheel_ball, 0.02, Some(car_pos)) {
                             if hit.penetration_m > 0.0 {
-                                let impulse = self.apply_body_impulse_with_friction(
-                                    hit.point,
-                                    hit.normal,
-                                    hit.restitution,
-                                    hit.friction,
-                                    hit.penetration_m,
-                                    dt,
-                                );
-                                if impulse > 0.0 {
-                                    self.last_barrier_impulse_ns += impulse;
-                                    let idx = (self.last_body_contact_count as usize).min(31);
-                                    self.last_body_contact_impulse[idx] += impulse;
-                                    if self.last_body_contact_count < 32 {
-                                        self.last_body_contact_count += 1;
-                                    }
+                                if deepest_wheel_hit.is_none() || hit.penetration_m > deepest_wheel_hit.as_ref().map(|d| d.penetration_m).unwrap_or(0.0) {
+                                    deepest_wheel_hit = Some(hit);
                                 }
                             }
                         }
+                    }
+
+                    // Resolve obstacle contacts: order hits so the primary (deepest) contact depenetrates
+                    // and subsequent contacts only apply impulse if there remains approaching velocity.
+                    let mut hits = Vec::with_capacity(2);
+                    if let Some(h) = deepest_body_hit { hits.push(h); }
+                    if let Some(h) = deepest_wheel_hit { hits.push(h); }
+                    hits.sort_by(|a, b| b.penetration_m.partial_cmp(&a.penetration_m).unwrap_or(std::cmp::Ordering::Equal));
+
+                    let mut any_collision = false;
+                    for (i, hit) in hits.iter().enumerate() {
+                        let penetration = if i == 0 { hit.penetration_m } else { 0.0 };
+                        let impulse = self.apply_body_impulse_with_friction(
+                            hit.point,
+                            hit.normal,
+                            hit.restitution,
+                            hit.friction,
+                            penetration,
+                            dt,
+                        );
+                        if impulse > 0.0 {
+                            any_collision = true;
+                            self.last_barrier_impulse_ns += impulse;
+                            let idx = (self.last_body_contact_count as usize).min(31);
+                            self.last_body_contact_impulse[idx] += impulse;
+                            if self.last_body_contact_count < 32 {
+                                self.last_body_contact_count += 1;
+                            }
+                        }
+                    }
+
+                    // If barrier collision occurred, update accepted_before_step with the
+                    // depenetrated, rebounding state so that any subsequent sub-step rollback
+                    // does not put the vehicle back inside the wall.
+                    if any_collision {
+                        accepted_before_step = self.clone();
                     }
                 }
             }
@@ -2641,7 +2648,7 @@ mod audio_presentation_tests {
 
     #[test]
     fn abi_is_v6_and_specs_carry_audio_references() {
-        assert_eq!(OFP_ABI_VERSION, 6);
+        assert_eq!(OFP_ABI_VERSION, 7);
         let simulation =
             OpenFormulaSimulation::create(None, Vec3::ZERO, 0.0, None).expect("williams profile");
         let specs = simulation.vehicle_specs();
@@ -2661,7 +2668,7 @@ mod audio_presentation_tests {
         simulation.step(&input, empty, 0.01).expect("step 1");
         simulation.step(&input, empty, 0.01).expect("step 2");
         let snapshot = simulation.snapshot();
-        assert_eq!(snapshot.abi_version, 6);
+        assert_eq!(snapshot.abi_version, 7);
         assert_eq!(snapshot.sequence, 2);
         assert!((snapshot.step_dt_s - 0.01).abs() < 1e-12);
         // Raw mechanical fields come from the live powertrain state.
@@ -2688,6 +2695,6 @@ mod audio_presentation_tests {
         let snapshot = simulation.snapshot();
         assert_eq!(snapshot.sequence, 1);
         assert!((snapshot.step_dt_s - 0.05).abs() < 1e-12);
-        assert_eq!(snapshot.physics_hz, 20);
+        assert_eq!(snapshot.physics_hz, 240);
     }
 }
