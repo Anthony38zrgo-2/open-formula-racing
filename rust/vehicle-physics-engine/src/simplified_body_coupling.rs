@@ -47,11 +47,10 @@ pub fn hub_arm(config: &VehicleConfig, state: &VehicleState, wheel: WheelIndex) 
     state.transform.basis.transform_vector(hub - center)
 }
 
-pub fn body_accelerations(
+pub fn construct_schur_matrix(
     config: &VehicleConfig,
     state: &VehicleState,
-    force: ForceTorqueOutput,
-) -> Result<(Vec3, Vec3), String> {
+) -> Result<([[f64; 6]; 6], f64, Vec3, crate::suspension_mass_properties::InertiaTensor, [f64; 4]), String> {
     let props =
         crate::vehicle_mass_properties::resolve_vehicle_mass_properties_for_suspension_backend(
             config,
@@ -59,8 +58,6 @@ pub fn body_accelerations(
         );
     let basis = state.transform.basis;
     let axis = basis.y;
-    let omega = state.angular_velocity;
-    let gravity = Vec3::new(0.0, -9.80665, 0.0);
     let masses = WheelIndex::ALL.map(|w| corner_unsprung_mass_kg(config, w));
     let body_mass = props.total_mass_kilograms - masses.iter().sum::<f64>();
     if body_mass <= 0.0 {
@@ -104,12 +101,6 @@ pub fn body_accelerations(
             matrix[i + 3][j + 3] = body_i.entries_kilogram_square_metres[i][j];
         }
     }
-    let mut rhs = [0.0; 6];
-    let f = force.force_world + gravity * body_mass - omega.cross(omega.cross(first_world));
-    let t = force.torque_world + first_world.cross(gravity) - omega.cross(body_i.multiply(omega));
-    for (i, x) in xyz(f).into_iter().chain(xyz(t)).enumerate() {
-        rhs[i] = x;
-    }
     for wheel in WheelIndex::ALL {
         let m = masses[wheel as usize];
         let r = hub_arm(config, state, wheel);
@@ -120,12 +111,67 @@ pub fn body_accelerations(
                 matrix[i][j] += m * b[i].dot(p(b[j]));
             }
         }
+    }
+    Ok((matrix, body_mass, first_world, body_i, masses))
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct BodySchurMassMatrix {
+    pub inv: [[f64; 6]; 6],
+}
+
+impl BodySchurMassMatrix {
+    pub fn build(config: &VehicleConfig, state: &VehicleState) -> Result<Self, String> {
+        let (matrix, _, _, _, _) = construct_schur_matrix(config, state)?;
+        let inv = invert_6x6(matrix)?;
+        Ok(Self { inv })
+    }
+
+    #[inline]
+    pub fn response(&self, force_world: Vec3, torque_world: Vec3) -> (Vec3, Vec3) {
+        let mut w = [0.0; 6];
+        w[0] = force_world.x;
+        w[1] = force_world.y;
+        w[2] = force_world.z;
+        w[3] = torque_world.x;
+        w[4] = torque_world.y;
+        w[5] = torque_world.z;
+        let mut a = [0.0; 6];
+        for i in 0..6 {
+            let mut sum = 0.0;
+            for j in 0..6 {
+                sum += self.inv[i][j] * w[j];
+            }
+            a[i] = sum;
+        }
+        (Vec3::new(a[0], a[1], a[2]), Vec3::new(a[3], a[4], a[5]))
+    }
+}
+
+pub fn body_accelerations(
+    config: &VehicleConfig,
+    state: &VehicleState,
+    force: ForceTorqueOutput,
+) -> Result<(Vec3, Vec3), String> {
+    let (matrix, body_mass, first_world, body_i, masses) = construct_schur_matrix(config, state)?;
+    let basis = state.transform.basis;
+    let axis = basis.y;
+    let omega = state.angular_velocity;
+    let gravity = Vec3::new(0.0, -9.80665, 0.0);
+    let mut rhs = [0.0; 6];
+    let f = force.force_world + gravity * body_mass - omega.cross(omega.cross(first_world));
+    let t = force.torque_world + first_world.cross(gravity) - omega.cross(body_i.multiply(omega));
+    for (i, x) in xyz(f).into_iter().chain(xyz(t)).enumerate() {
+        rhs[i] = x;
+    }
+    for wheel in WheelIndex::ALL {
+        let m = masses[wheel as usize];
+        let r = hub_arm(config, state, wheel);
+        let p = |v: Vec3| v - axis * v.dot(axis);
         let bias = omega.cross(omega.cross(r))
             + omega.cross(axis)
                 * (2.0 * state.suspension.wheels[wheel as usize].unsprung_velocity_m_s);
         add_wrench(&mut rhs, p(gravity - bias) * m, r);
-        // The component of a banked-road reaction perpendicular to the allowed
-        // corner travel is transmitted by the rigid linkage, not by the spring.
         let corner = &state.suspension.wheels[wheel as usize];
         add_wrench(
             &mut rhs,
@@ -135,6 +181,38 @@ pub fn body_accelerations(
     }
     let acceleration = solve(matrix, rhs)?;
     Ok((vec(&acceleration[..3]), vec(&acceleration[3..])))
+}
+
+pub fn invert_6x6(mut a: [[f64; 6]; 6]) -> Result<[[f64; 6]; 6], String> {
+    let mut inv = [[0.0; 6]; 6];
+    for i in 0..6 {
+        inv[i][i] = 1.0;
+    }
+    for i in 0..6 {
+        let pivot = (i..6)
+            .max_by(|x, y| a[*x][i].abs().total_cmp(&a[*y][i].abs()))
+            .unwrap();
+        if !a[pivot][i].is_finite() || a[pivot][i].abs() < 1e-10 {
+            return Err("Singular body/corner mass matrix".into());
+        }
+        a.swap(i, pivot);
+        inv.swap(i, pivot);
+        let div = a[i][i];
+        for k in 0..6 {
+            a[i][k] /= div;
+            inv[i][k] /= div;
+        }
+        for j in 0..6 {
+            if j != i {
+                let factor = a[j][i];
+                for k in 0..6 {
+                    a[j][k] -= factor * a[i][k];
+                    inv[j][k] -= factor * inv[i][k];
+                }
+            }
+        }
+    }
+    Ok(inv)
 }
 
 fn solve(mut a: [[f64; 6]; 6], mut b: [f64; 6]) -> Result<[f64; 6], String> {

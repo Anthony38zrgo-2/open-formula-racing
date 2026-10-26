@@ -332,7 +332,8 @@ impl VehicleSimulator {
         samples: &[TriRaycastSample; 4],
         dt: f64,
     ) -> TelemetryFrame {
-        let original = self.clone();
+        let original_state = self.state.clone();
+        let original_fuel = self.config.fuel.current_kg;
         if !dt.is_finite() || dt <= 0.0 { return self.build_telemetry_frame(); }
         let env = AeroEnvironment::unavailable();
         let previous_mode = self.aero_probe_mode;
@@ -341,9 +342,12 @@ impl VehicleSimulator {
         let h = dt / substeps as f64;
         for _ in 0..substeps {
             if let Err(error) = self.advance_transaction(input, samples, &env, h, 0) {
-                if original.state.suspension.mechanical_failure.is_none() { eprintln!("MECHANICAL_STEP_REJECTED time={} reason={error}", original.state.sim_time); }
+                if original_state.suspension.mechanical_failure.is_none() {
+                    eprintln!("MECHANICAL_STEP_REJECTED time={} reason={error}", original_state.sim_time);
+                }
                 let failure = self.state.suspension.failure;
-                *self = original;
+                self.state = original_state;
+                self.config.fuel.set_current_kg(original_fuel);
                 self.state.suspension.mechanical_failure = Some(error);
                 // The rejection record belongs to the step, not to the restored state.
                 self.state.suspension.failure = failure;
@@ -361,15 +365,19 @@ impl VehicleSimulator {
         environment: &AeroEnvironment,
         duration_seconds: f64,
     ) -> TelemetryFrame {
-        let original = self.clone();
+        let original_state = self.state.clone();
+        let original_fuel = self.config.fuel.current_kg;
         if !duration_seconds.is_finite() || duration_seconds <= 0.0 { return self.build_telemetry_frame(); }
         let substeps = internal_substeps(duration_seconds);
         let h = duration_seconds / substeps as f64;
         for _ in 0..substeps {
             if let Err(error) = self.advance_transaction(input, samples, environment, h, 0) {
-                if original.state.suspension.mechanical_failure.is_none() { eprintln!("MECHANICAL_STEP_REJECTED time={} reason={error}", original.state.sim_time); }
+                if original_state.suspension.mechanical_failure.is_none() {
+                    eprintln!("MECHANICAL_STEP_REJECTED time={} reason={error}", original_state.sim_time);
+                }
                 let failure = self.state.suspension.failure;
-                *self = original;
+                self.state = original_state;
+                self.config.fuel.set_current_kg(original_fuel);
                 self.state.suspension.mechanical_failure = Some(error);
                 // The rejection record belongs to the step, not to the restored state.
                 self.state.suspension.failure = failure;
@@ -404,103 +412,78 @@ impl VehicleSimulator {
         environment: &AeroEnvironment, dt: f64, depth: usize) -> Result<(), String> {
         crate::vertical_diagnostics::interval(self.state.sim_time + dt, dt);
         let _mass_cache = crate::vehicle_mass_properties::StepMassCache::new();
-        let original = self.clone();
-        let mut linear = original.state.linear_acceleration;
-        let mut angular = original.state.angular_acceleration;
+        let original_state = self.state.clone();
+        let original_fuel = self.config.fuel.current_kg;
+        let mut linear = original_state.linear_acceleration;
+        let mut angular = original_state.angular_acceleration;
         let mut reason = "Body/corner iteration did not converge".to_string();
-        // Last trial that failed, kept only so the trace can publish the rejected
-        // candidate next to the accepted state. Diagnostics only; never integrated.
-        let mut failing: Option<VehicleSimulator> = None;
+        let mut failing_state: Option<VehicleState> = None;
         let mut iteration: u16 = 0;
         let mut last_residual = f64::INFINITY;
-        let mut best_candidate: Option<VehicleSimulator> = None;
-        let mut best_residual = f64::INFINITY;
+
         for _ in 0..32 {
             iteration = iteration.saturating_add(1);
-            let mut candidate = original.clone();
-            candidate.state.linear_acceleration = linear;
-            candidate.state.angular_acceleration = angular;
-            candidate.state.suspension.mechanical_failure = None;
-            candidate.state.suspension.failure = None;
-            let (forces, _) = candidate.solve_forces(input, samples, environment, dt);
+            self.state = original_state.clone();
+            self.config.fuel.set_current_kg(original_fuel);
+            self.state.linear_acceleration = linear;
+            self.state.angular_acceleration = angular;
+            self.state.suspension.mechanical_failure = None;
+            self.state.suspension.failure = None;
+            let (forces, _) = self.solve_forces(input, samples, environment, dt);
 
-            if let Some(error) = &candidate.state.suspension.mechanical_failure {
-                if let Some(failure) = candidate.state.suspension.failure.as_mut() {
+            if let Some(error) = &self.state.suspension.mechanical_failure {
+                if let Some(failure) = self.state.suspension.failure.as_mut() {
                     failure.subdivisions = depth as u32;
                     failure.iteration = iteration as u32;
                 }
                 reason = error.clone();
-                failing = Some(candidate);
+                failing_state = Some(self.state.clone());
                 break;
             }
             for axle in 0..2 {
                 crate::vertical_diagnostics::record(crate::vertical_diagnostics::kind::SUBSTEP,
-                    axle, -1, iteration, depth as u16, candidate.state.suspension.axles[axle as usize].residual_m_s,
-                    linear, angular, [&candidate.state.suspension.vertical[0], &candidate.state.suspension.vertical[1],
-                    &candidate.state.suspension.vertical[2], &candidate.state.suspension.vertical[3]]);
+                    axle, -1, iteration, depth as u16, self.state.suspension.axles[axle as usize].residual_m_s,
+                    linear, angular, [&self.state.suspension.vertical[0], &self.state.suspension.vertical[1],
+                    &self.state.suspension.vertical[2], &self.state.suspension.vertical[3]]);
             }
-            if let Err(error) = candidate.integrate_standalone(forces, dt) { reason = error; failing = Some(candidate); break; }
-            let next_linear = candidate.state.linear_acceleration;
-            let next_angular = candidate.state.angular_acceleration;
+            if let Err(error) = self.integrate_standalone(forces, dt) {
+                reason = error;
+                failing_state = Some(self.state.clone());
+                break;
+            }
+            let next_linear = self.state.linear_acceleration;
+            let next_angular = self.state.angular_acceleration;
             let residual = ((next_linear-linear).length() + (next_angular-angular).length()) * dt;
             last_residual = residual;
-            record_iteration(&candidate, iteration, depth as u16, residual, next_linear, next_angular);
-            if residual < best_residual
-                && candidate.state.transform.origin.is_finite()
-                && candidate.state.linear_velocity.is_finite()
-                && candidate.state.angular_velocity.is_finite()
-            {
-                best_residual = residual;
-                best_candidate = Some(candidate.clone());
-            }
+            record_iteration(self, iteration, depth as u16, residual, next_linear, next_angular);
+
             let tol = if depth > 0 { 1e-5 } else { 1e-8 };
             if residual <= tol {
-                *self = candidate;
                 return Ok(());
             }
-            let alpha = if iteration > 4 { 0.25 } else { 0.75 };
-            linear = linear * (1.0 - alpha) + next_linear * alpha;
-            angular = angular * (1.0 - alpha) + next_angular * alpha;
-            failing = Some(candidate);
+            linear = linear * 0.25 + next_linear * 0.75;
+            angular = angular * 0.25 + next_angular * 0.75;
+            failing_state = Some(self.state.clone());
         }
         if depth < 3 && dt * 0.5 >= 0.001 {
-            let mut candidate = original;
-            // A failed subdivision must not lose the record of why: propagate the
-            // diagnostics of the rejected candidate, not only the message.
-            if let Err(error) = candidate.advance_transaction(input, samples, environment, dt*0.5, depth+1) {
-                self.state.suspension.failure = candidate.state.suspension.failure;
+            self.state = original_state.clone();
+            self.config.fuel.set_current_kg(original_fuel);
+            if let Err(error) = self.advance_transaction(input, samples, environment, dt*0.5, depth+1) {
                 return Err(error);
             }
-            if let Err(error) = candidate.advance_transaction(input, samples, environment, dt*0.5, depth+1) {
-                self.state.suspension.failure = candidate.state.suspension.failure;
+            if let Err(error) = self.advance_transaction(input, samples, environment, dt*0.5, depth+1) {
                 return Err(error);
             }
-            *self = candidate;
             return Ok(());
         }
-        // If all iterations and subdivisions exhausted without explicit mechanical failure,
-        // but have a finite best candidate with a reasonable residual (e.g. oscillating between bump stop
-        // states during violent collisions), accept the best candidate instead of rejecting the step.
-        if depth >= 2 || dt * 0.5 < 0.001 {
-            if let Some(candidate) = best_candidate.as_ref() {
-                if candidate.state.suspension.mechanical_failure.is_none()
-                    && best_residual < 100.0
-                    && candidate.state.transform.origin.is_finite()
-                    && candidate.state.linear_velocity.is_finite()
-                    && candidate.state.angular_velocity.is_finite()
-                {
-                    *self = candidate.clone();
-                    return Ok(());
-                }
-            }
-        }
+
 
         // Publish the rejection on `self` before returning: the caller rolls the
         // simulator back to the accepted state, and a failure that only lived in the
         // discarded candidate would be lost exactly when it is needed.
-        let mut failure = failing
+        let mut failure = failing_state
             .as_ref()
-            .and_then(|candidate| candidate.state.suspension.failure)
+            .and_then(|st| st.suspension.failure)
             .or_else(|| self.state.suspension.failure);
         if failure.is_none() {
             // No axle-level rejection: classify the body/corner failure and still
@@ -514,8 +497,8 @@ impl VehicleSimulator {
                 residual_m_s: last_residual,
                 ..crate::vertical_diagnostics::FailureDiagnostics::default()
             };
-            if let Some(candidate) = failing.as_ref() {
-                let vertical = &candidate.state.suspension.vertical;
+            if let Some(st) = failing_state.as_ref() {
+                let vertical = &st.suspension.vertical;
                 let worst = vertical
                     .iter()
                     .enumerate()
@@ -535,21 +518,23 @@ impl VehicleSimulator {
             }
             failure = Some(diagnostics);
         }
-        if let (Some(candidate), Some(failure)) = (failing.as_ref(), failure) {
+        if let (Some(st), Some(failure)) = (failing_state.as_ref(), failure) {
             crate::vertical_diagnostics::record_failure(
                 failure,
                 iteration,
                 depth as u16,
-                candidate.state.linear_acceleration,
-                candidate.state.angular_acceleration,
+                st.linear_acceleration,
+                st.angular_acceleration,
                 [
-                    &candidate.state.suspension.vertical[0],
-                    &candidate.state.suspension.vertical[1],
-                    &candidate.state.suspension.vertical[2],
-                    &candidate.state.suspension.vertical[3],
+                    &st.suspension.vertical[0],
+                    &st.suspension.vertical[1],
+                    &st.suspension.vertical[2],
+                    &st.suspension.vertical[3],
                 ],
             );
         }
+        self.state = original_state;
+        self.config.fuel.set_current_kg(original_fuel);
         self.state.suspension.failure = failure;
         Err(reason)
     }

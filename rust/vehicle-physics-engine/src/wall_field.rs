@@ -210,30 +210,40 @@ impl ConvexPoly2 {
             (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
         }
 
-        let mut lower = Vec::with_capacity(8);
+        let mut lower = [[0.0f64; 2]; 8];
+        let mut lower_len = 0usize;
         for p in &sorted {
-            while lower.len() >= 2 && cross2(lower[lower.len() - 2], lower[lower.len() - 1], *p) <= 1e-9 {
-                lower.pop();
+            while lower_len >= 2 && cross2(lower[lower_len - 2], lower[lower_len - 1], *p) <= 1e-9 {
+                lower_len -= 1;
             }
-            lower.push(*p);
+            if lower_len < 8 {
+                lower[lower_len] = *p;
+                lower_len += 1;
+            }
         }
 
-        let mut upper = Vec::with_capacity(8);
+        let mut upper = [[0.0f64; 2]; 8];
+        let mut upper_len = 0usize;
         for p in sorted.iter().rev() {
-            while upper.len() >= 2 && cross2(upper[upper.len() - 2], upper[upper.len() - 1], *p) <= 1e-9 {
-                upper.pop();
+            while upper_len >= 2 && cross2(upper[upper_len - 2], upper[upper_len - 1], *p) <= 1e-9 {
+                upper_len -= 1;
             }
-            upper.push(*p);
+            if upper_len < 8 {
+                upper[upper_len] = *p;
+                upper_len += 1;
+            }
         }
 
-        lower.pop();
-        upper.pop();
-        lower.extend(upper);
+        if lower_len > 0 { lower_len -= 1; }
+        if upper_len > 0 { upper_len -= 1; }
 
-        let n = lower.len().min(8);
         let mut v = [[0.0; 2]; 8];
-        for i in 0..n {
-            v[i] = lower[i];
+        let mut n = 0usize;
+        for i in 0..lower_len {
+            if n < 8 { v[n] = lower[i]; n += 1; }
+        }
+        for i in 0..upper_len {
+            if n < 8 { v[n] = upper[i]; n += 1; }
         }
 
         Self { v, n, y_min, y_max }
@@ -552,42 +562,30 @@ impl WallField {
     }
 
     /// Queries contact points and signed gaps against a convex polygon with prediction margin.
-    pub fn query_poly(
+    /// Queries candidate wall segment indices overlapping bounding box [q_min_x, q_min_z] .. [q_max_x, q_max_z].
+    #[inline]
+    pub fn query_candidate_walls(&self, q_min_x: f64, q_min_z: f64, q_max_x: f64, q_max_z: f64, out: &mut Vec<u32>) {
+        self.grid.query_range(q_min_x, q_min_z, q_max_x, q_max_z, out);
+    }
+
+    /// Queries contact points and signed gaps against a convex polygon using pre-queried candidate wall segments.
+    pub fn query_poly_with_candidates(
         &self,
         poly: &ConvexPoly2,
         prediction: f64,
         side_memory: &mut WallSideMemory,
         car_ref_pos: Vec3,
         current_time_s: f64,
-        candidates_scratch: &mut Vec<u32>,
+        candidates: &[u32],
         out: &mut Vec<WallContact>,
     ) {
-        if poly.n < 3 || self.segments.is_empty() {
+        if poly.n < 3 || self.segments.is_empty() || candidates.is_empty() {
             return;
         }
 
-        let mut p_min_x = f64::INFINITY;
-        let mut p_min_z = f64::INFINITY;
-        let mut p_max_x = f64::NEG_INFINITY;
-        let mut p_max_z = f64::NEG_INFINITY;
-
-        for i in 0..poly.n {
-            p_min_x = p_min_x.min(poly.v[i][0]);
-            p_min_z = p_min_z.min(poly.v[i][1]);
-            p_max_x = p_max_x.max(poly.v[i][0]);
-            p_max_z = p_max_z.max(poly.v[i][1]);
-        }
-
         let pred = prediction.max(0.01);
-        self.grid.query_range(
-            p_min_x - pred,
-            p_min_z - pred,
-            p_max_x + pred,
-            p_max_z + pred,
-            candidates_scratch,
-        );
 
-        for &wall_idx in candidates_scratch.iter() {
+        for &wall_idx in candidates.iter() {
             let seg = &self.segments[wall_idx as usize];
 
             // 1. Height range overlap
@@ -639,7 +637,7 @@ impl WallField {
                             second_pt = deepest_pt;
                             min_gap = gap;
                             deepest_pt = pt;
-                        } else if gap < second_gap && (pt - deepest_pt).length() > 0.05 {
+                        } else if gap < second_gap {
                             second_gap = gap;
                             second_pt = pt;
                         }
@@ -671,5 +669,52 @@ impl WallField {
                 }
             }
         }
+    }
+
+    /// Queries contact points and signed gaps against a convex polygon with prediction margin.
+    pub fn query_poly(
+        &self,
+        poly: &ConvexPoly2,
+        prediction: f64,
+        side_memory: &mut WallSideMemory,
+        car_ref_pos: Vec3,
+        current_time_s: f64,
+        candidates_scratch: &mut Vec<u32>,
+        out: &mut Vec<WallContact>,
+    ) {
+        if poly.n < 3 || self.segments.is_empty() {
+            return;
+        }
+
+        let mut p_min_x = f64::INFINITY;
+        let mut p_min_z = f64::INFINITY;
+        let mut p_max_x = f64::NEG_INFINITY;
+        let mut p_max_z = f64::NEG_INFINITY;
+
+        for i in 0..poly.n {
+            p_min_x = p_min_x.min(poly.v[i][0]);
+            p_min_z = p_min_z.min(poly.v[i][1]);
+            p_max_x = p_max_x.max(poly.v[i][0]);
+            p_max_z = p_max_z.max(poly.v[i][1]);
+        }
+
+        let pred = prediction.max(0.01);
+        self.grid.query_range(
+            p_min_x - pred,
+            p_min_z - pred,
+            p_max_x + pred,
+            p_max_z + pred,
+            candidates_scratch,
+        );
+
+        self.query_poly_with_candidates(
+            poly,
+            prediction,
+            side_memory,
+            car_ref_pos,
+            current_time_s,
+            candidates_scratch,
+            out,
+        );
     }
 }

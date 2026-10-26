@@ -1167,24 +1167,10 @@ impl OpenFormulaSimulation {
             return 0.0;
         }
         let basis = state.transform.basis;
-        let zero = crate::simplified_body_coupling::body_accelerations(
-            config,
-            state,
-            crate::simulation::ForceTorqueOutput::default(),
-        );
-        let unit = crate::simplified_body_coupling::body_accelerations(
-            config,
-            state,
-            crate::simulation::ForceTorqueOutput {
-                force_world: normal,
-                torque_world: arm.cross(normal),
-            },
-        );
-        let (Ok((a0, alpha0)), Ok((a1, alpha1))) = (zero, unit) else {
-            return 0.0;
+        let (response, angular_response) = match crate::simplified_body_coupling::BodySchurMassMatrix::build(config, state) {
+            Ok(s) => s.response(normal, arm.cross(normal)),
+            Err(_) => return 0.0,
         };
-        let response = a1 - a0;
-        let angular_response = alpha1 - alpha0;
         let inverse_effective_mass = (response + angular_response.cross(arm)).dot(normal);
         if inverse_effective_mass <= 1e-9 {
             return 0.0;
@@ -1220,6 +1206,23 @@ impl OpenFormulaSimulation {
         let car_pos = state.transform.origin;
         let basis = state.transform.basis;
         let current_time_s = state.sim_time;
+
+        // Speculative prediction distance: covers vehicle movement over step duration plus margin
+        let speed = state.linear_velocity.length();
+        let prediction = (speed * dt * 1.5 + 0.06).clamp(0.06, 0.40);
+        let check_radius = 3.5 + prediction;
+        let mut candidates_scratch = Vec::with_capacity(32);
+        world.walls().query_candidate_walls(
+            car_pos.x - check_radius,
+            car_pos.z - check_radius,
+            car_pos.x + check_radius,
+            car_pos.z + check_radius,
+            &mut candidates_scratch,
+        );
+
+        if candidates_scratch.is_empty() {
+            return false;
+        }
 
         // Build 5 body box footprints + 4 oriented wheel footprints
         const BODY_BOXES: &[(&str, Vec3, Vec3)] = &[
@@ -1285,21 +1288,16 @@ impl OpenFormulaSimulation {
             ));
         }
 
-        // Speculative prediction distance: covers vehicle movement over step duration plus margin
-        let speed = state.linear_velocity.length();
-        let prediction = (speed * dt * 1.5 + 0.06).clamp(0.06, 0.40);
-
         let mut raw_contacts: Vec<crate::wall_field::WallContact> = Vec::with_capacity(24);
-        let mut candidates_scratch = Vec::with_capacity(32);
 
         for poly in &polys {
-            world.walls().query_poly(
+            world.walls().query_poly_with_candidates(
                 poly,
                 prediction,
                 &mut self.wall_side_memory,
                 car_pos,
                 current_time_s,
-                &mut candidates_scratch,
+                &candidates_scratch,
                 &mut raw_contacts,
             );
         }
@@ -1345,12 +1343,10 @@ impl OpenFormulaSimulation {
             wall_index: u32,
         }
 
-        let zero_acc = crate::simplified_body_coupling::body_accelerations(
-            config,
-            state,
-            crate::simulation::ForceTorqueOutput::default(),
-        );
-        let Ok((a0, alpha0)) = zero_acc else { return false; };
+        let schur = match crate::simplified_body_coupling::BodySchurMassMatrix::build(config, state) {
+            Ok(s) => s,
+            Err(_) => return false,
+        };
 
         let mut constraints: Vec<WallConstraint> = Vec::with_capacity(contacts.len());
 
@@ -1372,53 +1368,29 @@ impl OpenFormulaSimulation {
                 -c.gap_m / dt
             };
 
-            // Compute normal effective mass Kn
-            let unit_n = crate::simplified_body_coupling::body_accelerations(
-                config,
-                state,
-                crate::simulation::ForceTorqueOutput {
-                    force_world: normal,
-                    torque_world: arm.cross(normal),
-                },
-            );
-            // Compute tangential effective mass Kt
-            let unit_t = crate::simplified_body_coupling::body_accelerations(
-                config,
-                state,
-                crate::simulation::ForceTorqueOutput {
-                    force_world: tangent,
-                    torque_world: arm.cross(tangent),
-                },
-            );
+            let (resp_n, ang_resp_n) = schur.response(normal, arm.cross(normal));
+            let (resp_t, ang_resp_t) = schur.response(tangent, arm.cross(tangent));
+            let kn = (resp_n + ang_resp_n.cross(arm)).dot(normal);
+            let kt = (resp_t + ang_resp_t.cross(arm)).dot(tangent);
 
-            if let (Ok((an, alphan)), Ok((at, alphat))) = (unit_n, unit_t) {
-                let resp_n = an - a0;
-                let ang_resp_n = alphan - alpha0;
-                let kn = (resp_n + ang_resp_n.cross(arm)).dot(normal);
-
-                let resp_t = at - a0;
-                let ang_resp_t = alphat - alpha0;
-                let kt = (resp_t + ang_resp_t.cross(arm)).dot(tangent);
-
-                if kn > 1e-9 && kt > 1e-9 {
-                    constraints.push(WallConstraint {
-                        normal,
-                        tangent,
-                        arm,
-                        gap_m: c.gap_m,
-                        target_vn,
-                        kn,
-                        kt,
-                        response_n: resp_n,
-                        ang_response_n: ang_resp_n,
-                        response_t: resp_t,
-                        ang_response_t: ang_resp_t,
-                        accum_impulse_n: 0.0,
-                        accum_impulse_t: 0.0,
-                        max_friction: c.friction.min(0.30),
-                        wall_index: c.wall_index,
-                    });
-                }
+            if kn > 1e-9 && kt > 1e-9 {
+                constraints.push(WallConstraint {
+                    normal,
+                    tangent,
+                    arm,
+                    gap_m: c.gap_m,
+                    target_vn,
+                    kn,
+                    kt,
+                    response_n: resp_n,
+                    ang_response_n: ang_resp_n,
+                    response_t: resp_t,
+                    ang_response_t: ang_resp_t,
+                    accum_impulse_n: 0.0,
+                    accum_impulse_t: 0.0,
+                    max_friction: c.friction.min(0.30),
+                    wall_index: c.wall_index,
+                });
             }
         }
 
@@ -1535,7 +1507,9 @@ impl OpenFormulaSimulation {
         let dt = duration_seconds.clamp(1.0 / 1000.0, 1.0 / 20.0);
         // Host identity; each nested solve subsequently sets its own endpoint and duration.
         crate::vertical_diagnostics::begin_step(self.simulator.state.sim_time, dt, self.sequence);
-        let mut accepted_before_step = self.clone();
+        let _mass_cache = crate::vehicle_mass_properties::StepMassCache::new();
+        let mut accepted_state = self.simulator.state.clone();
+        let mut accepted_fuel = self.simulator.config.fuel.current_kg;
         self.counters.wheel_queries = 0;
         self.counters.wheel_hits = 0;
         self.counters.floor_queries = 0;
@@ -1585,7 +1559,8 @@ impl OpenFormulaSimulation {
         // position depenetration (zero kinetic energy injection, no bounce or pinball oscillation).
         let any_barrier_collision = self.resolve_obstacle_wall_contacts(dt);
         if any_barrier_collision {
-            accepted_before_step = self.clone();
+            accepted_state = self.simulator.state.clone();
+            accepted_fuel = self.simulator.config.fuel.current_kg;
         }
 
         // 3. Ground sampling for this step: 12 wheel rays + 2 floor probes, from the
@@ -1657,10 +1632,10 @@ impl OpenFormulaSimulation {
             }
             let rejected_time_s = self.simulator.state.sim_time;
             crate::vertical_diagnostics::interval(
-                accepted_before_step.simulator.state.sim_time,
+                accepted_state.sim_time,
                 0.0,
             );
-            let accepted = &accepted_before_step.simulator.state;
+            let accepted = &accepted_state;
             crate::vertical_diagnostics::record(
                 crate::vertical_diagnostics::kind::RESTORED,
                 -1,
@@ -1678,7 +1653,8 @@ impl OpenFormulaSimulation {
                 ],
             );
             crate::vertical_diagnostics::dump_rejection(failure, rejected_time_s);
-            *self = accepted_before_step;
+            self.simulator.state = accepted_state;
+            self.simulator.config.fuel.set_current_kg(accepted_fuel);
             self.counters.rejected_steps += 1;
             self.last_error = error;
             self.last_failure = failure;
@@ -1725,10 +1701,10 @@ impl OpenFormulaSimulation {
             );
             let rejected_time_s = self.simulator.state.sim_time;
             crate::vertical_diagnostics::interval(
-                accepted_before_step.simulator.state.sim_time,
+                accepted_state.sim_time,
                 0.0,
             );
-            let accepted = &accepted_before_step.simulator.state;
+            let accepted = &accepted_state;
             crate::vertical_diagnostics::record(
                 crate::vertical_diagnostics::kind::RESTORED,
                 -1,
@@ -1746,7 +1722,8 @@ impl OpenFormulaSimulation {
                 ],
             );
             crate::vertical_diagnostics::dump_rejection(failure, rejected_time_s);
-            *self = accepted_before_step;
+            self.simulator.state = accepted_state;
+            self.simulator.config.fuel.set_current_kg(accepted_fuel);
             self.counters.rejected_steps += 1;
             self.failed = true;
             self.last_error =
