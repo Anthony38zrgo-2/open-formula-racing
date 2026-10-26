@@ -22,6 +22,7 @@ RustPhysicsLibrary::RustPhysicsLibrary()
       backendMask(nullptr), setupDocument(nullptr), setupFields(nullptr), fuelDensity(nullptr), vehicleSpecs(nullptr), applySetup(nullptr),
       resetSetup(nullptr), pitFuel(nullptr), pitTires(nullptr), vehicleGeometry(nullptr),
       traceShutdown(nullptr), traceConfigure(nullptr), traceDump(nullptr), traceBuffered(nullptr), effectiveSetup(nullptr),
+      loadTrackGroundMeshV2(nullptr), loadTrackVisualWorld(nullptr), releaseTrackGroundMesh(nullptr), trackObstacleTriangles(nullptr),
       _module(nullptr)
 {
 }
@@ -181,6 +182,10 @@ bool RustPhysicsLibrary::load(const std::string& library_path)
     // refactor still loads and the adapter falls back to the single-argument loader.
     loadTrackGroundMeshV2 = reinterpret_cast<LoadTrackGroundMeshV2Fn>(
         resolve(_module, "ofp_load_track_ground_mesh_v2"));
+    loadTrackVisualWorld = reinterpret_cast<LoadTrackVisualWorldFn>(
+        resolve(_module, "ofp_load_track_visual_world"));
+    trackObstacleTriangles = reinterpret_cast<TrackObstacleTrianglesFn>(
+        resolve(_module, "ofp_track_obstacle_triangles"));
     releaseTrackGroundMesh = reinterpret_cast<ReleaseTrackGroundMeshFn>(
         resolve(_module, "ofp_release_track_ground_mesh"));
     worldGeneration = reinterpret_cast<WorldGenerationFn>(resolve(_module, "ofp_world_generation"));
@@ -242,7 +247,9 @@ void RustPhysicsLibrary::unload()
     traceBuffered = nullptr;
     effectiveSetup = nullptr;
     loadTrackGroundMeshV2 = nullptr;
+    loadTrackVisualWorld = nullptr;
     releaseTrackGroundMesh = nullptr;
+    trackObstacleTriangles = nullptr;
     worldGeneration = nullptr;
     worldInstallCount = nullptr;
     worldIdentityJson = nullptr;

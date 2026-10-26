@@ -131,11 +131,32 @@ pub struct GroundHit {
     pub rolling_resistance: f64,
 }
 
+/// Physical surface properties of one obstacle triangle.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ObstacleMaterial {
+    pub friction: f64,
+    pub restitution: f64,
+    pub damage: f64,
+}
+
+/// Contact hit against a solid obstacle.
+#[derive(Debug, Clone, Copy)]
+pub struct ObstacleHit {
+    pub point: Vec3,
+    pub normal: Vec3,
+    pub penetration_m: f64,
+    pub friction: f64,
+    pub restitution: f64,
+    pub damage: f64,
+}
+
 /// Immutable, integrator-free collision geometry.
 #[derive(Debug)]
 pub struct CollisionWorld {
     mesh: Option<SharedShape>,
     materials: Vec<TriangleMaterial>,
+    obstacles_mesh: Option<SharedShape>,
+    obstacles_materials: Vec<ObstacleMaterial>,
     identity: WorldIdentity,
 }
 
@@ -332,6 +353,8 @@ impl CollisionWorld {
         Ok(Self {
             mesh: Some(SharedShape::new(mesh)),
             materials: materials.to_vec(),
+            obstacles_mesh: None,
+            obstacles_materials: Vec::new(),
             identity: WorldIdentity {
                 circuit_id: circuit_id.to_string(),
                 revision,
@@ -344,6 +367,203 @@ impl CollisionWorld {
                 revision_note: note,
             },
         })
+    }
+
+    /// Loads the visual track model (.acc or .ac) and automatically classifies driveable
+    /// ground triangles and solid obstacle triangles into dual Parry3D QBVH acceleration structures.
+    pub fn load_visual_track(
+        path: &str,
+        circuit_id: Option<&str>,
+        revision: Option<u32>,
+    ) -> Result<Self, String> {
+        let track = crate::ac3d_track::load_or_parse_visual_track(path, circuit_id, revision)?;
+        Self::build_visual(
+            &track.circuit_id,
+            track.revision,
+            path,
+            &track.driveable,
+            &track.obstacles,
+        )
+    }
+
+    fn build_visual(
+        circuit_id: &str,
+        revision: u32,
+        source_path: &str,
+        driveable: &[crate::ac3d_track::DriveableTriangle],
+        obstacles: &[crate::ac3d_track::ObstacleTriangle],
+    ) -> Result<Self, String> {
+        if driveable.is_empty() {
+            return Err("visual track has no driveable triangles".to_string());
+        }
+
+        let mut d_vertices: Vec<Point3<f64>> = Vec::with_capacity(driveable.len() * 3);
+        let mut d_indices: Vec<[u32; 3]> = Vec::with_capacity(driveable.len());
+        let mut d_materials = Vec::with_capacity(driveable.len());
+        let mut aabb_min = Vec3::new(f64::INFINITY, f64::INFINITY, f64::INFINITY);
+        let mut aabb_max = Vec3::new(f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
+
+        let mut hasher = Sha256::new();
+        hasher.update(b"FORMULA_VISUAL_TRACK_1");
+        hasher.update((driveable.len() as u64).to_be_bytes());
+        hasher.update((obstacles.len() as u64).to_be_bytes());
+
+        for (index, tri) in driveable.iter().enumerate() {
+            let base = (index * 3) as u32;
+            d_indices.push([base, base + 1, base + 2]);
+            d_materials.push(TriangleMaterial::new(tri.friction, tri.rolling_resistance));
+            for corner in &tri.vertices {
+                d_vertices.push(Point3::new(corner.x, corner.y, corner.z));
+                aabb_min = Vec3::new(
+                    aabb_min.x.min(corner.x),
+                    aabb_min.y.min(corner.y),
+                    aabb_min.z.min(corner.z),
+                );
+                aabb_max = Vec3::new(
+                    aabb_max.x.max(corner.x),
+                    aabb_max.y.max(corner.y),
+                    aabb_max.z.max(corner.z),
+                );
+                hasher.update(corner.x.to_bits().to_be_bytes());
+                hasher.update(corner.y.to_bits().to_be_bytes());
+                hasher.update(corner.z.to_bits().to_be_bytes());
+            }
+        }
+
+        let d_mesh = TriMesh::new(d_vertices, d_indices)
+            .map_err(|e| format!("cannot build ground TriMesh: {e:?}"))?;
+
+        let (obs_mesh, obs_materials) = if !obstacles.is_empty() {
+            let mut o_vertices: Vec<Point3<f64>> = Vec::with_capacity(obstacles.len() * 3);
+            let mut o_indices: Vec<[u32; 3]> = Vec::with_capacity(obstacles.len());
+            let mut o_materials = Vec::with_capacity(obstacles.len());
+            for (index, tri) in obstacles.iter().enumerate() {
+                let base = (index * 3) as u32;
+                o_indices.push([base, base + 1, base + 2]);
+                o_materials.push(ObstacleMaterial {
+                    friction: tri.friction,
+                    restitution: tri.restitution,
+                    damage: tri.damage,
+                });
+                for corner in &tri.vertices {
+                    o_vertices.push(Point3::new(corner.x, corner.y, corner.z));
+                    aabb_min = Vec3::new(
+                        aabb_min.x.min(corner.x),
+                        aabb_min.y.min(corner.y),
+                        aabb_min.z.min(corner.z),
+                    );
+                    aabb_max = Vec3::new(
+                        aabb_max.x.max(corner.x),
+                        aabb_max.y.max(corner.y),
+                        aabb_max.z.max(corner.z),
+                    );
+                    hasher.update(corner.x.to_bits().to_be_bytes());
+                    hasher.update(corner.y.to_bits().to_be_bytes());
+                    hasher.update(corner.z.to_bits().to_be_bytes());
+                }
+            }
+            let mesh = TriMesh::new(o_vertices, o_indices)
+                .map_err(|e| format!("cannot build obstacle TriMesh: {e:?}"))?;
+            (Some(SharedShape::new(mesh)), o_materials)
+        } else {
+            (None, Vec::new())
+        };
+
+        let geometry_sha256: String = hasher
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+
+        Ok(Self {
+            mesh: Some(SharedShape::new(d_mesh)),
+            materials: d_materials,
+            obstacles_mesh: obs_mesh,
+            obstacles_materials: obs_materials,
+            identity: WorldIdentity {
+                circuit_id: circuit_id.to_string(),
+                revision,
+                source: "visual_track_model",
+                source_path: source_path.to_string(),
+                geometry_sha256,
+                triangle_count: driveable.len(),
+                aabb_min,
+                aabb_max,
+                revision_note: format!("obstacles: {}", obstacles.len()),
+            },
+        })
+    }
+
+    pub fn obstacles_mesh(&self) -> Option<&SharedShape> {
+        self.obstacles_mesh.as_ref()
+    }
+
+    pub fn obstacle_triangle_count(&self) -> usize {
+        self.obstacles_materials.len()
+    }
+
+    pub fn has_obstacles(&self) -> bool {
+        self.obstacles_mesh.is_some()
+    }
+
+    /// Queries the obstacle mesh against a body shape (e.g. OBB or sphere) at `shape_pose`.
+    /// Returns the contact hit if colliding or within `prediction` distance.
+    pub fn query_obstacle_contact(
+        &self,
+        shape_pose: &Isometry3<f64>,
+        shape: &dyn parry3d_f64::shape::Shape,
+        prediction: f64,
+    ) -> Option<ObstacleHit> {
+        let obs_mesh = self.obstacles_mesh.as_ref()?;
+        let dispatcher = parry3d_f64::query::DefaultQueryDispatcher;
+        let mut generated: Vec<parry3d_f64::query::ContactManifold<(), ()>> = Vec::new();
+        let mut workspace = None;
+        let prediction_dist = prediction.max(0.001);
+
+        // Query contact manifolds between obstacles_mesh (at identity) and shape (at shape_pose)
+        parry3d_f64::query::PersistentQueryDispatcher::contact_manifolds(
+            &dispatcher,
+            shape_pose,
+            obs_mesh.as_ref(),
+            shape,
+            prediction_dist,
+            &mut generated,
+            &mut workspace,
+        )
+        .ok()?;
+
+        let mut deepest: Option<ObstacleHit> = None;
+        for manifold in generated {
+            // manifold.local_n1 is the normal on obs_mesh pointing toward shape
+            let normal = Vec3::new(
+                manifold.local_n1.x,
+                manifold.local_n1.y,
+                manifold.local_n1.z,
+            );
+            let normal = if normal.length() > 1e-9 {
+                normal.normalized()
+            } else {
+                Vec3::UP
+            };
+
+            for pt in manifold.points {
+                let penetration_m = -pt.dist;
+                let point = Vec3::new(pt.local_p1.x, pt.local_p1.y, pt.local_p1.z);
+                if deepest.is_none()
+                    || penetration_m > deepest.as_ref().map(|d| d.penetration_m).unwrap_or(0.0)
+                {
+                    deepest = Some(ObstacleHit {
+                        point,
+                        normal,
+                        penetration_m,
+                        friction: 0.50,
+                        restitution: 0.15,
+                        damage: 1.0,
+                    });
+                }
+            }
+        }
+        deepest
     }
 
     pub fn identity(&self) -> &WorldIdentity {
@@ -715,5 +935,65 @@ mod tests {
             CollisionWorld::load_transfer_file(path.to_str().unwrap(), None, None).unwrap_err();
         assert!(error.contains("no triangles"), "{error}");
         let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn obstacle_contact_detects_box_penetration() {
+        let ground = vec![
+            crate::ac3d_track::DriveableTriangle {
+                vertices: [
+                    Vec3::new(-10.0, 0.0, -10.0),
+                    Vec3::new(10.0, 0.0, -10.0),
+                    Vec3::new(10.0, 0.0, 10.0),
+                ],
+                friction: 1.0,
+                rolling_resistance: 0.002,
+            },
+            crate::ac3d_track::DriveableTriangle {
+                vertices: [
+                    Vec3::new(-10.0, 0.0, -10.0),
+                    Vec3::new(10.0, 0.0, 10.0),
+                    Vec3::new(-10.0, 0.0, 10.0),
+                ],
+                friction: 1.0,
+                rolling_resistance: 0.002,
+            },
+        ];
+        // Vertical wall along Z at X = 5.0
+        let wall = vec![
+            crate::ac3d_track::ObstacleTriangle {
+                vertices: [
+                    Vec3::new(5.0, 0.0, -10.0),
+                    Vec3::new(5.0, 2.0, -10.0),
+                    Vec3::new(5.0, 2.0, 10.0),
+                ],
+                friction: 0.50,
+                restitution: 0.15,
+                damage: 1.0,
+            },
+            crate::ac3d_track::ObstacleTriangle {
+                vertices: [
+                    Vec3::new(5.0, 0.0, -10.0),
+                    Vec3::new(5.0, 2.0, 10.0),
+                    Vec3::new(5.0, 0.0, 10.0),
+                ],
+                friction: 0.50,
+                restitution: 0.15,
+                damage: 1.0,
+            },
+        ];
+        let world = CollisionWorld::build_visual("test", 1, "test.acc", &ground, &wall).unwrap();
+        assert!(world.has_obstacles());
+        assert_eq!(world.obstacle_triangle_count(), 2);
+
+        // Test a cuboid at X = 5.2 with half-extent 0.5 (penetrating wall at X = 5.0 from the front face by 0.3m)
+        let box_shape = parry3d_f64::shape::Cuboid::new(parry3d_f64::na::Vector3::new(0.5, 0.5, 0.5));
+        let box_pose = parry3d_f64::na::Isometry3::translation(5.2, 1.0, 0.0);
+        let hit = world
+            .query_obstacle_contact(&box_pose, &box_shape, 0.1)
+            .expect("must hit wall");
+        assert!(hit.penetration_m > 0.1, "penetration was {}", hit.penetration_m);
+        // Normal pointing from wall toward box (+X direction)
+        assert!(hit.normal.x > 0.9, "normal was {:?}", hit.normal);
     }
 }

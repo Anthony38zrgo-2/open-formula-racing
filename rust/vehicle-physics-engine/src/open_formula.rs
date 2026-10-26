@@ -14,6 +14,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
+use parry3d_f64::na::{Isometry3, Matrix3, Rotation3, Translation3, UnitQuaternion, Vector3};
 use serde_json::Value;
 
 use crate::collision_world::{CollisionWorld, GroundHit};
@@ -63,6 +64,19 @@ pub fn install_track_ground_mesh(
     revision: Option<u32>,
 ) -> Result<(crate::collision_world::WorldIdentity, u64), String> {
     let world = CollisionWorld::load_transfer_file(path, circuit_id, revision)?;
+    let (generation, identity) = crate::collision_world::install_world(world);
+    Ok((identity, generation))
+}
+
+/// Installs the session world directly from the visual track model (.acc or .ac).
+/// The exact 3D geometry rendered by Speed Dreams is automatically classified into
+/// driveable ground and solid obstacle meshes.
+pub fn install_track_visual_world(
+    path: &str,
+    circuit_id: Option<&str>,
+    revision: Option<u32>,
+) -> Result<(crate::collision_world::WorldIdentity, u64), String> {
+    let world = CollisionWorld::load_visual_track(path, circuit_id, revision)?;
     let (generation, identity) = crate::collision_world::install_world(world);
     Ok((identity, generation))
 }
@@ -1190,6 +1204,119 @@ impl OpenFormulaSimulation {
         impulse
     }
 
+    /// Applies a rigid impulse with Coulomb friction and Baumgarte depenetration at an obstacle contact point.
+    fn apply_body_impulse_with_friction(
+        &mut self,
+        point_world: Vec3,
+        normal_world: Vec3,
+        restitution: f64,
+        friction_coeff: f64,
+        penetration_m: f64,
+        dt: f64,
+    ) -> f64 {
+        let state = &mut self.simulator.state;
+        let config = &self.simulator.config;
+        let normal = if normal_world.length() > 1e-9 {
+            normal_world.normalized()
+        } else {
+            Vec3::UP
+        };
+        let com_local = crate::simulation::center_of_mass_local_for_suspension_backend(
+            config,
+            state.suspension.backend,
+        );
+        let com = state.transform.transform_point(com_local);
+        let arm = point_world - com;
+        let point_velocity = state.linear_velocity + state.angular_velocity.cross(arm);
+        let normal_velocity = point_velocity.dot(normal);
+
+        // Soft Baumgarte position depenetration bias velocity
+        let bias_velocity = if penetration_m > 0.002 {
+            (penetration_m.min(0.08) * 0.25 / dt.max(0.001)).min(5.0)
+        } else {
+            0.0
+        };
+
+        let closing_velocity = normal_velocity - bias_velocity;
+        if closing_velocity >= 0.0 && penetration_m <= 0.002 {
+            return 0.0;
+        }
+
+        let basis = state.transform.basis;
+        let zero = crate::simplified_body_coupling::body_accelerations(
+            config,
+            state,
+            crate::simulation::ForceTorqueOutput::default(),
+        );
+        let unit_n = crate::simplified_body_coupling::body_accelerations(
+            config,
+            state,
+            crate::simulation::ForceTorqueOutput {
+                force_world: normal,
+                torque_world: arm.cross(normal),
+            },
+        );
+        let (Ok((a0, alpha0)), Ok((a1, alpha1))) = (zero, unit_n) else {
+            return 0.0;
+        };
+        let response_n = a1 - a0;
+        let angular_response_n = alpha1 - alpha0;
+        let inverse_effective_mass_n = (response_n + angular_response_n.cross(arm)).dot(normal);
+        if inverse_effective_mass_n <= 1e-9 {
+            return 0.0;
+        }
+
+        let normal_impulse = (-(1.0 + restitution.clamp(0.0, 0.3)) * normal_velocity + bias_velocity)
+            / inverse_effective_mass_n;
+        if !normal_impulse.is_finite() || normal_impulse <= 0.0 {
+            return 0.0;
+        }
+
+        let arms =
+            WheelIndex::ALL.map(|w| crate::simplified_body_coupling::hub_arm(config, state, w));
+        state.linear_velocity += response_n * normal_impulse;
+        state.angular_velocity += angular_response_n * normal_impulse;
+        for wheel in WheelIndex::ALL {
+            state.suspension.wheels[wheel as usize].unsprung_velocity_m_s -=
+                (response_n + angular_response_n.cross(arms[wheel as usize])).dot(basis.y) * normal_impulse;
+        }
+
+        // Tangential Coulomb friction impulse
+        let tangential_velocity = point_velocity - normal * normal_velocity;
+        let tan_speed = tangential_velocity.length();
+        if tan_speed > 1e-4 && friction_coeff > 0.0 {
+            let tan_dir = tangential_velocity * (1.0 / tan_speed);
+            let unit_t = crate::simplified_body_coupling::body_accelerations(
+                config,
+                state,
+                crate::simulation::ForceTorqueOutput {
+                    force_world: tan_dir,
+                    torque_world: arm.cross(tan_dir),
+                },
+            );
+            if let Ok((a_t, alpha_t)) = unit_t {
+                let response_t = a_t - a0;
+                let angular_response_t = alpha_t - alpha0;
+                let inv_mass_t = (response_t + angular_response_t.cross(arm)).dot(tan_dir);
+                if inv_mass_t > 1e-9 {
+                    let desired_stick_impulse = -(tan_speed / inv_mass_t);
+                    let max_coulomb = friction_coeff * normal_impulse;
+                    let tan_impulse = desired_stick_impulse.clamp(-max_coulomb, max_coulomb);
+                    state.linear_velocity += response_t * tan_impulse;
+                    state.angular_velocity += angular_response_t * tan_impulse;
+                }
+            }
+        }
+
+        // Soft position correction to eliminate residual interpenetration
+        if penetration_m > 0.005 {
+            let push_dist = (penetration_m * 0.3).min(0.02);
+            state.transform.origin += normal * push_dist;
+        }
+
+        normal_impulse
+    }
+
     pub fn step(
         &mut self,
         input: &OfpControlInput,
@@ -1280,6 +1407,109 @@ impl OpenFormulaSimulation {
             self.last_barrier_impulse_ns += impulse.max(0.0);
             if contact_index < 32 {
                 self.last_body_contact_impulse[contact_index] = impulse.max(0.0);
+            }
+        }
+
+        // Authoritative 3D vehicle body and wheel obstacle collision directly against
+        // the visual track obstacle mesh (walls, fences, pit boxes, garages, tire walls).
+        if let Some(world) = self.world.clone() {
+            if world.has_obstacles() {
+                let car_pos = self.simulator.state.transform.origin;
+                let car_basis = self.simulator.state.transform.basis;
+                let matrix = Matrix3::from_columns(&[
+                    Vector3::new(car_basis.x.x, car_basis.x.y, car_basis.x.z),
+                    Vector3::new(car_basis.y.x, car_basis.y.y, car_basis.y.z),
+                    Vector3::new(car_basis.z.x, car_basis.z.y, car_basis.z.z),
+                ]);
+                let car_rot = UnitQuaternion::from_rotation_matrix(&Rotation3::from_matrix_unchecked(matrix));
+
+                // Broadphase: fast vehicle bounding sphere vs obstacles
+                let car_bounding_ball = parry3d_f64::shape::Ball::new(2.8);
+                let car_iso = Isometry3::from_parts(
+                    Translation3::from(Vector3::new(car_pos.x, car_pos.y, car_pos.z)),
+                    car_rot,
+                );
+
+                if world.query_obstacle_contact(&car_iso, &car_bounding_ball, 0.05).is_some() {
+                    // Check the 5 standard body collision boxes
+                    const BODY_BOXES: &[(&str, Vec3, Vec3)] = &[
+                        ("monocoque", Vec3::new(0.0, -0.02, -0.35), Vec3::new(0.28, 0.22, 0.80)),
+                        ("engine_transmission", Vec3::new(0.0, -0.03, 0.80), Vec3::new(0.30, 0.22, 0.60)),
+                        ("floor", Vec3::new(0.0, -0.26, 0.0), Vec3::new(0.64, 0.02, 1.28)),
+                        ("front_wing", Vec3::new(0.0, -0.17, -1.80), Vec3::new(0.80, 0.04, 0.17)),
+                        ("rear_wing", Vec3::new(0.0, 0.45, 1.70), Vec3::new(0.70, 0.04, 0.13)),
+                    ];
+
+                    for (_ident, center_local, half_extents) in BODY_BOXES {
+                        let center_world = self.simulator.state.transform.transform_point(*center_local);
+                        let box_iso = Isometry3::from_parts(
+                            Translation3::from(Vector3::new(center_world.x, center_world.y, center_world.z)),
+                            car_rot,
+                        );
+                        let box_shape = parry3d_f64::shape::Cuboid::new(Vector3::new(
+                            half_extents.x,
+                            half_extents.y,
+                            half_extents.z,
+                        ));
+
+                        if let Some(hit) = world.query_obstacle_contact(&box_iso, &box_shape, 0.02) {
+                            if hit.penetration_m > 0.0 {
+                                let impulse = self.apply_body_impulse_with_friction(
+                                    hit.point,
+                                    hit.normal,
+                                    hit.restitution,
+                                    hit.friction,
+                                    hit.penetration_m,
+                                    dt,
+                                );
+                                if impulse > 0.0 {
+                                    self.last_barrier_impulse_ns += impulse;
+                                    let idx = (self.last_body_contact_count as usize).min(31);
+                                    self.last_body_contact_impulse[idx] += impulse;
+                                    if self.last_body_contact_count < 32 {
+                                        self.last_body_contact_count += 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Check 4 wheel hubs
+                    for wheel in WheelIndex::ALL {
+                        let suspension = &self.simulator.state.suspension.wheels[wheel as usize];
+                        let centre_local = crate::suspension::wheel_centre_local(
+                            &self.simulator.config,
+                            wheel,
+                            suspension.suspension_compression_m,
+                            suspension.hub_lateral_m,
+                            suspension.hub_long_m,
+                        );
+                        let hub_pos = self.simulator.state.transform.transform_point(centre_local);
+                        let hub_iso = Isometry3::translation(hub_pos.x, hub_pos.y, hub_pos.z);
+                        let wheel_ball = parry3d_f64::shape::Ball::new(0.33);
+
+                        if let Some(hit) = world.query_obstacle_contact(&hub_iso, &wheel_ball, 0.02) {
+                            if hit.penetration_m > 0.0 {
+                                let impulse = self.apply_body_impulse_with_friction(
+                                    hit.point,
+                                    hit.normal,
+                                    hit.restitution,
+                                    hit.friction,
+                                    hit.penetration_m,
+                                    dt,
+                                );
+                                if impulse > 0.0 {
+                                    self.last_barrier_impulse_ns += impulse;
+                                    let idx = (self.last_body_contact_count as usize).min(31);
+                                    self.last_body_contact_impulse[idx] += impulse;
+                                    if self.last_body_contact_count < 32 {
+                                        self.last_body_contact_count += 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 

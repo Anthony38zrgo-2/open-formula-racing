@@ -277,31 +277,80 @@ namespace
         std::string circuit_id;
         unsigned revision = 0;
         bool declared = false;
+        bool is_visual_model = false;
     };
+
+    static bool g_visualWorldInstalled = false;
 
     TrackWorldSource trackGroundSource(tTrack* track)
     {
         TrackWorldSource source;
         if (!track)
             return source;
-        const char* relative =
-            GfParmGetStr(track->params, "Header", "ground collision mesh", "");
-        if (!relative || !*relative)
-            return source;
-        source.declared = true;
-        source.path = std::string(GfDataDir()) + relative;
-        // The circuit identity the session reports is the track's own name, never the
-        // file name: two circuits may ship a document with the same file name.
+
+        // Circuit identity and revision
         const char* name = GfParmGetStr(track->params, "Header", "name", "");
-        source.circuit_id = (name && *name) ? name : std::string();
-        if (source.circuit_id.empty())
-        {
-            const std::string path = source.path;
-            const size_t separator = path.find_last_of("/\\");
-            source.circuit_id = separator == std::string::npos ? path : path.substr(separator + 1);
-        }
+        source.circuit_id = (name && *name) ? name : (track->name ? track->name : "");
+        if (source.circuit_id.empty() && track->internalname)
+            source.circuit_id = track->internalname;
         const double version = GfParmGetNum(track->params, "Header", "version", nullptr, 0.0);
         source.revision = version > 0.0 ? static_cast<unsigned>(version) : 1u;
+
+        // 1. Single source of truth: visual track model (.acc or .ac)
+        const char* model3d = GfParmGetStr(track->params, TRK_SECT_GRAPH, TRK_ATT_3DDESC, "");
+        if (!model3d || !*model3d)
+            model3d = track->graphic.model3d;
+
+        auto fileExists = [](const std::string& p) -> bool {
+            if (p.empty()) return false;
+            FILE* f = fopen(p.c_str(), "rb");
+            if (f) { fclose(f); return true; }
+            return false;
+        };
+
+        const char* category = track->category ? track->category : "circuit";
+        const char* internalname = track->internalname ? track->internalname : "";
+
+        std::string visualPath;
+        if (model3d && *model3d)
+        {
+            char buf[512];
+            snprintf(buf, sizeof(buf), "tracks/%s/%s/%s", category, internalname, model3d);
+            std::string fullLocal = std::string(GfLocalDir()) + buf;
+            std::string fullData = std::string(GfDataDir()) + buf;
+            if (fileExists(fullLocal)) visualPath = fullLocal;
+            else if (fileExists(fullData)) visualPath = fullData;
+        }
+
+        if (visualPath.empty() && *internalname)
+        {
+            char buf[512];
+            snprintf(buf, sizeof(buf), "tracks/%s/%s/%s.acc", category, internalname, internalname);
+            std::string fullLocal = std::string(GfLocalDir()) + buf;
+            std::string fullData = std::string(GfDataDir()) + buf;
+            if (fileExists(fullLocal)) visualPath = fullLocal;
+            else if (fileExists(fullData)) visualPath = fullData;
+        }
+
+        if (!visualPath.empty())
+        {
+            source.declared = true;
+            source.path = visualPath;
+            source.is_visual_model = true;
+            return source;
+        }
+
+        // 2. Fallback: legacy transfer document
+        const char* relative =
+            GfParmGetStr(track->params, "Header", "ground collision mesh", "");
+        if (relative && *relative)
+        {
+            source.declared = true;
+            source.path = std::string(GfDataDir()) + relative;
+            source.is_visual_model = false;
+            return source;
+        }
+
         return source;
     }
 
@@ -310,16 +359,29 @@ namespace
     //! A previous session's world is never reused: that was the stale-track path.
     int installTrackWorld(const TrackWorldSource& source)
     {
+        g_visualWorldInstalled = false;
         if (!rustPhysicsLibrary.isLoaded())
             return -1;
         if (!source.declared)
         {
-            GfLogError("Rust physics: the circuit declares no 'ground collision mesh'; "
-                       "the session has no authoritative ground geometry\n");
+            GfLogError("Rust physics: no visual track model (.acc) or ground collision mesh found\n");
             return -1;
         }
         int triangles = -1;
-        if (rustPhysicsLibrary.loadTrackGroundMeshV2)
+        if (source.is_visual_model && rustPhysicsLibrary.loadTrackVisualWorld)
+        {
+            triangles = rustPhysicsLibrary.loadTrackVisualWorld(
+                source.path.c_str(), source.circuit_id.c_str(),
+                static_cast<std::uint32_t>(source.revision));
+            if (triangles > 0)
+            {
+                g_visualWorldInstalled = true;
+                int obstacles = rustPhysicsLibrary.trackObstacleTriangles ? rustPhysicsLibrary.trackObstacleTriangles() : 0;
+                GfLogInfo("Rust physics: visual track collision loaded from %s (%d driveable triangles, %d obstacle triangles)\n",
+                          source.path.c_str(), triangles, obstacles);
+            }
+        }
+        else if (rustPhysicsLibrary.loadTrackGroundMeshV2)
         {
             triangles = rustPhysicsLibrary.loadTrackGroundMeshV2(
                 source.path.c_str(), source.circuit_id.c_str(),
@@ -334,7 +396,7 @@ namespace
             char error[1024] = { 0 };
             if (rustPhysicsLibrary.worldLastError)
                 rustPhysicsLibrary.worldLastError(error, sizeof(error));
-            GfLogError("Rust physics: cannot install the ground world %s (%s): %s\n",
+            GfLogError("Rust physics: cannot install track world %s (%s): %s\n",
                        source.path.c_str(), source.circuit_id.c_str(),
                        error[0] ? error : "unknown cause");
             return -1;
@@ -677,23 +739,35 @@ namespace
         tCarElt* elt = car.car;
         if (!elt)
             return;
-        for (int i = 0; i < count && i < OFP_MAX_BODY_CONTACTS; ++i)
+        for (int i = 0; i < OFP_MAX_BODY_CONTACTS; ++i)
         {
             const double impulse = car.snapshot.body_contact_impulse_ns[i];
-            if (impulse <= 0.0 || contacts[i].activation == 0)
+            if (impulse <= 0.0)
                 continue;
             car.last_barrier_contacts += 1;
             elt->priv.collision |= SEM_COLLISION_XYSCENE;
             elt->priv.simcollision = elt->priv.collision;
-            car.accumulated_damage += contacts[i].damage * impulse * impulse * 1.0e-4;
+            const double damageCoeff = (i < count && contacts && contacts[i].activation)
+                                           ? contacts[i].damage
+                                           : 1.0;
+            car.accumulated_damage += damageCoeff * impulse * impulse * 1.0e-4;
             elt->_dammage = (int)car.accumulated_damage;
             tCollisionState* state = &elt->priv.collision_state;
             state->collision_count += 1;
-            for (int axis = 0; axis < 3; ++axis)
+            if (i < count && contacts && contacts[i].activation)
             {
-                const double* point = &contacts[i].point.x;
-                state->pos[axis] = (float)point[axis];
-                state->force[axis] = (float)(0.0001 * impulse);
+                for (int axis = 0; axis < 3; ++axis)
+                {
+                    const double* point = &contacts[i].point.x;
+                    state->pos[axis] = (float)point[axis];
+                    state->force[axis] = (float)(0.0001 * impulse);
+                }
+            }
+            else
+            {
+                state->force[0] = (float)(0.0001 * impulse);
+                state->force[1] = 0.0f;
+                state->force[2] = 0.0f;
             }
         }
     }
@@ -719,7 +793,11 @@ namespace
         input.gear_request = (std::int32_t)ctrl->gear;
 
         OfpBodyContact contacts[OFP_MAX_BODY_CONTACTS];
-        const int contact_count = collectBarrierContacts(car, contacts, OFP_MAX_BODY_CONTACTS);
+        int contact_count = 0;
+        if (!g_visualWorldInstalled)
+        {
+            contact_count = collectBarrierContacts(car, contacts, OFP_MAX_BODY_CONTACTS);
+        }
 
         const int code = rustPhysicsLibrary.step(car.handle, &input, contacts,
                                                  (std::uint32_t)contact_count, delta_time);

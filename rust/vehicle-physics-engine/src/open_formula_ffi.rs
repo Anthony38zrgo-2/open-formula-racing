@@ -536,6 +536,49 @@ pub extern "C" fn ofp_load_track_ground_mesh_v2(
     load_ground_mesh(path, circuit_id, revision)
 }
 
+/// Loads the exact visual track description (.acc or .ac) used by Speed Dreams.
+/// Automatically parses and classifies driveable ground surfaces and 3D solid obstacles,
+/// with fast caching via `.ofpcache`.
+#[no_mangle]
+pub extern "C" fn ofp_load_track_visual_world(
+    path: *const c_char,
+    circuit_id: *const c_char,
+    revision: u32,
+) -> i32 {
+    let result = catch_unwind(AssertUnwindSafe(|| -> Result<i32, String> {
+        let path = read_c_string(path)
+            .ok_or_else(|| "visual track path is not valid UTF-8".to_string())?;
+        let id = read_c_string(circuit_id).filter(|value| !value.trim().is_empty());
+        let revision = if revision == 0 { None } else { Some(revision) };
+        let (identity, generation) =
+            crate::open_formula::install_track_visual_world(path, id, revision)?;
+        set_world_error("");
+        let _ = generation;
+        Ok(identity.triangle_count as i32)
+    }));
+    match result {
+        Ok(Ok(count)) => count,
+        Ok(Err(message)) => {
+            crate::open_formula::release_track_ground_mesh();
+            set_world_error(&message);
+            -1
+        }
+        Err(_) => {
+            crate::open_formula::release_track_ground_mesh();
+            set_world_error("panic while loading the visual track");
+            -2
+        }
+    }
+}
+
+/// Number of solid obstacle triangles in the installed collision world.
+#[no_mangle]
+pub extern "C" fn ofp_track_obstacle_triangles() -> i32 {
+    crate::collision_world::installed_world()
+        .map(|(_, world)| world.obstacle_triangle_count() as i32)
+        .unwrap_or(0)
+}
+
 fn load_ground_mesh(path: *const c_char, circuit_id: *const c_char, revision: u32) -> i32 {
     let result = catch_unwind(AssertUnwindSafe(|| -> Result<i32, String> {
         let path = read_c_string(path)

@@ -50,7 +50,10 @@ public:
     //! be confused inside one process.
     typedef int (*LoadTrackGroundMeshV2Fn)(const char* path, const char* circuit_id,
                                           std::uint32_t revision);
+    typedef int (*LoadTrackVisualWorldFn)(const char* path, const char* circuit_id,
+                                          std::uint32_t revision);
     typedef int (*ReleaseTrackGroundMeshFn)();
+    typedef int (*TrackObstacleTrianglesFn)();
     typedef std::uint64_t (*WorldGenerationFn)();
     typedef std::uint64_t (*WorldInstallCountFn)();
     typedef int (*WorldIdentityJsonFn)(char* buffer, std::uint32_t capacity);
@@ -94,7 +97,9 @@ public:
     TraceBufferedFn traceBuffered;
     EffectiveSetupFn effectiveSetup;
     LoadTrackGroundMeshV2Fn loadTrackGroundMeshV2;
+    LoadTrackVisualWorldFn loadTrackVisualWorld;
     ReleaseTrackGroundMeshFn releaseTrackGroundMesh;
+    TrackObstacleTrianglesFn trackObstacleTriangles;
     WorldGenerationFn worldGeneration;
     WorldInstallCountFn worldInstallCount;
     WorldIdentityJsonFn worldIdentityJson;
