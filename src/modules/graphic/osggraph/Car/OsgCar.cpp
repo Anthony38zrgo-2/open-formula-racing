@@ -609,6 +609,10 @@ osg::ref_ptr<osg::Node> SDCar::loadCar(tCarElt *Car, bool tracktype,
     if(_wing3)
         this->car_shaded_body->addChild(RearWingSelector.get());
 
+    osg::ref_ptr<osg::Group> susp = suspension.initSuspension(car, handle, pCar.get());
+    if (susp.valid())
+        this->car_shaded_body->addChild(susp.get());
+
     gCar->addChild(car_shaded_body.get());
 
     if(_driver)
@@ -908,6 +912,7 @@ void SDCar::updateCar(tSituation *s, tCarElt *CurCar, int current, int driver)
         i->update(*this);
 
     wheels.updateWheels();
+    suspension.updateSuspension(car);
 
     this->carTransform->setMatrix(mat);
     this->lights_branch->setMatrix(mat);

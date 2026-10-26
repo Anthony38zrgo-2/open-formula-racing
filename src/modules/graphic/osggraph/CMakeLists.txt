@@ -42,6 +42,7 @@ SET(OSGGRAPH_HEADERS Utils/OsgVectorArrayAdapter.h
                      Viewer/FormulaHudLayout.h
 
                      Car/OsgCar.h
+                     Car/OsgSuspension.h
                      Car/OsgCarLight.h
                      Car/OsgWheel.h
                      Car/OsgBrake.h
@@ -91,6 +92,7 @@ SET(OSGGRAPH_SOURCES Utils/OsgMath.cpp
                      Viewer/OsgGraphicsWindow.cpp
 
                      Car/OsgCar.cpp Car/OsgGaragePreview.cpp
+                     Car/OsgSuspension.cpp
                      Car/OsgCarLight.cpp
                      Car/OsgWheel.cpp
                      Car/OsgBrake.cpp

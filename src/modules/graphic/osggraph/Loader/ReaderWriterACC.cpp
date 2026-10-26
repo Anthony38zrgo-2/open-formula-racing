@@ -594,7 +594,7 @@ osg::Node* ReaderWriterACC::readObject(std::istream& stream, FileData& fileData,
                 }
 
                 for (unsigned i = 0; i < primitiveBins.size(); ++i)
-                    primitiveBins[i].finalize(group.get(), fileData.getMaterial(i), textureData);
+                    primitiveBins[i].finalize(group.get(), fileData.getMaterial(i), textureData, strName);
                 if (alpha_cutoff >= 0.0f)
                 {
                     osg::StateSet* mask_state = group->getOrCreateStateSet();

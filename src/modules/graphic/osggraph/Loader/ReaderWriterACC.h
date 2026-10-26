@@ -1227,27 +1227,37 @@ struct Bins
         }
     }
 
-    void finalize(osg::Group* group, const MaterialData& material, const TextureData& textureData)
+    void finalize(osg::Group* group, const MaterialData& material, const TextureData& textureData, const std::string& name = "")
     {
         if (lineBin.valid())
         {
-            group->addChild(lineBin->finalize(material, textureData));
+            osg::Geode* g = lineBin->finalize(material, textureData);
+            if (g && !name.empty()) g->setName(name);
+            group->addChild(g);
         }
         if (smoothDoubleSurfaceBin.valid())
         {
-            group->addChild(smoothDoubleSurfaceBin->finalize(material, textureData));
+            osg::Geode* g = smoothDoubleSurfaceBin->finalize(material, textureData);
+            if (g && !name.empty()) g->setName(name);
+            group->addChild(g);
         }
         if (smoothSingleSurfaceBin.valid())
         {
-            group->addChild(smoothSingleSurfaceBin->finalize(material, textureData));
+            osg::Geode* g = smoothSingleSurfaceBin->finalize(material, textureData);
+            if (g && !name.empty()) g->setName(name);
+            group->addChild(g);
         }
         if (flatDoubleSurfaceBin.valid())
         {
-            group->addChild(flatDoubleSurfaceBin->finalize(material, textureData));
+            osg::Geode* g = flatDoubleSurfaceBin->finalize(material, textureData);
+            if (g && !name.empty()) g->setName(name);
+            group->addChild(g);
         }
         if (flatSingleSurfaceBin.valid())
         {
-            group->addChild(flatSingleSurfaceBin->finalize(material, textureData));
+            osg::Geode* g = flatSingleSurfaceBin->finalize(material, textureData);
+            if (g && !name.empty()) g->setName(name);
+            group->addChild(g);
         }
     }
 

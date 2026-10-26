@@ -28,6 +28,7 @@
 #include "OsgWheel.h"
 //#include "OsgBackFire.h"
 #include "OsgCarLight.h"
+#include "OsgSuspension.h"
 
 struct CarElt;
 typedef struct CarElt tCarElt;
@@ -115,6 +116,7 @@ public :
     void updateShadingParameters(const osg::Matrixf &modelview);
 
     SDWheels    wheels;
+    SDSuspension suspension;
 };
 
 class SDCars
