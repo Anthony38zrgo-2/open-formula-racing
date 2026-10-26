@@ -1,0 +1,41 @@
+{
+  "installed": {
+    "lib/games/speed-dreams-2/modules/simu/vehicle_physics_engine.dll": {
+      "sha256": "289783d4cea4615caec963c8e44adb15975a184e2e4ed1311aca0cccd43cc8f9",
+      "size": 5331456
+    },
+    "share/games/speed-dreams-2/cars/rust/williams-fw19-hockenheim/suspension.json": {
+      "sha256": "f8762fe0653a97817018459318782360090f9dc0ebe34f60dc8f5469dc7fad81",
+      "size": 8048
+    },
+    "share/games/speed-dreams-2/cars/rust/williams-fw19-hockenheim/suspension_filters.json": {
+      "sha256": "1320f2a51be956e83564658c9fe98338fc623e87ea1c707ae1292e7f06581c75",
+      "size": 325
+    },
+    "share/games/speed-dreams-2/cars/rust/williams-fw19-hockenheim/vehicle.json": {
+      "sha256": "7314bad388a973e375994e83161f8956fb4fbc7c4f6e96740aa815ace6c4cc85",
+      "size": 909
+    },
+    "share/games/speed-dreams-2/cars/rust/williams-fw19-hockenheim/AGENTS.md": {
+      "sha256": "e7d6538f1418179717acafb8d06617a22a4de237bf947de8e6984f8a3226aee9",
+      "size": 2854
+    }
+  },
+  "previous_sha256": {
+    "lib/games/speed-dreams-2/modules/simu/vehicle_physics_engine.dll": "f5b91f45144430012a53ab06798d751a18e69e8c2ac8e6d5cd6cf8c59daee8f2",
+    "share/games/speed-dreams-2/cars/rust/williams-fw19-hockenheim/suspension.json": "36bd5eb1bfab5bd061a947429310c8d783bdc35486fc120e6be1c993ea2b5e8c",
+    "share/games/speed-dreams-2/cars/rust/williams-fw19-hockenheim/suspension_filters.json": "1320f2a51be956e83564658c9fe98338fc623e87ea1c707ae1292e7f06581c75",
+    "share/games/speed-dreams-2/cars/rust/williams-fw19-hockenheim/vehicle.json": "7314bad388a973e375994e83161f8956fb4fbc7c4f6e96740aa815ace6c4cc85",
+    "share/games/speed-dreams-2/cars/rust/williams-fw19-hockenheim/AGENTS.md": "f54aec359e38a5c50817569c5be2d0b9f3ef0cf335078ff938a1d4625d9dfd98",
+    "distribution_manifest.json": "9feea0aab2a8005607e75647fc27cd64c5cbdd2bacea9cd63a6560aa74990dac"
+  },
+  "backup": "C:\\Users\\bill\\open-formula-backups\\2026-10-25-install-c1-917274d0",
+  "rollback": "C:\\Users\\bill\\open-formula-backups\\2026-10-25-install-c1-917274d0\\rollback.ps1",
+  "game_launcher": "D:\\open-formula\\distribution\\OpenFormula.exe",
+  "profile_car_directory": "D:\\open-formula\\distribution\\share\\games\\speed-dreams-2\\cars\\rust\\williams-fw19-hockenheim",
+  "ride_height_target_m": {
+    "front": 0.035014,
+    "rear": 0.039991
+  },
+  "notes": "C1 suspension: damper knee blend, cubic bump stop + dedicated damper, compliant hard stop, ARB damper, single road-height route with slew limit; all 1 ms filters at 0.0."
+}

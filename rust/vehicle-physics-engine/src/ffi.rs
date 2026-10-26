@@ -817,7 +817,18 @@ pub extern "C" fn f1_94_physics_step(
     // `sim_ptr` is a live `VehicleSimulator` and `input_ptr` points to a valid POD.
     let sim = unsafe { &mut *(sim_ptr as *mut VehicleSimulator) };
     let input = VehicleInput::from(unsafe { *input_ptr });
-    let samples = read_samples(samples_ptr);
+    let mut samples = read_samples(samples_ptr);
+    // Hosts on this retired ABI cast their own rays. When the profile asks for the
+    // single-ray mode, collapse the tricast to its centre ray so the same profile
+    // produces the same contact model on every host; the host still pays for the
+    // rays it cast, but the physics no longer depends on which entry point ran.
+    if sim.config.suspension.contact_rays() == 1 {
+        for sample in samples.iter_mut() {
+            sample.inner = sample.center;
+            sample.outer = sample.center;
+            sample.context.ray_count = 1;
+        }
+    }
     let telem = sim.step(&input, &samples, dt);
     write_telemetry(sim, &telem, out_telem);
 }

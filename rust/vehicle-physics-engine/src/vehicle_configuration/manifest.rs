@@ -15,6 +15,7 @@ pub const DRIVING_ASSISTANCE_DOMAIN_NAME: &str = "driving_assistance";
 pub const UNDERFLOOR_CONTACT_DOMAIN_NAME: &str = "underfloor_contact";
 pub const COUPLED_WORLD_DOMAIN_NAME: &str = "coupled_world";
 pub const TIRE_FILTERS_DOMAIN_NAME: &str = "tire_filters";
+pub const SUSPENSION_FILTERS_DOMAIN_NAME: &str = "suspension_filters";
 pub const AUDIO_DOMAIN_NAME: &str = "audio";
 pub const SUSPENSION_PRESENTATION_DOMAIN_NAME: &str = "suspension_presentation";
 
@@ -30,10 +31,11 @@ pub const REQUIRED_PHYSICAL_DOMAIN_NAMES: [&str; 9] = [
     DRIVING_ASSISTANCE_DOMAIN_NAME,
 ];
 
-pub const OPTIONAL_PHYSICAL_DOMAIN_NAMES: [&str; 3] = [
+pub const OPTIONAL_PHYSICAL_DOMAIN_NAMES: [&str; 4] = [
     UNDERFLOOR_CONTACT_DOMAIN_NAME,
     COUPLED_WORLD_DOMAIN_NAME,
     TIRE_FILTERS_DOMAIN_NAME,
+    SUSPENSION_FILTERS_DOMAIN_NAME,
 ];
 
 pub const EXTERNALLY_OWNED_DOMAIN_NAMES: [&str; 2] =

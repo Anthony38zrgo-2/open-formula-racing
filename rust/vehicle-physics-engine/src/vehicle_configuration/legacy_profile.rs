@@ -64,6 +64,8 @@ pub(crate) struct JsonVehicleSpec {
     pub(crate) underfloor_contact: Option<UnderfloorContactConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) tire_filters: Option<TireFilterConfiguration>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) suspension_filters: Option<SuspensionFilterConfiguration>,
 }
 
 fn default_schema_version() -> u32 {
@@ -87,6 +89,9 @@ impl JsonVehicleSpec {
             configuration.validate()?;
         }
         if let Some(filters) = self.tire_filters.as_ref() {
+            filters.validate()?;
+        }
+        if let Some(filters) = self.suspension_filters.as_ref() {
             filters.validate()?;
         }
         self.tires.validate()?;
@@ -248,6 +253,7 @@ impl JsonVehicleSpec {
                 rear_camber: self.suspension.rear.camber,
                 rear_bump_stop_multiplier: self.suspension.rear.bump_stop_multiplier,
                 tri_ray_spacing_ratio: self.suspension.tri_ray_spacing_ratio,
+                contact_ray_count: self.suspension.contact_ray_count,
                 front_camber_gain_rad_per_m: self
                     .suspension
                     .front
@@ -451,6 +457,7 @@ impl JsonVehicleSpec {
             coupled_world: self.coupled_world.clone(),
             underfloor_contact: self.underfloor_contact,
             tire_filters: self.tire_filters,
+            suspension_filters: self.suspension_filters,
         }
     }
 
@@ -618,6 +625,7 @@ impl JsonVehicleSpec {
                         .then(|| cfg.suspension.rear_toe_gain_rad_per_m),
                 },
                 tri_ray_spacing_ratio: cfg.suspension.tri_ray_spacing_ratio,
+                contact_ray_count: cfg.suspension.contact_ray_count,
                 // Visual-only geometry is not part of the force config; it is
                 // never re-emitted by to_json_value.
                 geometry: None,
@@ -832,6 +840,7 @@ impl JsonVehicleSpec {
                 input_smoothing_throttle_rate: cfg.aids.input_smoothing_throttle_rate,
                 input_smoothing_brake_rate: cfg.aids.input_smoothing_brake_rate,
             },
+            suspension_filters: cfg.suspension_filters,
         }
     }
 }

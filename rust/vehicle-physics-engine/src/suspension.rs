@@ -108,6 +108,10 @@ pub struct WheelSuspensionState {
     pub normal_road_compression_metres: f64,
     #[serde(default)]
     pub normal_road_velocity_metres_per_second: f64,
+    /// True once a limited contact-height target has been accepted for this corner.
+    /// The first sample snaps to the geometry instead of ramping up from zero.
+    #[serde(default)]
+    pub normal_road_target_initialized: bool,
     #[serde(default)]
     pub normal_force_application_compression_metres: f64,
 
@@ -259,6 +263,7 @@ impl WheelSuspensionState {
             normal_contact_projection_rate_per_second: 0.0,
             normal_road_compression_metres: 0.0,
             normal_road_velocity_metres_per_second: 0.0,
+            normal_road_target_initialized: false,
             normal_force_application_compression_metres: 0.0,
             suspension_compression_m: compression,
             unsprung_velocity_m_s: 0.0,
@@ -763,6 +768,12 @@ impl SuspensionSystem {
         body_kinematics: Option<crate::simulation::BodyKinematics>,
     ) {
         let duration_seconds = duration_seconds.max(1e-5);
+        // Last accepted contact-height target per corner, captured before
+        // `sample_contact` rewrites the field: the single limiter in
+        // `configure_simplified_contact_kinematics` needs the value that actually
+        // entered the solver, not the raw estimate of this sample.
+        let previous_normal_road_compression: [f64; 4] =
+            std::array::from_fn(|index| self.wheels[index].normal_road_compression_metres);
         for index in 0..4 {
             let wheel = WheelIndex::ALL[index];
             self.sample_contact(
@@ -795,7 +806,12 @@ impl SuspensionSystem {
             && configuration.suspension.geometric_suspension.is_some()
         {
             if let Some(body) = body_kinematics {
-                self.configure_simplified_contact_kinematics(configuration, body);
+                self.configure_simplified_contact_kinematics(
+                    configuration,
+                    body,
+                    previous_normal_road_compression,
+                    duration_seconds,
+                );
                 self.body_angular_velocity_world = body.angular_velocity;
                 self.body_linear_velocity_world = body.linear_velocity;
                 self.body_reference_world = body.transform.origin;
@@ -1022,11 +1038,18 @@ impl SuspensionSystem {
                 max_ray_length,
             ),
         ];
-        state.ray_grounded = [
-            road.inner.is_colliding,
-            road.center.is_colliding,
-            road.outer.is_colliding,
-        ];
+        state.ray_grounded = if sample.context.effective_ray_count() == 1 {
+            // Single-ray mode: the centre query represents the patch, so the inner
+            // and outer slots carry no independent evidence of ground. Reporting
+            // them as hits would claim two rays that were never cast.
+            [false, road.center.is_colliding, false]
+        } else {
+            [
+                road.inner.is_colliding,
+                road.center.is_colliding,
+                road.outer.is_colliding,
+            ]
+        };
         let previous_contact_fraction = state.contact_fraction;
         let previous_normal_compression_metres = state.normal_road_compression_metres;
         let previous_normal_projection = state.normal_contact_projection;
@@ -1149,6 +1172,11 @@ impl SuspensionSystem {
 
         state.effective_normal = road.weighted_normal();
         if backend == SuspensionBackend::Simplified {
+            // Estimate from the tricast only. The production route
+            // (`configure_simplified_contact_kinematics`) re-derives this from the
+            // body pose and applies the single rate limiter/filter before the
+            // vertical solve; this value is the seed for the body-less
+            // compatibility entry point (`SuspensionSystem::step`).
             let projection = state
                 .effective_normal
                 .dot(body_orientation.y)
@@ -1441,6 +1469,12 @@ impl SuspensionSystem {
                 q_max: geometric_q_limits(geo, wheel).1,
                 k_wheel_rest_n_per_m: geometric_k_wheel_rest(geo, wheel).max(1.0),
             });
+        // Bar damper for the non-coupled entry point: the opposite corner's
+        // velocity is taken at tick start (explicit coupling). Production runs the
+        // coupled axle solve, which uses both candidate velocities instead.
+        let opposite_wheel = WheelIndex::ALL[(wheel as usize) ^ 1];
+        let opposite_velocity_start = self.wheels[opposite_wheel as usize].unsprung_velocity_m_s;
+        let arb_damper = axle.arb_damper_Ns_per_m.max(0.0);
         let state = &mut self.wheels[wheel as usize];
         let previous_compression = state.suspension_compression_m;
         let mut x = state.suspension_compression_m;
@@ -1544,8 +1578,8 @@ impl SuspensionSystem {
                     unsprung_mass,
                     h,
                     (
-                        minimum_compression_metres - tuning.hard_stop_overtravel_m,
-                        maximum_compression_metres + tuning.hard_stop_overtravel_m,
+                        minimum_compression_metres - hard_stop_allowance_m(axle, tuning),
+                        maximum_compression_metres + hard_stop_allowance_m(axle, tuning),
                     ),
                     contact,
                     |compression_metres, velocity_metres_per_second| {
@@ -1563,6 +1597,7 @@ impl SuspensionSystem {
                             prepared,
                             damper_compression_metres,
                             r0,
+                            velocity_metres_per_second,
                             tuning,
                         );
                         if !use_implicit_integration && (invalid_element || invalid_stop) {
@@ -1578,9 +1613,16 @@ impl SuspensionSystem {
                             q_opp,
                             k_wheel_rest,
                         );
+                        let antiroll_damping_newtons = if arb_damper > 0.0 {
+                            arb_damper
+                                * (velocity_metres_per_second - opposite_velocity_start)
+                        } else {
+                            0.0
+                        };
                         spring_force_newtons
                             + damping_force_newtons
                             + antiroll_force_newtons
+                            + antiroll_damping_newtons
                             + stop_force_newtons
                     },
                 );
@@ -1606,6 +1648,7 @@ impl SuspensionSystem {
                         prepared,
                         damper_compression_metres,
                         r0,
+                        v,
                         tuning,
                     )
                     .1;
@@ -1635,7 +1678,17 @@ impl SuspensionSystem {
             };
         let spring_force = sf;
         let damping_force = df;
-        let stop = geometric_stop_force(geo, wheel, x, rest_legacy, prepared, s_fin, r_fin, tuning);
+        let stop = geometric_stop_force(
+            geo,
+            wheel,
+            x,
+            rest_legacy,
+            prepared,
+            s_fin,
+            r_fin,
+            v,
+            tuning,
+        );
         let bottom_force = stop.0;
         let arb_now = coupled_integration
             .map(|integration| integration.antiroll_force_newtons)
@@ -1831,6 +1884,20 @@ fn geometric_travel_bounds(prepared: PreparedWheelEnvelope, rest_legacy: f64) ->
 
 /// Digressive viscous element with explicit bump/rebound rates (no inferred
 /// critical damping). Mirrors the legacy knee/fast shape.
+///
+/// `damper_knee_blend_m_per_s` (`b`) replaces the hard knee by a C1 blend of the
+/// stiffness over `knee ± b/2`. The force is the antiderivative of
+/// `c(u) = c_slow - (c_slow - c_fast) * smoothstep(u)`, so:
+///
+/// * the slope never jumps (it is `c_slow` on entry, `c_fast` on exit);
+/// * `F` matches the legacy law exactly at both band edges, including the far
+///   asymptotic line `c * knee + (v - knee) * c * fast`;
+/// * the slope stays positive, so `F(v) * v >= 0` (dissipative, monotone);
+/// * `F(knee)` moves by `-0.09375 * (c_slow - c_fast) * b`, i.e. 0.6 % of the
+///   knee force at the Williams calibration. An exact knee value *and* an exact
+///   asymptote with a monotone C1 stiffness are mutually exclusive: preserving
+///   the knee value forces the area below the knee to stay `c * x`, which means
+///   no blend at all. The C1 property wins and the deviation is bounded here.
 fn geometric_damper_element(
     axle: &crate::suspension_geo_config::AxlePhysicalElements,
     v_s: f64,
@@ -1840,19 +1907,42 @@ fn geometric_damper_element(
     }
     let knee = axle.damper_knee_m_per_s.max(1e-6);
     let fast = axle.damper_fast_factor.clamp(0.05, 1.0);
-    if v_s >= 0.0 {
-        let c = axle.damper_bump_Ns_per_m.max(0.0);
-        if v_s > knee {
-            (v_s - knee) * c * fast + knee * c
-        } else {
-            v_s * c
-        }
-    } else if v_s < -knee {
-        let c = axle.damper_rebound_Ns_per_m.max(0.0);
-        (v_s + knee) * c * fast - knee * c
+    let (rate, speed) = if v_s >= 0.0 {
+        (axle.damper_bump_Ns_per_m.max(0.0), v_s)
     } else {
-        v_s * axle.damper_rebound_Ns_per_m.max(0.0)
+        (axle.damper_rebound_Ns_per_m.max(0.0), -v_s)
+    };
+    let half_band = 0.5 * axle.damper_knee_blend_m_per_s.max(0.0);
+    let magnitude = if half_band > 0.0 && half_band < knee {
+        damper_blended_magnitude(speed, knee, rate, fast, half_band)
+    } else if speed > knee {
+        (speed - knee) * rate * fast + knee * rate
+    } else {
+        speed * rate
+    };
+    if v_s >= 0.0 {
+        magnitude
+    } else {
+        -magnitude
     }
+}
+
+/// C1 (in force) and C1 (in stiffness) transition between the slow and fast
+/// damper rates. `half_band` is half the authored blend width.
+fn damper_blended_magnitude(speed: f64, knee: f64, rate: f64, fast: f64, half_band: f64) -> f64 {
+    let low = knee - half_band;
+    let high = knee + half_band;
+    if speed <= low {
+        return speed * rate;
+    }
+    let fast_rate = rate * fast;
+    if speed >= high {
+        return knee * rate + (speed - knee) * fast_rate;
+    }
+    let u = ((speed - low) / (2.0 * half_band)).clamp(0.0, 1.0);
+    // Antiderivative of the smoothstep `3u^2 - 2u^3` on [0, 1].
+    let smooth_integral = u * u * u - 0.5 * u * u * u * u;
+    low * rate + 2.0 * half_band * (rate * u - (rate - fast_rate) * smooth_integral)
 }
 
 /// Core SUS-GEO-04 mapping: (F_spring_wheel, F_damper_wheel, s, r, rod, clamped,
@@ -1990,6 +2080,10 @@ fn geometric_arb_force(
 /// mechanism-clamped travel stops. Returns (force_wheel, clamped_flag).
 /// The reachable limits come from the prepared per-wheel envelope; this
 /// function never searches the mechanism.
+///
+/// `velocity_metres_per_second` is the wheel-space velocity the dedicated
+/// bump-stop damper must oppose (positive = compressing). The damper only acts
+/// in compression and is the only non-conservative term here.
 #[allow(clippy::too_many_arguments)]
 fn geometric_stop_force(
     geo: &GeometricSuspensionConfig,
@@ -1999,6 +2093,7 @@ fn geometric_stop_force(
     prepared: PreparedWheelEnvelope,
     s: f64,
     r: f64,
+    velocity_metres_per_second: f64,
     tuning: WheelMechanicalTuning,
 ) -> (f64, bool) {
     let axle = geo.axle(wheel);
@@ -2018,18 +2113,58 @@ fn geometric_stop_force(
     let bump_start = x_max - working_length;
     if x > bump_start {
         let excess = (x - bump_start).max(0.0);
-        let progress = ((x - bump_start) / (x_max - bump_start).max(1e-4)).clamp(0.0, 2.0);
-        force += k_rest * mult * excess * (1.0 + 3.0 * progress * progress);
+        force += bump_stop_force(
+            axle.bump_stop_law,
+            k_rest,
+            mult,
+            bump_start,
+            x_max,
+            x,
+        );
+        // Dedicated bump-stop damper: compression only, ramped in over the first
+        // 10 % of the working length so the force has no step at entry.
+        force += bump_stop_damper_force(
+            axle.bump_stop_damper_Ns_per_m,
+            working_length,
+            excess,
+            velocity_metres_per_second,
+        );
     }
-    // Hard wheel travel stops (measurable penetration, then the integrator
-    // clamps position/velocity like legacy).
+    // Hard wheel travel stops. With a compliance band the stop is a physical
+    // spring/damper and the inelastic clamp is only the last resort, once the
+    // whole band is consumed; without one the legacy runaway spring and clamp
+    // are the first response.
     if x > x_max {
         let over = x - x_max;
-        force += k_rest
-            * mult.max(1.0)
-            * over
-            * (12.0 + 24.0 * (over / tuning.hard_stop_overtravel_m.max(1e-4)));
-        clamped = true;
+        let compliance = axle.hard_stop_compliance_m.max(0.0);
+        if compliance > 0.0 {
+            let penetration = over.min(compliance);
+            let stiffness = axle.hard_stop_stiffness_N_per_m.max(0.0);
+            // C1 quadratic: F(0) = 0, dF/dx(0) = 0, F(compliance) = k * compliance.
+            force += stiffness * penetration * penetration / compliance;
+            let stop_damper = axle.hard_stop_damper_Ns_per_m.max(0.0);
+            if stop_damper > 0.0 && velocity_metres_per_second > 0.0 {
+                let engagement = (penetration / compliance).clamp(0.0, 1.0);
+                force += stop_damper * velocity_metres_per_second * engagement;
+            }
+            if over >= compliance {
+                // Envelope clamp: only the excess beyond the band keeps the
+                // historical runaway spring, so penetration cannot exceed it by
+                // more than the numerical overtravel.
+                let excess = over - compliance;
+                force += k_rest
+                    * mult.max(1.0)
+                    * excess
+                    * (12.0 + 24.0 * (excess / tuning.hard_stop_overtravel_m.max(1e-4)));
+                clamped = true;
+            }
+        } else {
+            force += k_rest
+                * mult.max(1.0)
+                * over
+                * (12.0 + 24.0 * (over / tuning.hard_stop_overtravel_m.max(1e-4)));
+            clamped = true;
+        }
     }
     if x < x_min {
         let over = x_min - x;
@@ -2053,6 +2188,72 @@ fn geometric_stop_force(
     // the envelope is therefore already flagged via x clamp above.
     let _ = (s, tuning);
     (finite_or_zero(force), clamped)
+}
+
+/// Progressive bump-stop force shape. `bump_start` is the first contact and
+/// `x_max` the geometric bump limit, so `x_max - bump_start` is the authored
+/// stop travel.
+///
+/// The `cubic` and `smoothstep` laws are C1 at entry (`F(0) = 0`, `dF/dx(0) = 0`)
+/// and reach exactly the legacy end-of-stroke force
+/// `4 * k_rest * mult * working_length`, so `bump_stop_mult` keeps its meaning
+/// and the peak force at full travel does not move.
+fn bump_stop_force(
+    law: crate::suspension_geo_config::BumpStopLaw,
+    k_rest: f64,
+    mult: f64,
+    bump_start: f64,
+    x_max: f64,
+    x: f64,
+) -> f64 {
+    use crate::suspension_geo_config::BumpStopLaw;
+    let stroke = (x_max - bump_start).max(1e-4);
+    let excess = (x - bump_start).max(0.0);
+    match law {
+        BumpStopLaw::Legacy => {
+            let progress = (excess / stroke).clamp(0.0, 2.0);
+            k_rest * mult * excess * (1.0 + 3.0 * progress * progress)
+        }
+        BumpStopLaw::Cubic => {
+            let end_force = 4.0 * k_rest * mult * stroke;
+            let k3 = end_force / (stroke * stroke * stroke);
+            k3 * excess * excess * excess
+        }
+        BumpStopLaw::Smoothstep => {
+            let end_force = 4.0 * k_rest * mult * stroke;
+            let u = (excess / stroke).clamp(0.0, 1.0);
+            end_force * (2.0 * u * u * u - u * u * u * u)
+        }
+    }
+}
+
+/// Travel allowance beyond the geometric envelope: the numerical overtravel that
+/// keeps bottom-out penetration measurable, extended by the compliant hard-stop
+/// band when the profile declares one. The clamp still exists, it just sits at
+/// the outer edge of the compliance band.
+fn hard_stop_allowance_m(
+    axle: &crate::suspension_geo_config::AxlePhysicalElements,
+    tuning: WheelMechanicalTuning,
+) -> f64 {
+    tuning
+        .hard_stop_overtravel_m
+        .max(axle.hard_stop_compliance_m.max(0.0))
+}
+
+/// Dedicated bump-stop damper force (pushes the wheel down, positive only).
+///
+/// Compression only (`v > 0`) and ramped with a smoothstep over the first 10 %
+/// of the working length, so entry has no force step. In the solver convention
+/// the resistance is `F >= 0` for `v >= 0`, so the dissipation `F * v` is never
+/// negative: the damper can only remove energy.
+fn bump_stop_damper_force(rate_ns_per_m: f64, working_length: f64, excess: f64, velocity: f64) -> f64 {
+    let rate = rate_ns_per_m.max(0.0);
+    if rate <= 0.0 || velocity <= 0.0 || excess <= 0.0 {
+        return 0.0;
+    }
+    let ramp = (excess / (0.1 * working_length).max(1e-6)).clamp(0.0, 1.0);
+    let engagement = ramp * ramp * (3.0 - 2.0 * ramp);
+    rate * velocity * engagement
 }
 
 /// Tangent wheel rate + dr/dq for telemetry (extra solves, once per tick).
@@ -3235,5 +3436,249 @@ mod tests {
                 (st.hub_long_m - finite_or_zero(sol.hub.z - corner.hub_center.z)).abs() < 1e-12
             );
         }
+    }
+}
+
+/// C1 regularisation gates: damper knee blend, progressive bump-stop law and the
+/// dedicated bump-stop damper. These are law-level checks (no integration), so a
+/// failure points at the shape and not at the solver.
+#[cfg(test)]
+mod c1_regularisation_tests {
+    use super::*;
+    use crate::suspension_geo_config::{AxlePhysicalElements, BumpStopLaw};
+    use crate::vehicle_config::VehicleConfig;
+
+    fn williams_axle(front: bool) -> AxlePhysicalElements {
+        let config = VehicleConfig::williams_fw19_hockenheim_canonical();
+        *config
+            .suspension
+            .geometric_suspension
+            .as_ref()
+            .expect("geometric suspension")
+            .axle(if front {
+                WheelIndex::FrontLeft
+            } else {
+                WheelIndex::RearLeft
+            })
+    }
+
+    fn without_blend(axle: &AxlePhysicalElements) -> AxlePhysicalElements {
+        let mut legacy = *axle;
+        legacy.damper_knee_blend_m_per_s = 0.0;
+        legacy
+    }
+
+    #[test]
+    fn knee_blend_matches_the_legacy_law_outside_the_band_and_bounds_the_knee_error() {
+        for front in [true, false] {
+            let axle = williams_axle(front);
+            assert!(axle.damper_knee_blend_m_per_s > 0.0, "profile authors a blend");
+            let legacy = without_blend(&axle);
+            let knee = axle.damper_knee_m_per_s;
+            let half = 0.5 * axle.damper_knee_blend_m_per_s;
+            // Inside the band the blend must be the only difference; outside it the
+            // force must be the historical law bit for bit.
+            for speed in [
+                0.0,
+                1e-4,
+                knee - half,
+                knee - half - 1e-6,
+                knee + half,
+                knee + half + 1e-6,
+                0.3,
+                1.0,
+                2.5,
+            ] {
+                for sign in [1.0, -1.0] {
+                    let v = sign * speed;
+                    let blended = geometric_damper_element(&axle, v);
+                    let reference = geometric_damper_element(&legacy, v);
+                    assert!(
+                        (blended - reference).abs() <= 1e-12 * reference.abs().max(1.0),
+                        "{front}: v={v} blended {blended} vs legacy {reference}"
+                    );
+                }
+            }
+            for sign in [1.0, -1.0] {
+                let v = sign * knee;
+                let blended = geometric_damper_element(&axle, v);
+                let reference = geometric_damper_element(&legacy, v);
+                assert!(
+                    (blended - reference).abs() < 0.01 * reference.abs(),
+                    "{front}: knee force must move by less than 1 % ({blended} vs {reference})"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn knee_blend_has_a_continuous_slope_at_both_band_edges() {
+        let axle = williams_axle(true);
+        let knee = axle.damper_knee_m_per_s;
+        let half = 0.5 * axle.damper_knee_blend_m_per_s;
+        let rate = axle.damper_bump_Ns_per_m;
+        let h = 1e-7;
+        for edge in [knee - half, knee + half] {
+            let left = (geometric_damper_element(&axle, edge) - geometric_damper_element(&axle, edge - h)) / h;
+            let right = (geometric_damper_element(&axle, edge + h) - geometric_damper_element(&axle, edge)) / h;
+            assert!(
+                (left - right).abs() < 1e-3 * rate,
+                "slope jump at {edge}: {left} vs {right} (rate {rate})"
+            );
+        }
+    }
+
+    #[test]
+    fn damper_force_always_opposes_the_shaft_velocity() {
+        // Solver convention: the element force is the resistance added to
+        // `m dv/dt = -F + ...`, so dissipation is `F * v >= 0` (the force and the
+        // velocity share sign in the drawn sense: both oppose the motion).
+        let axle = williams_axle(false);
+        let mut previous = f64::NEG_INFINITY;
+        for step in 0..=400 {
+            let v = -2.0 + 4.0 * step as f64 / 400.0;
+            let force = geometric_damper_element(&axle, v);
+            assert!(force * v >= -1e-9, "v={v}: F*v={}", force * v);
+            assert!(force >= previous - 1e-9, "v={v}: force must be monotone");
+            previous = force;
+        }
+    }
+
+    #[test]
+    fn bump_stop_laws_are_c1_and_keep_the_legacy_end_force() {
+        let k_rest = 151_900.0;
+        let mult = 1.0;
+        let bump_start = 0.5;
+        let stroke = 0.005;
+        let x_max = bump_start + stroke;
+        let legacy_end = bump_stop_force(
+            BumpStopLaw::Legacy,
+            k_rest,
+            mult,
+            bump_start,
+            x_max,
+            x_max,
+        );
+        for law in [BumpStopLaw::Cubic, BumpStopLaw::Smoothstep] {
+            let force = |x: f64| bump_stop_force(law, k_rest, mult, bump_start, x_max, x);
+            assert_eq!(force(bump_start), 0.0, "{law:?}");
+            assert_eq!(force(bump_start - 1e-3), 0.0, "{law:?}");
+            // Zero entry slope: one micrometre in, the slope must be far below the
+            // legacy `k_rest * mult` entry rate.
+            let h = 1e-6;
+            let entry_slope = (force(bump_start + h) - force(bump_start)) / h;
+            assert!(
+                entry_slope < 1e-3 * k_rest * mult,
+                "{law:?}: entry slope {entry_slope}"
+            );
+            // Monotone over the whole working length and exact at full travel.
+            let mut previous = 0.0;
+            for step in 0..=200 {
+                let x = bump_start + stroke * step as f64 / 200.0;
+                let value = force(x);
+                assert!(value >= previous - 1e-12, "{law:?}: not monotone at {x}");
+                assert!(value >= 0.0, "{law:?}: negative force at {x}");
+                previous = value;
+            }
+            assert!(
+                (force(x_max) - legacy_end).abs() <= 1e-9 * legacy_end,
+                "{law:?}: end force {} vs {legacy_end}",
+                force(x_max)
+            );
+        }
+    }
+
+    #[test]
+    fn bump_stop_damper_is_unilateral_and_dissipative() {
+        let rate = 500.0;
+        let working = 0.005;
+        // Not committed, extension, or disabled: no force at all.
+        assert_eq!(bump_stop_damper_force(rate, working, 0.0, 1.0), 0.0);
+        assert_eq!(bump_stop_damper_force(rate, working, 0.001, 0.0), 0.0);
+        assert_eq!(bump_stop_damper_force(rate, working, 0.001, -1.0), 0.0);
+        assert_eq!(bump_stop_damper_force(0.0, working, 0.001, 1.0), 0.0);
+        // Engaged in compression: positive (pushes the wheel down), bounded by the
+        // nominal rate and therefore strictly dissipative (F * v >= 0).
+        for u in [1e-5, 1e-4, 5e-4, 1e-3, 5e-3] {
+            for v in [0.05, 0.5, 3.0] {
+                let force = bump_stop_damper_force(rate, working, u, v);
+                assert!(force >= 0.0, "u={u} v={v}: force {force}");
+                assert!(force <= rate * v + 1e-12, "u={u} v={v}: force {force}");
+            }
+        }
+        // Full engagement after 10 % of the working length.
+        let saturated = bump_stop_damper_force(rate, working, 0.1 * working, 1.0);
+        assert!((saturated - rate).abs() < 1e-9, "saturated {saturated}");
+    }
+
+    #[test]
+    fn geometric_stop_reaches_the_documented_full_travel_force_and_starts_in_the_last_five_millimetres()
+    {
+        let config = VehicleConfig::williams_fw19_hockenheim_canonical();
+        let geo = config
+            .suspension
+            .geometric_suspension
+            .as_ref()
+            .expect("geometric suspension");
+        for wheel in [WheelIndex::FrontLeft, WheelIndex::RearLeft] {
+            let axle = geo.axle(wheel);
+            let (q_min, q_max) = geometric_q_limits(geo, wheel);
+            let prepared = PreparedWheelEnvelope {
+                q_min,
+                q_max,
+                k_wheel_rest_n_per_m: geometric_k_wheel_rest(geo, wheel),
+            };
+            let rest_legacy = spring_length(&config, wheel) * resting_ratio(&config, wheel);
+            let tuning = WheelMechanicalTuning::for_wheel(&config, wheel);
+            let r = jacobian(geo.corners.get(wheel), 0.0, 0.0, wheel.is_front())
+                .expect("jacobian")
+                .motion_ratio;
+            let x_max = rest_legacy + q_max;
+            let working = axle.bump_stop_travel_m.expect("authored stop travel");
+            let bump_start = x_max - working;
+            let force = |x: f64, v: f64| {
+                geometric_stop_force(geo, wheel, x, rest_legacy, prepared, 0.0, r, v, tuning).0
+            };
+            assert_eq!(force(bump_start - 1e-4, 0.0), 0.0, "{wheel:?}: no stop before entry");
+            let entry = force(bump_start + 1e-6, 0.0);
+            assert!(entry > 0.0 && entry < 1e-2, "{wheel:?}: C1 entry force {entry}");
+            let k_rest = axle.spring_rate_N_per_m * r * r;
+            let expected = 4.0 * k_rest * axle.bump_stop_mult * working;
+            let full = force(x_max, 0.0);
+            assert!(
+                (full - expected).abs() < 0.01 * expected,
+                "{wheel:?}: full-travel stop {full} N vs {expected} N"
+            );
+            println!("{wheel:?}: k_rest {k_rest:.0} N/m, stop at full travel {full:.1} N");
+            // Damper: compression only, and it can never exceed its nominal rate.
+            let compressing = force(x_max, 1.0) - force(x_max, 0.0);
+            let extending = force(x_max, -1.0) - force(x_max, 0.0);
+            assert!(compressing > 0.0, "{wheel:?}: compression damper must resist");
+            assert!((compressing - axle.bump_stop_damper_Ns_per_m).abs() < 1e-6);
+            assert_eq!(extending, 0.0, "{wheel:?}: no damper in extension");
+        }
+    }
+
+    #[test]
+    fn profile_roundtrip_carries_the_regularisation_and_rejects_invalid_values() {
+        let config = VehicleConfig::williams_fw19_hockenheim_canonical();
+        let json = config.to_resolved_configuration_value().to_string();
+        let restored = VehicleConfig::from_json_str(&json).expect("roundtrip");
+        let original = config.suspension.geometric_suspension.as_ref().unwrap();
+        let roundtrip = restored.suspension.geometric_suspension.as_ref().unwrap();
+        assert_eq!(roundtrip.front.bump_stop_law, BumpStopLaw::Cubic);
+        assert_eq!(roundtrip.rear.bump_stop_law, BumpStopLaw::Cubic);
+        assert_eq!(roundtrip.front.damper_knee_blend_m_per_s, original.front.damper_knee_blend_m_per_s);
+        assert_eq!(roundtrip.rear.bump_stop_damper_Ns_per_m, original.rear.bump_stop_damper_Ns_per_m);
+
+        let mut bad = original.clone();
+        bad.front.damper_knee_blend_m_per_s = -0.01;
+        assert!(bad.validate().is_err(), "negative blend must be rejected");
+        let mut bad = original.clone();
+        bad.rear.damper_knee_blend_m_per_s = 2.0 * original.rear.damper_knee_m_per_s;
+        assert!(bad.validate().is_err(), "blend crossing zero must be rejected");
+        let mut bad = original.clone();
+        bad.front.bump_stop_damper_Ns_per_m = -1.0;
+        assert!(bad.validate().is_err(), "negative stop damper must be rejected");
     }
 }

@@ -942,9 +942,17 @@ impl OpenFormulaSimulation {
     ///   the origin follows the wheel. The full droop-to-bump envelope stays covered.
     /// * `distance` is measured from the centre, so `suspension::sample_contact`
     ///   converts it to `compression_at_sample - signed_gap`.
+    ///
+    /// `suspension.contact_ray_count` selects between the tricast (3 rays per wheel,
+    /// 12 per vehicle) and the single-ray mode (1 ray per wheel, 4 per vehicle). The
+    /// single-ray mode casts only the centre ray and repeats that hit into the
+    /// inner/outer slots, so the contact model sees one uniform plane: partial
+    /// contact and bank angle are then invisible by construction, which is the
+    /// documented trade of the cheaper mode.
     fn sample_wheel_rays(&mut self) -> [TriRaycastSample; 4] {
         let state = &self.simulator.state;
         let config = &self.simulator.config;
+        let ray_count = config.suspension.contact_rays();
         let basis = state.transform.basis;
         let up = basis.y;
         let down = -up;
@@ -1000,27 +1008,39 @@ impl OpenFormulaSimulation {
             let lateral_sign = if wheel.is_left() { 1.0 } else { -1.0 };
             let lateral = lateral_axis * (span * lateral_sign);
             let origins = [centre_world + lateral, centre_world, centre_world - lateral];
-            let hits = [
-                cast_ground(world, origins[0], down, length),
-                cast_ground(world, origins[1], down, length),
-                cast_ground(world, origins[2], down, length),
-            ];
+            // Cast exactly the authored number of rays. In the single-ray mode the
+            // centre query represents the whole patch, so its hit fills the three
+            // slots and no inner/outer query reaches the collision world.
+            let ground = |origin: Vec3, counters: &mut StepCounters| {
+                counters.wheel_queries += 1;
+                let hit = cast_ground(world, origin, down, length);
+                if hit.is_some() {
+                    counters.wheel_hits += 1;
+                }
+                hit
+            };
+            let hits: [Option<GroundHit>; 3] = if ray_count == 1 {
+                let centre = ground(origins[1], &mut self.counters);
+                [centre, centre, centre]
+            } else {
+                [
+                    ground(origins[0], &mut self.counters),
+                    ground(origins[1], &mut self.counters),
+                    ground(origins[2], &mut self.counters),
+                ]
+            };
             let mut sample = TriRaycastSample::default();
             for (slot, hit) in hits.iter().enumerate() {
-                self.counters.wheel_queries += 1;
                 let raycast = match hit {
-                    Some(hit) => {
-                        self.counters.wheel_hits += 1;
-                        RaycastHit {
-                            is_colliding: true,
-                            distance: hit.distance,
-                            point: hit.point,
-                            normal: hit.normal,
-                            surface: hit.surface,
-                            surface_friction_multiplier: hit.friction,
-                            surface_rolling_resistance_multiplier: hit.rolling_resistance,
-                        }
-                    }
+                    Some(hit) => RaycastHit {
+                        is_colliding: true,
+                        distance: hit.distance,
+                        point: hit.point,
+                        normal: hit.normal,
+                        surface: hit.surface,
+                        surface_friction_multiplier: hit.friction,
+                        surface_rolling_resistance_multiplier: hit.rolling_resistance,
+                    },
                     None => RaycastHit {
                         is_colliding: false,
                         distance: length,
@@ -1041,7 +1061,8 @@ impl OpenFormulaSimulation {
                 suspension.suspension_compression_m,
                 radius,
                 span,
-            );
+            )
+            .with_ray_count(ray_count as u8);
             samples_out[index] = sample;
         }
         samples_out

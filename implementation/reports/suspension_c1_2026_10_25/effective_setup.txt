@@ -1,0 +1,46 @@
+FIELD path=suspension.front.resting_ratio label="Front ride height ratio" value=0.271429 unit="ratio" min=0.200000 max=0.800000 step=0.005000 editable=1
+FIELD path=suspension.rear.resting_ratio label="Rear ride height ratio" value=0.336615 unit="ratio" min=0.200000 max=0.800000 step=0.005000 editable=1
+FIELD path=suspension.front.damping_ratio label="Front damper ratio" value=0.740000 unit="ratio" min=0.050000 max=1.200000 step=0.010000 editable=1
+FIELD path=suspension.rear.damping_ratio label="Rear damper ratio" value=0.710000 unit="ratio" min=0.050000 max=1.200000 step=0.010000 editable=1
+FIELD path=suspension.front.bump_damp_multiplier label="Front bump multiplier" value=1.000000 unit="ratio" min=0.200000 max=3.000000 step=0.010000 editable=1
+FIELD path=suspension.rear.bump_damp_multiplier label="Rear bump multiplier" value=0.900000 unit="ratio" min=0.200000 max=3.000000 step=0.010000 editable=1
+FIELD path=suspension.front.rebound_damp_multiplier label="Front rebound multiplier" value=1.120000 unit="ratio" min=0.200000 max=3.000000 step=0.010000 editable=1
+FIELD path=suspension.rear.rebound_damp_multiplier label="Rear rebound multiplier" value=1.350000 unit="ratio" min=0.200000 max=3.000000 step=0.010000 editable=1
+FIELD path=suspension.geometry_physical.front_arb.ratio label="Front anti-roll ratio" value=0.250000 unit="ratio" min=0.000000 max=2.000000 step=0.010000 editable=1
+FIELD path=suspension.geometry_physical.rear_arb.ratio label="Rear anti-roll ratio" value=0.060000 unit="ratio" min=0.000000 max=2.000000 step=0.010000 editable=1
+FIELD path=suspension.front.toe label="Front toe (local)" value=-0.001745 unit="rad" min=-0.050000 max=0.050000 step=0.001000 editable=1
+FIELD path=suspension.rear.toe label="Rear toe (local)" value=0.000000 unit="rad" min=-0.050000 max=0.050000 step=0.001000 editable=1
+FIELD path=suspension.front.camber label="Front camber" value=-0.069813 unit="rad" min=-0.100000 max=0.050000 step=0.001000 editable=1
+FIELD path=suspension.rear.camber label="Rear camber" value=-0.026180 unit="rad" min=-0.100000 max=0.050000 step=0.001000 editable=1
+FIELD path=suspension.front.bump_stop_multiplier label="Front bump stop" value=1.000000 unit="ratio" min=0.000000 max=4.000000 step=0.050000 editable=1
+FIELD path=suspension.rear.bump_stop_multiplier label="Rear bump stop" value=1.000000 unit="ratio" min=0.000000 max=4.000000 step=0.050000 editable=1
+FIELD path=brakes.front_brake_bias label="Front brake bias" value=0.590000 unit="fraction" min=0.300000 max=0.800000 step=0.005000 editable=1
+FIELD path=brakes.max_brake_torque label="Maximum brake torque" value=4000.000000 unit="N m" min=500.000000 max=8000.000000 step=50.000000 editable=1
+FIELD path=powertrain.differential.preload_nm label="Differential preload" value=90.000000 unit="N m" min=0.000000 max=120.000000 step=1.000000 editable=1
+FIELD path=powertrain.differential.power_ramp_angle_deg label="Differential power ramp" value=65.000000 unit="deg" min=5.000000 max=80.000000 step=1.000000 editable=1
+FIELD path=powertrain.differential.coast_ramp_angle_deg label="Differential coast ramp" value=60.000000 unit="deg" min=5.000000 max=80.000000 step=1.000000 editable=1
+FIELD path=powertrain.differential.clutches label="Differential clutches" value=6.000000 unit="count" min=1.000000 max=8.000000 step=1.000000 editable=1
+FIELD path=powertrain.final_drive label="Final drive" value=4.650000 unit="ratio" min=2.000000 max=6.000000 step=0.010000 editable=1
+FIELD path=powertrain.max_rpm label="Rev limiter" value=17500.000000 unit="rpm" min=6000.000000 max=22000.000000 step=100.000000 editable=1
+FIELD path=aero.model.front_wing.incidence_deg label="Front wing incidence" value=18.000000 unit="deg" min=0.000000 max=20.000000 step=0.500000 editable=1
+FIELD path=aero.model.rear_wing.incidence_deg label="Rear wing incidence" value=16.000000 unit="deg" min=0.000000 max=20.000000 step=0.500000 editable=1
+FIELD path=steering.max_steering_angle label="Maximum steering angle" value=0.314000 unit="rad" min=0.150000 max=0.700000 step=0.005000 editable=1
+FIELD path=steering.steering_speed label="Steering speed" value=8.000000 unit="1/s" min=1.000000 max=12.000000 step=0.050000 editable=1
+FIELD path=fuel.initial_kg label="Fuel load" value=7.594444 unit="kg" min=0.000000 max=120.000000 step=0.500000 editable=1
+FIELD path=fuel.density_kg_per_litre label="Fuel density (conversion)" value=0.750000 unit="kg/L" min=0.000000 max=0.000000 step=0.000000 editable=0
+FIELD path=tires.pressure.cold_kpa_gauge.FL label="Front left cold pressure" value=130.000000 unit="kPa gauge" min=80.000000 max=220.000000 step=1.000000 editable=1
+FIELD path=tires.pressure.cold_kpa_gauge.FR label="Front right cold pressure" value=130.000000 unit="kPa gauge" min=80.000000 max=220.000000 step=1.000000 editable=1
+FIELD path=tires.pressure.cold_kpa_gauge.RL label="Rear left cold pressure" value=120.000000 unit="kPa gauge" min=80.000000 max=220.000000 step=1.000000 editable=1
+FIELD path=tires.pressure.cold_kpa_gauge.RR label="Rear right cold pressure" value=120.000000 unit="kPa gauge" min=80.000000 max=220.000000 step=1.000000 editable=1
+FIELD path=suspension.front.spring_length label="Front spring length (design)" value=0.350000 unit="m" min=0.000000 max=0.000000 step=0.000000 editable=0
+FIELD path=suspension.rear.spring_length label="Rear spring length (design)" value=0.325000 unit="m" min=0.000000 max=0.000000 step=0.000000 editable=0
+FIELD path=tires.front.radius label="Front tire radius (design)" value=0.311949 unit="m" min=0.000000 max=0.000000 step=0.000000 editable=0
+FIELD path=tires.rear.radius label="Rear tire radius (design)" value=0.322016 unit="m" min=0.000000 max=0.000000 step=0.000000 editable=0
+DERIVED wheel=FrontLeft rest_compression_m=0.095000 spring_length_m=0.350000 spring_free_length_m=0.271429 spring_installed_length_m=0.260000 preload_m=0.011429 spring_rate_N_per_m=200000.000 damper_bump_Ns_per_m=8074.843 damper_rebound_Ns_per_m=9938.269 damper_knee_m_per_s=0.127000 damper_fast_factor=0.500000 droop_m=0.085000 bump_m=0.025000 tire_radius_m=0.311949
+DERIVED wheel=FrontRight rest_compression_m=0.095000 spring_length_m=0.350000 spring_free_length_m=0.271429 spring_installed_length_m=0.260000 preload_m=0.011429 spring_rate_N_per_m=200000.000 damper_bump_Ns_per_m=8074.843 damper_rebound_Ns_per_m=9938.269 damper_knee_m_per_s=0.127000 damper_fast_factor=0.500000 droop_m=0.085000 bump_m=0.025000 tire_radius_m=0.311949
+DERIVED wheel=RearLeft rest_compression_m=0.109400 spring_length_m=0.325000 spring_free_length_m=0.251640 spring_installed_length_m=0.250000 preload_m=0.001640 spring_rate_N_per_m=1200000.000 damper_bump_Ns_per_m=47431.814 damper_rebound_Ns_per_m=58377.618 damper_knee_m_per_s=0.127000 damper_fast_factor=0.500000 droop_m=0.090000 bump_m=0.040000 tire_radius_m=0.322016
+DERIVED wheel=RearRight rest_compression_m=0.109400 spring_length_m=0.325000 spring_free_length_m=0.251640 spring_installed_length_m=0.250000 preload_m=0.001640 spring_rate_N_per_m=1200000.000 damper_bump_Ns_per_m=47431.814 damper_rebound_Ns_per_m=58377.618 damper_knee_m_per_s=0.127000 damper_fast_factor=0.500000 droop_m=0.090000 bump_m=0.040000 tire_radius_m=0.322016
+DERIVED axle=front arb_ratio=0.250000 arb_config=LegacyRatio { ratio: 0.25 }
+DERIVED axle=rear arb_ratio=0.060000 arb_config=LegacyRatio { ratio: 0.06 }
+DERIVED mass_kg=547.000 fuel_kg=7.594 front_weight_fraction=0.445000 brake_bias_front=0.590000
+DERIVED effective_elements={"front":{"arb_geometric_ratio":0.25,"arb_ratio":0.25,"bump_damp_multiplier":1.0,"bump_stop_multiplier":1.0,"damper_bump_Ns_per_m":8074.843399230281,"damper_rebound_Ns_per_m":9938.268799052654,"damping_ratio":0.74,"effective_bump_stop_mult":1.0,"rebound_damp_multiplier":1.12},"rear":{"arb_geometric_ratio":0.06,"arb_ratio":0.06,"bump_damp_multiplier":0.9,"bump_stop_multiplier":1.0,"damper_bump_Ns_per_m":47431.81426907967,"damper_rebound_Ns_per_m":58377.61756194421,"damping_ratio":0.71,"effective_bump_stop_mult":1.0,"rebound_damp_multiplier":1.35}}

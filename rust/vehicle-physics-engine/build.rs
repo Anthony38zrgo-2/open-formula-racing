@@ -97,7 +97,7 @@ fn generate_embedded_geometric_profile() {
         manifest["coordinate_contract"].clone(),
     );
 
-    let section_map: [(&str, &[&str]); 11] = [
+    let section_map: [(&str, &[&str]); 12] = [
         ("chassis", &["chassis", "geometry", "physical_mass_inventory"]),
         ("fuel", &["fuel"]),
         ("steering", &["steering"]),
@@ -109,6 +109,7 @@ fn generate_embedded_geometric_profile() {
         ("driving_assistance", &["aids"]),
         ("underfloor_contact", &["underfloor_contact"]),
         ("coupled_world", &["coupled_world"]),
+        ("suspension_filters", &["suspension_filters"]),
     ];
 
     for (domain_name, section_names) in section_map {

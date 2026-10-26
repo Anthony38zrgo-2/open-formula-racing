@@ -3,6 +3,12 @@ use super::document::JsonSuspension;
 
 impl JsonSuspension {
     pub(crate) fn validate_geometry(&self) -> Result<(), String> {
+        if self.contact_ray_count != 1 && self.contact_ray_count != 3 {
+            return Err(format!(
+                "suspension.contact_ray_count must be 1 or 3 (got {})",
+                self.contact_ray_count
+            ));
+        }
         for (name, axle) in [("front", &self.front), ("rear", &self.rear)] {
             for (field, value) in [
                 ("camber_gain_rad_per_m", axle.camber_gain_rad_per_m),

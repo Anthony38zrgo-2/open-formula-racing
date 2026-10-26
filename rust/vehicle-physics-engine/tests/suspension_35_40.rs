@@ -77,7 +77,13 @@ fn progressive_stops_only_start_in_the_last_five_millimetres() {
         let mut before=[0.;4];before[i]=max-0.005-0.00025;
         let mut after=before;after[i]=max-0.005+0.00025;
         assert!(evaluation(&c,before).wheels[i].bottom_out_force.abs()<1e-6);
-        assert!(evaluation(&c,after).wheels[i].bottom_out_force>1.);
+        // C1 bump stop: the entry slope is zero by construction, so 0.25 mm into
+        // the 5 mm working length produces ~0.4 N instead of the ~152 N of the
+        // linear entry. It must still be strictly positive (the stop starts in
+        // the last 5 mm, not later) and far below the full-stroke force.
+        let entered = evaluation(&c,after).wheels[i].bottom_out_force;
+        assert!(entered > 0., "{w:?}: stop must start in the last 5 mm, got {entered}");
+        assert!(entered < 5., "{w:?}: C1 entry force must stay small, got {entered}");
         assert_eq!(WheelMechanicalTuning::for_wheel(&c,w).hard_stop_overtravel_m,0.0001);
     }
 }

@@ -139,6 +139,7 @@ impl VehicleConfiguration {
             coupled_world: None,
             underfloor_contact: None,
             tire_filters: None,
+            suspension_filters: None,
 
             suspension: SuspensionConfiguration {
                 front_spring_length: 0.250,
@@ -160,6 +161,7 @@ impl VehicleConfiguration {
                 rear_camber: -0.0174533,
                 rear_bump_stop_multiplier: 3.5,
                 tri_ray_spacing_ratio: 0.40,
+                contact_ray_count: 3,
                 front_camber_gain_rad_per_m: 0.0,
                 rear_camber_gain_rad_per_m: 0.0,
                 front_toe_gain_rad_per_m: 0.0,
@@ -336,6 +338,7 @@ impl VehicleConfiguration {
             coupled_world: None,
             underfloor_contact: None,
             tire_filters: None,
+            suspension_filters: None,
 
             suspension: SuspensionConfiguration {
                 front_spring_length: 0.100,
@@ -357,6 +360,7 @@ impl VehicleConfiguration {
                 rear_camber: -0.026,
                 rear_bump_stop_multiplier: 2.2,
                 tri_ray_spacing_ratio: 0.40,
+                contact_ray_count: 3,
                 front_camber_gain_rad_per_m: 0.0,
                 rear_camber_gain_rad_per_m: 0.0,
                 front_toe_gain_rad_per_m: 0.0,

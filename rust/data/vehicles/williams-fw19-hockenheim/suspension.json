@@ -227,10 +227,17 @@
         }
       },
       "front": {
+        "arb_damper_Ns_per_m": 200.0,
+        "bump_stop_damper_Ns_per_m": 500.0,
+        "bump_stop_law": "cubic",
         "bump_stop_mult": 1.0,
         "damper_bump_Ns_per_m": 8074.843399230281,
         "damper_fast_factor": 0.5,
+        "damper_knee_blend_m_per_s": 0.015,
         "damper_knee_m_per_s": 0.127,
+        "hard_stop_compliance_m": 0.0004,
+        "hard_stop_damper_Ns_per_m": 1500.0,
+        "hard_stop_stiffness_N_per_m": 16500000.0,
         "damper_max_m": 0.4,
         "damper_min_m": 0.15,
         "damper_rebound_Ns_per_m": 9938.268799052654,
@@ -247,10 +254,17 @@
         "ratio": 0.25
       },
       "rear": {
+        "arb_damper_Ns_per_m": 150.0,
+        "bump_stop_damper_Ns_per_m": 550.0,
+        "bump_stop_law": "cubic",
         "bump_stop_mult": 1.0,
         "damper_bump_Ns_per_m": 47431.81426907967,
         "damper_fast_factor": 0.5,
+        "damper_knee_blend_m_per_s": 0.02,
         "damper_knee_m_per_s": 0.127,
+        "hard_stop_compliance_m": 0.0004,
+        "hard_stop_damper_Ns_per_m": 1500.0,
+        "hard_stop_stiffness_N_per_m": 16500000.0,
         "damper_max_m": 0.4,
         "damper_min_m": 0.15,
         "damper_rebound_Ns_per_m": 58377.61756194421,
@@ -283,6 +297,7 @@
       "toe": 0.0,
       "toe_gain_rad_per_m": 0.025
     },
-    "tri_ray_spacing_ratio": 0.4
+    "tri_ray_spacing_ratio": 0.4,
+    "contact_ray_count": 1
   }
 }

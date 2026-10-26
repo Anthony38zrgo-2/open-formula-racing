@@ -120,6 +120,8 @@ struct PreparedAxleCorner {
     geometry_invalid: bool,
     envelope: PreparedWheelEnvelope,
     tuning: WheelMechanicalTuning,
+    /// Overtravel plus compliant hard-stop band, at the wheel (m).
+    hard_stop_allowance_metres: f64,
     contact: SimplifiedNormalContact,
     simplified: std::sync::Arc<SimplifiedSuspension>,
 }
@@ -166,6 +168,7 @@ impl PreparedAxleCorner {
         &self,
         geometry: &GeometricSuspensionConfig,
         compression_metres: f64,
+        velocity_metres_per_second: f64,
         spring_compression_metres: f64,
         motion_ratio: f64,
     ) -> (f64, bool) {
@@ -177,6 +180,7 @@ impl PreparedAxleCorner {
             self.envelope,
             spring_compression_metres,
             motion_ratio,
+            velocity_metres_per_second,
             self.tuning,
         )
     }
@@ -184,8 +188,8 @@ impl PreparedAxleCorner {
     fn compression_bounds_metres(&self) -> (f64, f64) {
         let bounds = geometric_travel_bounds(self.envelope, self.reference_compression_metres);
         (
-            bounds.0 - self.tuning.hard_stop_overtravel_m,
-            bounds.1 + self.tuning.hard_stop_overtravel_m,
+            bounds.0 - self.hard_stop_allowance_metres,
+            bounds.1 + self.hard_stop_allowance_metres,
         )
     }
 }
@@ -199,6 +203,7 @@ fn integrate_implicit_axle(
     compression_bounds_metres: [(f64, f64); 2],
     reference_compressions_metres: [f64; 2],
     antiroll_stiffness_newtons_per_metre: f64,
+    antiroll_damping_newtons_per_second_per_metre: f64,
     ground_contacts: [GroundContactConstraint; 2],
     force_at: impl Fn(usize, f64, f64) -> f64,
 ) -> ([VerticalSuspensionStep; 2], AxleSolveDiagnostics) {
@@ -220,8 +225,15 @@ fn integrate_implicit_axle(
                     * (compression_metres
                         - reference_compressions_metres[index]
                         - opposite_travel_metres);
+                // Bar damper: proportional to the relative travel velocity of the
+                // pair and opposite to it. Antisymmetric between the two corners,
+                // so the axle momentum and the static equilibrium are untouched
+                // and the power `F_self * v_self + F_opp * v_opp` is never negative.
+                let antiroll_damping_newtons = antiroll_damping_newtons_per_second_per_metre
+                    * (velocity_metres_per_second - opposite_velocity_metres_per_second);
                 force_at(index, compression_metres, velocity_metres_per_second)
                     + antiroll_force_newtons
+                    + antiroll_damping_newtons
             },
         )
     };
@@ -238,10 +250,13 @@ fn integrate_implicit_axle(
                 - reference_compressions_metres[index]
                 - opposite_compression_metres
                 + reference_compressions_metres[opposite_index]);
+        let antiroll_damping_newtons = antiroll_damping_newtons_per_second_per_metre
+            * (candidate_velocities[index] - candidate_velocities[opposite_index]);
         masses_kilograms[index]
             * (candidate_velocities[index] - velocities_metres_per_second[index])
             + duration_seconds * suspension_force_newtons
             + duration_seconds * antiroll_force_newtons
+            + duration_seconds * antiroll_damping_newtons
     };
     // Admissible velocity interval per corner: the suspension travel stop AND, when
     // the road is binding, the ground plane. Both are unilateral bounds with the
@@ -486,6 +501,15 @@ impl SuspensionSystem {
             motion_ratio,
             geometry_invalid,
             envelope: self.geometric_prepared.as_ref().unwrap().for_wheel(wheel),
+            hard_stop_allowance_metres: hard_stop_allowance_m(
+                configuration
+                    .suspension
+                    .geometric_suspension
+                    .as_ref()
+                    .expect("geometric suspension")
+                    .axle(wheel),
+                tuning,
+            ),
             tuning,
             contact,
             simplified,
@@ -524,6 +548,21 @@ impl SuspensionSystem {
         )
     }
 
+    /// Anti-roll bar damper for one axle (N·s/m at the wheel). Authored per axle,
+    /// already expressed in wheel-space relative travel velocity.
+    pub(super) fn simplified_antiroll_damping(
+        &self,
+        configuration: &VehicleConfig,
+        wheels: [WheelIndex; 2],
+    ) -> f64 {
+        configuration
+            .suspension
+            .geometric_suspension
+            .as_ref()
+            .map(|geometry| geometry.axle(wheels[0]).arb_damper_Ns_per_m.max(0.0))
+            .unwrap_or(0.0)
+    }
+
     pub(super) fn solve_simplified_geometric_axle(
         &mut self,
         configuration: &VehicleConfig,
@@ -542,6 +581,7 @@ impl SuspensionSystem {
             self.prepare_simplified_axle_corner(configuration, wheel, modifiers[wheel as usize])
         });
         let antiroll_stiffness = self.simplified_antiroll_stiffness(configuration, wheels);
+        let antiroll_damping = self.simplified_antiroll_damping(configuration, wheels);
         // Weight plus body acceleration along the suspension axis. The corner mass is
         // physical, so it carries its own weight and the pseudo-force of the anchor
         // acceleration; the chassis is charged only the element reaction.
@@ -682,6 +722,7 @@ impl SuspensionSystem {
                 std::array::from_fn(|index| corners[index].compression_bounds_metres()),
                 std::array::from_fn(|index| corners[index].reference_compression_metres),
                 antiroll_stiffness,
+                antiroll_damping,
                 ground_contacts,
                 |index, compression_metres, velocity_metres_per_second| {
                     let corner = &corners[index];
@@ -693,6 +734,7 @@ impl SuspensionSystem {
                             .stop_force(
                                 geometry,
                                 compression_metres,
+                                velocity_metres_per_second,
                                 spring_compression,
                                 motion_ratio,
                             )
@@ -781,6 +823,7 @@ impl SuspensionSystem {
                     .stop_force(
                         geometry,
                         step.compression_metres,
+                        step.velocity_metres_per_second,
                         spring_compression,
                         motion_ratio,
                     )
@@ -863,6 +906,7 @@ mod tests {
                     [(-0.1, 0.1); 2],
                     [0.0; 2],
                     stiffness,
+                    0.0,
                     inactive_ground(),
                     |_, _, _| 0.0,
                 );
@@ -894,6 +938,7 @@ mod tests {
             1.0 / 500.0,
             [(-0.1, 0.1); 2],
             [0.0; 2],
+            0.0,
             0.0,
             [
                 GroundContactConstraint {

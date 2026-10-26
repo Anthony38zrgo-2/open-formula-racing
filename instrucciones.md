@@ -1,223 +1,414 @@
-# Encargo vigente: neumático sin elasticidad vertical y contacto rígido en simuv5
+# GOAL — Handoff de suspensión: regularización y filtros por componente
 
-Fecha: 21 de octubre de 2026. Repositorio exclusivo: D:/open-formula.
-Rama observada: codex/initial-port. HEAD observado: bfb708b4500efe15dba347da20af40f46a5e0fe0.
+**Fecha:** 25 de octubre de 2026.
+**Repositorio exclusivo:** `D:/open-formula`.
+**Rama:** `main`.
+**HEAD de partida:** `b315dce34a16c3b874b0d38ce21c2ecc2776f40a`.
+**Sustituye:** el handoff anterior de `instrucciones.md` (2026-10-21, neumático rígido). El anterior queda en el historial de Git; no se pierde.
 
-Este documento sustituye íntegramente instrucciones.md. Es un handoff para que el siguiente agente implemente y valide el cambio descrito. Las decisiones de alcance ya están confirmadas; no volver a solicitar elección entre neumático elástico y rígido.
+Este documento es un handoff para el siguiente agente. El objetivo es hacer la suspensión **más predecible y menos sensible o crítica**, aplicando regularización C1, amortiguación física y, solo si hace falta, filtros de 1 ms. No es una autorización para cambiar el modelo de neumático, el acoplamiento cuerpo/esquina ni la aerodinámica.
 
-Esta edición solo cambia la documentación. El repositorio contiene cambios de otro trabajo de autoridad física única; no atribuirlos a este encargo, descartarlos ni suponer que ya están terminados o validados.
+---
 
-## 1. Objetivo confirmado por el usuario
+## Estado de la implementación (2026-10-25, sesión 1)
 
-Eliminar la elasticidad y amortiguación VERTICAL del neumático. La suspensión debe aportar sus muelles, amortiguadores y demás elementos mecánicos; el neumático mantiene rozamiento, grip y el resto de su comportamiento tangencial, térmico y de desgaste.
+Informe completo, medidas y hashes: `implementation/reports/suspension_c1_2026_10_25/README.md`.
 
-El usuario confirmó expresamente: «Sí, neumático sin elasticidad vertical», conservando contacto rígido con el suelo y grip dependiente de la carga normal.
+| Fase | Estado | Resumen |
+|---|---|---|
+| 1. Codo C1 del amortiguador | **Hecha** | Banda `knee ± blend/2` integrada sobre la rigidez; C1, asíntota exacta, `F(knee)` −0.55 % / −0.74 %. `blend = 0.015 / 0.02`. |
+| 2. Tope C1 + amortiguador | **Hecha** | `bump_stop_law = "cubic"` (`F = k3·x³`, `F_end` = fuerza histórica a pleno recorrido) + amortiguador unilateral 500/550 N·s/m. |
+| 3. Altura de carretera | **Hecha** | Ruta única en `configure_simplified_contact_kinematics`, limitador 15 m/s y filtro opcional 0.0; dominio `suspension_filters.json`. |
+| 4. Tope duro compliant | **Hecha** | Banda 0.4 mm, muelle cuadrático C1 16.5 MN/m + 1.5 kN·s/m; clamp solo al final; bounds extendidos a `max(overtravel, compliance)`. |
+| 5. Amortiguador de barra | **Hecha** | `arb_damper_Ns_per_m` 200/150, antisimétrico, dentro del solve implícito del eje. |
+| 6. Filtros de 1 ms | **Diferida, en 0.0** | Dominio preparado y capado a 1 ms; sin evidencia de ruido. Pulso a 74 m/s cubierto con un protocolo equivalente en el árbol (`suspension_c1::high_speed_steering_pulse_does_not_grow`): la guiñada decrece, sin ciclo límite. |
+| Extra. Raycast 1 vs 3 por rueda | **Hecha (en 1)** | `suspension.contact_ray_count` (1 o 3, por defecto 3) en el muestreador interno; el perfil queda en 1 (4 consultas por paso en vez de 12). En plano, mismas cargas y altura; se pierde contacto parcial y peralte por huella. Bancos: `contact_ray_count` (5). |
 
-Esto implica:
+Regresiones en verde (`body_coupling` 6, `setup_authority` 15, `structural_contact` 16, `suspension_35_40` 5, `vertical_telemetry` 9, `wheel_centre_contact` 16, nuevos `suspension_c1` 11 y `contact_ray_count` 5) y `verify_dll.py` en verde con ABI 7. Estática idéntica a la ley histórica (ride 0.03501418/0.03999095 m, cargas 1335.841/1667.909 N). Las 19–20 fallas unitarias restantes son preexistentes (verificadas contra `b315dce`). Sin commit ni push.
 
-- Sustituir el resorte/amortiguador radial por una restricción unilateral rueda-suelo resuelta dentro del solver físico único.
-- Conservar la reacción normal del suelo que sostiene el coche. No eliminar N ni sustituirla simplemente por cero.
-- Mantener fuerzas longitudinales/laterales, deslizamiento combinado, sensibilidad a carga, relajación tangencial, par autoalineante y resistencia a la rodadura.
-- Conservar los efectos de temperatura, presión y desgaste sobre adherencia y rodadura. Retirar su influencia sobre rigidez y amortiguación vertical del neumático.
-- Conservar suspensión, masas no suspendidas, combustible, inercias, siete grados de libertad y contacto del fondo.
-- Conservar transferencia de carga y momentos producidos por frenada y curva. El encargo elimina la elasticidad radial, no la interacción física entre grip, chasis y suspensión.
+**Siguiente paso sugerido**: decidir si el substepping del eje (0.2) se implementa con interpolación del cuerpo o se declara fuera de alcance; y repetir el pulso original del neumático (fuera del árbol) si se vuelve a tocar `tire_filters.json`.
 
-No recuperar el neumático legacy ni el prototipo retirado tire_vertical_model. No crear un fallback silencioso al modelo elástico.
+---
 
-## 2. Antes de editar: estado real y trabajo concurrente
+## GOAL
 
-Inventariar HEAD, rama, git status, diff y archivos sin seguimiento. Respaldar fuera del árbol los archivos que se vayan a modificar, incluidos candidatos ignorados si se usan. No resetear, limpiar ni reemplazar archivos de producción completos para simplificar el cambio.
+1. **Tope progresivo C1 + amortiguador dedicado (P0).**
+   Sustituir la ley actual del tope progresivo por una fuerza C1, con pendiente inicial cero y energía conservativa, y añadir un amortiguador dedicado en compresión. Mantener el recorrido de 5 mm y la altura residual de 5 mm.
 
-Durante esta redacción había modificaciones en CMakeLists.txt, migration_status.json, instrucciones.md, aero.cpp, car.cpp, carstruct.h, collide.cpp, sim.h, tire_vertical_solver.cpp/.h y prepare_williams_vehicle.py. También existían sin seguimiento informes, geometría del fondo, scripts y tools/validate_formula_vertical_authority.cpp. Este inventario es una observación, no una lista de archivos autorizados para borrar.
+2. **Limitador de velocidad de la altura de carretera (P1).**
+   Unificar el objetivo de contacto, eliminar el doble camino que hoy sobrescribe `normal_road_compression_metres`, y limitar su velocidad de cambio (10–15 m/s) antes de la restricción. Filtro paso bajo opcional de 2–4 ms, desactivado por defecto.
 
-Leer primero:
+3. **Mezcla C1 del codo del amortiguador (P1).**
+   Sustituir el codo duro de `damper_knee_m_per_s` por una mezcla C1 en una banda de 0.01–0.02 m/s, conservando fuerza y asíntotas, y garantizando disipación positiva.
 
-- implementation/reports/vertical_single_authority.md.
-- implementation/reports/vertical_floor_geometry.md, si existe.
-- implementation/floor_contact_points.json, si existe.
-- implementation/reports/simuv5_legacy_tire_retirement.md.
-- implementation/migration_status.json.
-- Los fuentes y diffs actuales de todos los archivos que se vayan a tocar.
+4. **Tope duro compliant (P1/P2).**
+   Sustituir la proyección inelástica del tope duro por un tope compliant (muelle + amortiguador) dentro de `hard_stop_compliance_m` de 0.3–0.5 mm. Mantener el clamp como último recurso y no permitir violar el envelope geométrico.
 
-El informe vertical_single_authority leído en esta revisión describe fase 0 y reproducción del defecto; los fuentes ya contienen tipos/entradas para contactos del chasis. No asumir que el informe cubre todos los cambios pendientes. Verificar qué fases se implementaron realmente y completar únicamente las dependencias necesarias para este objetivo, conservando el trabajo existente.
+5. **Amortiguador de barra (P2).**
+   Añadir amortiguación física a la barra anti-roll, proporcional a la velocidad relativa de recorrido y opuesta a ella, con 100–300 N·s/m en rueda. No cambia el equilibrio estático.
 
-Coordinar archivos compartidos si otro agente sigue escribiéndolos. No hacer commit ni push. No trabajar en D:/Formula90s. No modificar memorias.
+6. **Filtros de 1 ms solo si las mediciones muestran ruido (P2/P3).**
+   No añadir filtros por defecto. Solo después de 1–5, y solo si hay evidencia de ruido: velocidad del amortiguador o recorrido relativo de barra con `tau ≤ 1 ms`. Nunca sobre fuerza total de suspensión, aceleración del cuerpo o fuerza del muelle.
 
-## 3. Arquitectura y contrato físico
+**Criterio general:** primero C1 y amortiguación física; los filtros son el último recurso. Cualquier filtro sobre fuerza añade fase en el bucle rueda–chasis y puede crear un ciclo límite, como ya ocurrió con el neumático.
 
-### 3.1 Autoridad única
+---
 
-formula_vertical_state sigue siendo el estado autoritativo de heave, roll, pitch y las cuatro extensiones. Neumáticos rígidos, suspensiones, topes y contactos del fondo se resuelven en el mismo sistema antes de publicar DynGCg, DynGC y vistas de rueda.
+## 0. Contexto y estado de partida
 
-No añadir correcciones externas de posición/velocidad, un segundo integrador de ruedas ni una copia rutinaria de DynGCg hacia el estado interno al terminar cada paso. Reset, inicialización y recolocación son transiciones explícitas y atómicas.
+### 0.1 Camino activo
 
-Preservar las decisiones del trabajo anterior:
+El juego usa `rustphysics` → `ofp_step` → `OpenFormulaSimulation` → `VehicleSimulator` → `SuspensionSystem`. El backend de producción es **Simplified** con modelo **Geometric** (`SuspensionBackend::production()`), y el host entrega `dt = 0.002 s` (500 Hz).
 
-- Contacto del fondo rígido unilateral disipativo, con geometría derivada de datos del vehículo y contrastada con el modelo visual; aproximaciones declaradas cuando falten datos.
-- Retirar el clamp externo de +/-1 rad sin convertirlo arbitrariamente en tope mecánico. Diagnosticar el dominio angular del modelo.
-- aero.cpp puede cambiar únicamente para asegurar lecturas coherentes del estado y alturas. No recalibrar curvas aerodinámicas.
-- Conservar eventos y daños aplicables sin duplicarlos en predictor, iteraciones o subpasos.
+La resolución vertical es un solve implícito por eje, delantero y después trasero, acoplado al cuerpo mediante un punto fijo 6×6. No es un solve monolítico de cuatro ruedas y cuerpo; eso es una decisión de arquitectura existente y **no es el objeto de este GOAL**.
 
-Si estas propiedades todavía no están terminadas, son dependencias de integración del nuevo contacto. El informe final debe distinguir lo heredado, lo completado aquí y lo pendiente.
+### 0.2 Dependencia numérica: substepping
 
-### 3.2 Contacto de rueda sin resorte radial
+`WheelMechanicalTuning::mechanical_substep_s` vale `1/480`, pero `solve_simplified_geometric_axle` fija `substeps = 1` y descarta el objetivo (`simplified_axle_integration.rs:595-603`). A 500 Hz el paso de 2 ms es menor que 1/480 y el efecto es pequeño; a 120 Hz el paso es 8.3 ms, cuatro veces el objetivo. **Antes de calibrar filtros, decidir si se implementa substepping del eje con interpolación del cuerpo o si se documenta que la validación es solo a 500 Hz.** No usar filtros para compensar un paso de integración demasiado grande.
 
-Ahora el soporte se obtiene de N = max(0, k_radial*d + c_radial*d_velocity), con condición de deformación positiva. Sustituir esa ley por contacto geométrico unilateral.
+### 0.3 Lección del neumático
 
-En la aproximación vertical plana actual:
+En el commit `b315dce` se activaron todos los filtros del neumático. El valor `min_relaxation_tau_s = 0.045 s` produjo un ciclo límite de guiñada a alta velocidad; se corrigió a `0.008 s` y `relaxation_recovery_scale = 1.3`. La fase de un paso bajo es `atan(2π f τ)`:
 
-    H_i = body_height - wheel_x_i*pitch + wheel_y_i*roll
-    C_i = H_i + R_i - L_i
-    gap_i = C_i - R_i - G_i = H_i - L_i - G_i
+| `tau` | 1 Hz | 2 Hz | 20 Hz (rebote de rueda) |
+|---:|---:|---:|---:|
+| 1 ms | 0.4° | 0.7° | **7.2°** |
+| 2 ms | 0.7° | 1.4° | **14.4°** |
+| 5 ms | 1.8° | 3.6° | **36°** |
+| 10 ms | 3.6° | 7.2° | **51.5°** |
+| 45 ms | 15.8° | 29.5° | — |
 
-H es la referencia del chasis, C el centro de rueda, R el radio geométrico, L la extensión física y G la altura del suelo. Respetar los offsets reales respecto a statGC y las convenciones del solver. El radio efectivo de rodadura no sustituye a R en estas identidades.
+Conclusión operativa: **filtros sobre fuerza ≤ 1 ms**; 2 ms ya es marginal; 5 ms es peligroso. Los filtros de entrada de carretera pueden ser 2–4 ms, pero es preferible un limitador de velocidad.
 
-Condiciones objetivo: gap >= 0, reacción normal N >= 0, sin reacción mientras la rueda se separa del suelo, y contacto activo compatible con la velocidad relativa/terreno. Esquema fijado: Euler implícito con active set de restricciones unilaterales dentro del solver acoplado (§3.4); no añadir un solver LCP separado ni una proyección posterior independiente.
+### 0.4 Datos actuales del Williams
 
-- Resolver las reacciones mediante restricciones y sus Jacobianos dentro del bloque conjunto, con restitución normal nula como punto de partida para los impactos de rueda. No usar k enorme como rigidez infinita.
-- En vuelo, mantener masa no suspendida, fuerzas internas y recorrido de suspensión; N=0 y fuerza de adherencia nula por falta de apoyo.
-- N no equivale siempre a la fuerza del muelle: incluye la dinámica de la masa no suspendida y demás fuerzas. No copiar susp.force como carga normal universal.
-- Incorporar cuatro contactos de rueda a la gestión de restricciones existente. Revisar capacidad, índices, redundancia, rango y contactos simultáneos con topes y fondo. No eliminar contactos arbitrariamente para evitar singularidades.
-- Publicar la carga normal media del paso físico a partir de los impulsos aceptados, según §3.7. No publicar la fuerza del último subpaso como si fuera la media ni aplicar impulsos dos veces. Evitar filtros/clamps de carga inventados para ocultar impactos.
-- Para pendientes, usar una geometría/Jacobiano coherentes. Si se conserva una aproximación de altura vertical, declarar sus límites y validarla; no llamarla contacto normal 3D completo ni perder componentes de reacción previamente existentes sin analizarlo.
-- Las alturas del terreno y sus velocidades deben describir el mismo movimiento temporal en cada subpaso. Resolver esa coherencia cuando sea necesaria para la restricción nueva, sin convertir el encargo en un rediseño de selección de triángulos.
+- Muelle: 200 000 N/m delante, 1 200 000 N/m detrás; rigidez efectiva en rueda 151.9 / 144.8 N/mm; relaciones de movimiento 0.829 / 0.359.
+- Amortiguador de elemento: 8 074.8 / 9 938.3 N·s/m delante; 47 431.8 / 58 377.6 N·s/m detrás; codo 0.127 m/s; factor rápido 0.5.
+- Tope progresivo: `bump_stop_mult = 1.0`, `bump_stop_travel_m = 0.005`, `hard_stop_overtravel_m = 0.0001`.
+- Barra: 38.36 N/mm delante, 9.88 N/mm detrás.
+- Reposo: 35.014 mm delante, 39.991 mm detrás; cargas 1335.8 / 1667.9 N por rueda.
+- Fuerza del tope a pleno recorrido de 5 mm: ~3.04 kN delante, ~2.90 kN detrás. Pendiente: ~152 kN/m al entrar y ~1.52 MN/m al final.
+- Fuerza del amortiguador en el codo: ~1.0 kN delante, ~6.0 kN detrás. Salto de pendiente: ~4.0 / 23.7 kN·s/m.
+- Tope duro: ~0.55 kN a 0.1 mm, ~10 kN a 0.5 mm, con pendiente muy alta y clamp inelástico.
 
-### 3.3 Grip, radio de rodadura y térmica
+### 0.5 Puntos críticos actuales
 
-El modelo tangencial recibe N, contacto, velocidades y estado térmico. Consume la carga normal aceptada; no determina soporte vertical, movimiento del chasis ni recorrido de suspensión.
+| Componente | Problema | Evidencia |
+|---|---|---|
+| Tope progresivo | Cambio de pendiente al entrar; sin amortiguador dedicado | `suspension.rs:1989-2056` |
+| Tope duro | Proyección inelástica; pico de fuerza | `vertical_suspension_integration.rs:125-207` |
+| Amortiguador | Codo duro; salto de pendiente del 50 % | `suspension.rs:1834-1856` |
+| Altura de carretera | Filtro inactivo y objetivo sobrescrito | `suspension.rs:1095-1100`; `simplified_contact_kinematics.rs:93-96` |
+| Barra | Sin amortiguación; acoplamiento de balanceo | `suspension.rs:1971-1987` |
+| Contacto vertical | Restricción rígida; carga normal escalonada | `vertical_suspension_integration.rs:1-18` |
+| Substepping | `mechanical_substep_s` ignorado | `simplified_axle_integration.rs:595-603` |
 
-La deformación radial actual también afecta radio efectivo, huella, calentamiento y volumen del gas. No ponerla a cero indiscriminadamente ni prometer conservar las mismas temperaturas después de retirar su dinámica.
+---
 
-Implementar una separación explícita:
+## 1. Tope progresivo C1 + amortiguador dedicado (P0)
 
-1. Deformación GEOMÉTRICA radial del contacto rígido: cero dentro de tolerancia, sin energía elástica ni disipación radial.
-2. Magnitudes EMPÍRICAS usadas por huella/rodadura/térmica: conservar una estimación algebraica cuasiestática desde carga, presión y temperatura, con parámetros renombrados explícitamente según §3.5. No integrar una segunda carcasa ni devolver esa estimación a la geometría del centro de rueda o al solver vertical.
-3. Radio geométrico fijo según datos del vehículo para contacto; radio efectivo de rodadura separado para slip y pares, con contrato único entre giro, transmisión y neumático.
-4. Auditar el calentamiento por histéresis: el término actual usa velocidad de deformación. No derivar una pseudodeformación y contabilizar automáticamente su valor absoluto como calor físico sin justificar el origen de la energía. Mantener deslizamiento, convección, conducción, gas y desgaste; documentar y validar cualquier sustitución del término de histéresis y del cambio de volumen. Si falta una ley defendible, declarar la limitación en lugar de inventar calor para igualar una temperatura anterior.
+### 1.1 Situación actual
 
-Una estimación interna puede afectar grip y, a través de las fuerzas tangenciales, transferencia de carga. Eso es una interacción física permitida; lo prohibido es que actúe como resorte o amortiguador vertical adicional.
+`geometric_stop_force` usa:
 
-### 3.4 Decisión numérica: active set acoplado
+```text
+excess = x - (x_max - working_length)
+force  = k_rest * mult * excess * (1 + 3 * progress²)
+```
 
-Usar Euler implícito para velocidad/posición y active set primal-dual para ruedas, fondo y topes, ampliando el esquema existente. En cada subpaso resolver las ecuaciones de movimiento y las restricciones activas dentro del mismo sistema Newton/KKT; añadir restricciones violadas y liberar las que requieran reacción con signo inadmisible. Comprobar factibilidad, signo y complementariedad al aceptar el subpaso. Para los contactos activos, imponer el hueco final con la cinemática del terreno coherente; las restricciones de recorrido conservan su convención de signo documentada.
+con `progress = excess / working_length` limitado a 2. En `excess = 0+` la pendiente vale `k_rest * mult` (~152 kN/m delante), y al final de 5 mm vale ~10k (~1.52 MN/m). No hay amortiguador dedicado: solo el amortiguador principal, que puede estar en su zona digresiva.
 
-Justificación: permite reutilizar las ecuaciones de suspensión no lineal y la autoridad única actuales, y evita otro solver físico fuera del bloque. La complementariedad es una condición de aceptación; no obliga a usar un algoritmo LCP separado. Restitución de rueda nula y sin resorte de penalización. Registrar tolerancias escaladas, iteraciones y cambios del conjunto activo; detectar ciclos y fallos explícitamente.
+### 1.2 Cambio requerido
 
-### 3.5 Decisión de configuración: retirar dinámica radial y migrar calibración
+1. **Ley C1**: sustituir la fuerza por una función con `F(0)=0`, `dF/dx(0)=0` y `F(5 mm) ≈ 3.0 kN`, derivada de un potencial. Opciones:
+   - cúbica `F = k3 * excess³` con `k3 = F_max / (5 mm)³` (fuerza C1, potencial `k3*x⁴/4`);
+   - o `smoothstep` entre la tasa lineal y la tasa de pleno recorrido, con derivada nula en ambos extremos.
+2. **Amortiguador dedicado** en compresión: `F_d = -c_bs * v` cuando el tope está comprometido, con `c_bs` de 300–800 N·s/m en rueda. No aplicar en extensión (o usar una asimetría explícita). La potencia `F_d * v` debe ser ≤ 0.
+3. **Datos**: añadir a `suspension.json` por eje:
+   - `bump_stop_law`: `"cubic"` o `"smoothstep"`;
+   - `bump_stop_cubic_coefficient_N_per_m3` (si aplica);
+   - `bump_stop_damper_Ns_per_m`;
+   - conservar `bump_stop_travel_m`, `bump_stop_mult`, `hard_stop_overtravel_m`.
+4. **Aplicación**: la fuerza del tope y el amortiguador deben entrar en `chassis_suspension_force`, en `suspension_impulse` y en el impulso al cuerpo una sola vez. No filtrar la fuerza total.
 
-- Eliminar del contrato vertical y del XML generado rigidez radial, radial damping ratio y sus modificadores mecánicos. No conservar nombres que aparenten controlar soporte vertical.
-- Conservar la calibración algebraica útil con nombres nuevos y unidades explícitas: empirical load compliance (m/N), empirical deformation limit (m), rolling radius load deflection factor (adimensional) y contact patch empirical deflection gain (adimensional). La compliance se obtiene inicialmente como el inverso de la antigua rigidez de referencia; el límite y los factores se migran sin ajuste de tuning.
-- La deformación empírica se calcula algebraicamente desde la carga normal media y la compliance, con su límite, sin velocidad radial integrada. Conservar las dependencias existentes de presión/temperatura sobre esta estimación solo como calibración de huella, radio de rodadura y volumen del gas. Ninguno de estos campos entra en el solver vertical, la matriz de masa ni la geometría de apoyo.
-- La amortiguación radial antigua se elimina sin parámetro empírico sustituto. El término térmico asociado a velocidad radial deja de representar una pérdida mecánica activa: retirarlo de esa contabilidad y declarar el cambio de fuente de calor. No reemplazarlo por calor ficticio calculado con la derivada absoluta de la deformación empírica. Las demás fuentes térmicas y el balance permanecen; cualquier futura recalibración de calor de rodadura es otro alcance.
-- Implementar migración explícita de XML y prepare_williams_vehicle.py, con informe de campos convertidos/eliminados. En ejecución, rechazar configuración antigua no migrada con mensaje que indique cómo migrarla; no ignorarla ni convertirla silenciosamente. Configuración nueva y antigua mezcladas también se rechazan. La herramienta de migración debe ser idempotente.
-- Probar que variar estos campos empíricos cambia únicamente sus salidas declaradas y, manteniendo fuerzas tangenciales prescritas, no altera la respuesta vertical.
+### 1.3 Criterios de aceptación
 
-### 3.6 Política de rango, redundancia y contactos incompatibles
+- `F(x)` y `dF/dx` continuas en el punto de entrada, con diferencia finita relativa < 1e-3.
+- `F` monótona y ≥ 0; energía del muelle `∫F dx` no negativa.
+- `F_d * v ≤ 0` en todo el recorrido; energía disipada ≥ 0.
+- Reposo sin fuerza de tope; altura 35.014 / 39.991 mm (±0.1 mm) y cargas 1335.8 / 1667.9 N (±1 N).
+- Ensayo de impacto/kerb: pico de fuerza ≤ +10 % del actual, sin aumento de levantamiento de rueda, sin oscilación después del impacto.
+- `suspension_35_40`, `body_coupling`, `structural_contact` y `vertical_telemetry` siguen pasando.
 
-No asignar una prioridad física artificial de rueda sobre fondo o fondo sobre tope. Todas las desigualdades físicas se verifican al aceptar el paso. El ejemplo de cuatro ruedas, tres puntos de fondo y un tope debe estar cubierto por un ensayo explícito; ocho restricciones candidatas no equivalen necesariamente a ocho condiciones independientes en siete coordenadas.
+### 1.4 Pruebas
 
-Escalar variables/filas y usar factorización con detección de rango (QR con pivoteo o SVD), con tolerancias relativas justificadas. Resolver una base independiente para obtener el movimiento. Conservar todas las desigualdades para validar factibilidad; una fila redundante no pierde su significado físico. Reconstruir reacciones admisibles de mínima norma en unidades físicas, sujetas a signos y al impulso generalizado requerido, incluyendo todos los contactos equivalentes. No obtener las cargas publicadas de la elección arbitraria de pivotes. Usar orden estable de identificadores para desempates y exigir invariancia al permutar el orden de los contactos.
+- Unitarias de la ley: continuidad, monotonía, energía, amortiguador unilateral.
+- Integración: caída sobre el tope, kerb de una rueda, bache simétrico, alta velocidad.
+- Comparar fuerza, recorrido, velocidad y energía antes/después.
 
-Regularización elegida: tratamiento algebraico del rango, sin añadir epsilon a la masa/KKT como compliance oculta y sin ablandar huecos o topes. Una reconstrucción sin reacciones admisibles obliga a revisar el active set; no recortar multiplicadores después de resolver.
+---
 
-Si las restricciones son físicamente incompatibles o el subpaso no converge, subdividir adaptativamente el intervalo hasta un mínimo documentado y probado. Si sigue fallando, devolver fallo explícito, conservar el último estado aceptado completo y detener la evolución del vehículo afectado de manera diagnosticable. No avanzar el tiempo de ese vehículo como si el intervalo hubiese tenido éxito, descartar solo el contacto incómodo ni publicar un estado parcial. El caso y el contador de fallo deben quedar visibles; no equivale a conducción aprobada.
+## 2. Limitador de velocidad de la altura de carretera (P1)
 
-### 3.7 Definición única de N y consumo por grip/térmica
+### 2.1 Situación actual
 
-Por rueda y subpaso aceptado s: J_s es el impulso de contacto del intervalo y N_s = J_s/h_s su fuerza media. Si el solver usa multiplicadores con unidades de fuerza, convertir una sola vez J_s = lambda_s*h_s. Predictor, iteraciones y subpasos rechazados no se acumulan.
+En `sample_contact` la rama Simplified copia `road_compression_m = target` sin filtro (`suspension.rs:1095-1100`). Además, `configure_simplified_contact_kinematics` recalcula `normal_road_compression_metres` desde la pose del cuerpo y el punto de contacto (`simplified_contact_kinematics.rs:93-96`), sobrescribiendo el valor anterior. `max_road_velocity_m_s = 15` existe en `WheelMechanicalTuning` pero no se aplica a la restricción.
 
-Para el paso físico completo de duración dt, publicar N_step = sum(J_s)/dt. Es la media del intervalo, no la fuerza instantánea final. Grip y térmica reciben exactamente esta misma N_step y la misma duración dt; mantener una única actualización aceptada de cada uno por paso físico en esta implementación. Registrar por separado N_s, impulsos, contacto al final y fracción temporal de apoyo. No filtrar N para uno de los consumidores y dejarla sin filtrar para el otro.
+### 2.2 Cambio requerido
 
-El estado de contacto al final y el apoyo durante el intervalo son datos distintos: un intervalo puede terminar en vuelo después de un impacto. La evaluación de fuerzas medias del intervalo debe reconocer el impulso que sí ocurrió, mientras que el siguiente paso con hueco positivo y sin nuevo contacto debe producir N=0 y ningún grip residual. Adaptar los flags de entrada del modelo para no descartar el apoyo del intervalo usando únicamente el flag final ni prolongarlo al intervalo siguiente. Añadir ambos casos al banco de integración.
+1. **Una sola ruta**: después de `configure_simplified_contact_kinematics`, aplicar el limitador/filtro a `normal_road_compression_metres` y a `normal_road_velocity_metres_per_second`. No filtrar dos veces ni dejar que `sample_contact` y `configure...` escriban valores distintos.
+2. **Limitador**: limitar el cambio de compresión objetivo por paso a `max_rate_m_s * dt` (10–15 m/s). Es un límite de velocidad, no un paso bajo; no añade retardo en régimen estacionario.
+3. **Filtro opcional**: `road_height_filter_tau_s` de 2–4 ms, desactivado por defecto (`0.0`). Si se activa, usarlo en la misma ruta y auditar penetración.
+4. **Datos**: añadir `road_height_max_rate_m_s` y `road_height_filter_tau_s` por perfil; el valor inicial recomendado es 15 m/s y 0.0. No cambiar `max_road_velocity_m_s` sin justificar.
+5. **No filtrar la fuerza normal** ni la reacción; solo el objetivo de contacto.
 
-La evaluación no lineal del grip y la térmica con carga media es una aproximación explícita de este alcance; no afirmar que equivale a integrar sus leyes por subpaso. Comprobar convergencia al reducir el paso físico completo, además del subpaso vertical. Para dt=0, conservar el estado sin dividir, generar impulso o acumular calor nuevos. En equilibrio inicial, calcular la carga estática desde la solución de restricciones, sin inventar un impulso de inicialización.
+### 2.3 Criterios de aceptación
 
-### 3.8 Instalación y aceptación: responsabilidades fijadas
+- La tasa de cambio del objetivo nunca supera `max_rate_m_s`.
+- En piano/bordillo: penetración ≤ 0.5 mm adicional respecto a la base; sin chattering (no aumento de transiciones de la máscara de contacto); sin levantamiento de rueda adicional.
+- En rasante: sin salto de fuerza ni oscilación de la carrocería.
+- Reposo y cargas sin cambios.
+- A 500 Hz y 120 Hz; si a 120 Hz no se puede, documentar que el substepping sigue pendiente.
 
-Se espera que el agente, tras superar bancos e integración, instale localmente DLL y XML candidatos en la distribución para dejar preparada la prueba manual. Está dentro del encargo; no requiere repetir una confirmación de instalación reversible. Antes, verificar las rutas efectivas y que no haya una sesión usando esos archivos; no cerrar una partida del usuario sin autorización. Si está abierta, preparar el candidato y declarar instalación pendiente hasta disponer de los archivos.
+### 2.4 Pruebas
 
-Respaldar DLL/XML existentes fuera del árbol, registrar hashes antes/después, conservar reglajes ajenos, verificar que el ejecutable carga el candidato y entregar instrucciones concretas de reversión. Un fallo de bancos no autoriza instalar. Esto no autoriza commit, push ni publicación remota.
+- Escalón de 10, 20 y 40 mm bajo una rueda.
+- Piano longitudinal y transversal.
+- Cambio de rasante y peralte.
+- Comparar máscara de contacto, fuerza normal, aceleración vertical y energía.
 
-El agente puede realizar bancos, integración y pruebas instrumentadas disponibles, y entregar estados separados: validación técnica, instalación y conducción. La puerta D requiere revisión expresa del usuario y el agente no puede autoconcederla ni reutilizar una aprobación de otra versión. Sin esa revisión, entregar el candidato instalado y técnicamente validado, con «aceptación humana de conducción pendiente» y los escenarios que faltan. No dejar todo el trabajo técnico sin terminar esperando esa revisión, ni declarar el encargo completamente cerrado cuando falte.
+---
 
-## 4. Archivos y responsabilidades
+## 3. Mezcla C1 del codo del amortiguador (P1)
 
-Los caminos siguientes son relativos a D:/open-formula.
+### 3.1 Situación actual
 
-| Archivos | Trabajo requerido |
-| --- | --- |
-| src/modules/simu/simuv5/tire_vertical_solver.cpp/.h | Sustituir soporte radial por contactos rígidos de rueda. Adaptar fuerzas, residuos, Jacobianos, restricciones, equilibrio inicial, validación de configuración, diagnósticos y energía. Mantener contacto de fondo y topes. Revisar también la implementación quarter-car del mismo archivo para que los bancos representen el modelo vigente. |
-| src/modules/simu/simuv5/car.cpp | SimCarBuildVerticalConfiguration deja de generar rigidez/amortiguación radial desde modificadores térmicos. Adaptar entradas, publicación, cargas/contactos y acoplamiento provisional/final. Mantener coherencia de estado y vistas. |
-| src/modules/simu/simuv5/tire_model.cpp | Adaptar reset y SimTireModelUpdateWheelWithVerticalState: no inicializar un aplastamiento físico N/k. Consumir contacto rígido y N; separar magnitudes empíricas y evitar reescrituras físicas independientes. |
-| src/modules/simu/simuv5/tire_contact_model.cpp/.h | Separar huella, sensibilidad a carga y radio efectivo de la deformación geométrica vertical. Retirar salidas que aparenten controlar una suspensión radial activa. |
-| src/modules/simu/simuv5/tire_model_configuration.cpp/.h | Aplicar la política fija de §3.5: retirar parámetros dinámicos radiales, validar los campos empíricos nuevos y rechazar configuración antigua o mezclada sin migración explícita. |
-| src/modules/simu/simuv5/tire_model_state.h | Si hace falta, distinguir estado rígido de contacto y estimaciones empíricas sin añadir una masa radial integrada. |
-| src/modules/simu/simuv5/tire_thermal_model.cpp/.h | Revisar histéresis, volumen y modificadores para que la térmica conserve coherencia energética y no reintroduzca soporte vertical. |
-| src/modules/simu/simuv5/tire_vertical_geometry.cpp/.h | Si hace falta, exponer hueco/velocidad de contacto rígido y separar radios y vistas geométricas. |
-| tools/prepare_williams_vehicle.py y configuración candidata del Williams | Migrar configuración reproducible. Identificar antes qué archivos están ignorados y cómo se genera el XML instalado; no editar solo el XML generado. Conservar reglajes ajenos. |
-| tools/validate_formula_tire_vertical_system.cpp | Actualizar quarter-car y coche completo al modelo rígido. Reemplazar expectativas basadas en aplastamiento radial; mantener las comprobaciones de suspensión nativa. |
-| tools/validate_formula_tire_contact.cpp, validate_formula_tire_geometry.cpp, validate_formula_tire_forces.cpp, validate_formula_tire_energy.cpp y validate_formula_tire_thermal.cpp | Adaptar contratos y añadir regresiones de contacto, tangencial y térmica. Verificar nombres actuales antes de editar. |
-| tools/validate_formula_vertical_authority.cpp | Integrar las invariantes con el nuevo contacto de rueda y los contactos de fondo, en el orden real de actualización. |
-| CMakeLists.txt y src/modules/simu/simuv5/CMakeLists.txt | Ajustar solo targets o fuentes necesarios. |
-| implementation/reports/rigid_tire_contact.md (nuevo) y implementation/migration_status.json | Registrar diseño, archivos, resultados medidos, artefactos y límites; separar validación nativa, integración y conducción. |
+`geometric_damper_element` usa un `if` duro en `v_s = knee`:
 
-Revisar carstruct.h, sim.h, simu.cpp, wheel.cpp, collide.cpp, aero.cpp y tire_force_model.cpp para contratos y dependencias. Modificarlos únicamente donde la integración lo requiera. No cambiar curvas de grip, aero o reglajes para compensar un error de contacto. No tocar simuv2/simuv4.
+```text
+if v_s > knee:  F = (v_s - knee)*c*fast + knee*c
+else:           F = v_s*c
+```
 
-## 5. Orden de ejecución
+La fuerza es continua, pero la pendiente cae de `c` a `c*fast` de golpe. Delante `c = 8074.8`, `fast = 0.5`; detrás `c = 47431.8`, `fast = 0.5`, con ~6 kN en el codo.
 
-1. Registrar y respaldar la base real. Identificar el estado del trabajo de autoridad única y reproducir los bancos relevantes antes de introducir cambios.
-2. Definir contrato de contacto rígido, radios y N. Añadir casos analíticos de quarter-car: equilibrio, vuelo, impacto y separación. Fijar tolerancias justificadas antes de comparar el candidato.
-3. Implementar restricción de rueda dentro del solver, retirar fuerzas/energía radial y adaptar equilibrio. Preservar masas e inercias. Resolver redundancias y fallos de convergencia sin publicar estados parciales.
-4. Integrar cuatro ruedas, topes y contactos de fondo; actualizar adaptador, predictor/final y diagnósticos. Aplicar únicamente reacciones y eventos del resultado aceptado.
-5. Separar las magnitudes de huella/rodadura/térmica; actualizar configuración, reset y bancos. Mantener contratos físicos y energéticos explícitos.
-6. Ejecutar regresiones e integración. Comparar candidato y base con iguales condiciones; explicar diferencias esperadas por quitar la elasticidad radial.
-7. Compilar candidato, verificar procedencia y probar en simulación. Instalar DLL/XML locales tras superar bancos e integración conforme a §3.8, con respaldo, hashes y vuelta atrás. No declarar conducción validada por compilar o llegar a RACE.
-8. Entregar el informe y actualizar el estado real. Mantener pendientes visibles si falta alguna puerta; no usar aprobaciones de alta velocidad de versiones anteriores.
+### 3.2 Cambio requerido
 
-## 6. Pruebas obligatorias
+1. **Mezcla C1** en una banda `knee ± blend/2` (o `knee` a `knee+blend`) con `smoothstep` o `hermite`: conservar `F(knee)` y las asíntotas `c*v` y `c*fast*v + offset`.
+2. **Datos**: `damper_knee_blend_m_s` por eje; valor inicial 0.015 delante y 0.02 detrás. `0.0` conserva la ley actual.
+3. **Disipación**: la fuerza debe seguir oponiéndose a la velocidad y `F*v ≤ 0`; no introducir fuerza en el cruce.
+4. **No filtrar la velocidad** en esta fase; la mezcla C1 es instantánea. Un filtro de 1 ms solo puede añadirse en la fase 6.
 
-### A. Contacto rígido y suspensión
+### 3.3 Criterios de aceptación
 
-- Equilibrio estático: suma de reacciones y momentos compatible con peso, fuerzas externas y apoyos. gap dentro de tolerancia; deformación radial geométrica cero. Sin deriva de heave/roll/pitch.
-- Comparar equilibrio con la base: documentar el cambio de altura al desaparecer el aplastamiento radial. No añadir offsets ni retocar precarga silenciosamente para esconderlo.
-- Cambiar los antiguos parámetros radiales del solver, incluidos modificadores térmicos: la respuesta vertical debe permanecer igual bajo idénticas entradas mecánicas y fuerzas tangenciales prescritas. Si se conservan parámetros empíricos de grip, probar su aislamiento en lugar de exigir que el grip sea idéntico al cambiarlos.
-- Cambiar muelle/amortiguador de suspensión: debe cambiar la respuesta según el modelo nativo. Mantener bellcrank, barras y tercer elemento coherentes.
-- Vuelo: N=0, sin adherencia; rueda y suspensión siguen evolucionando. Separación sin atracción ni pegado artificial.
-- Impacto/aterrizaje simétrico y de una rueda: impulsos y signos correctos, sin rebote elástico radial añadido; comprobar referencia analítica en el caso sencillo.
-- Topes sin contacto del fondo, contacto del fondo fuera de topes y contacto combinado de ruedas/topes/fondo: restricciones válidas, sin singularidades no tratadas ni multiplicación de daños.
-- Pendientes, cambio de rasante, piano de una rueda y apoyo sobre terreno móvil: geometría y trabajo del terreno coherentes. Verificar el dominio angular y documentar límites.
-- Jacobianos por diferencias finitas en regímenes suaves y pruebas separadas de activación/desactivación. Redundancias: solución física admisible aunque el reparto individual de multiplicadores no sea único.
-- Caso obligatorio de rango: cuatro ruedas, tres puntos de fondo y un tope; repetir permutando los contactos y perturbando ligeramente la geometría. Verificar movimiento, impulso generalizado y reparto admisible reproducible, además de fallo explícito para geometría incompatible.
-- Tiempo cero conserva estado sin impulso/daño nuevos. Entradas inválidas y fallo de convergencia no mezclan estado anterior con vistas parcialmente nuevas.
+- `F` y `dF/dv` continuas en `knee - blend` y `knee + blend`; sin salto de pendiente.
+- `F(knee)` y las asíntotas no cambian fuera de la banda.
+- Reposo y cargas sin cambios; `F*v ≤ 0`; energía disipada ≥ 0.
+- En bump/rebound de alta velocidad no aparecen oscilaciones ni picos nuevos.
+- `suspension_35_40` y `structural_contact` pasan.
 
-### B. Grip, giro y térmica
+### 3.4 Pruebas
 
-- Con N, velocidades, radio efectivo, huella y estado térmico iguales, comparar Fx, Fy, slip, relajación, par autoalineante y par de reacción con la base. Los cambios de carga debidos al nuevo contacto deben analizarse aparte del cambio de ley tangencial.
-- Aceleración, frenada, bloqueo, patinaje y curva: límites de adherencia y transferencia de carga coherentes, sin suprimir momentos de fuerzas tangenciales.
-- Radio de rodadura consistente entre velocidad periférica, slip, torque y transmisión; radio geométrico del contacto independiente de la estimación empírica.
-- Temperatura/presión/desgaste siguen afectando grip y rodadura; no afectan rigidez ni amortiguación vertical. Probar este aislamiento con fuerzas tangenciales controladas.
-- No contabilizar energía elástica ni disipación del antiguo resorte radial. Contabilizar pérdidas de impacto, amortiguadores, trabajo externo y del suelo por separado. No exigir energía decreciente cuando existe trabajo externo positivo.
-- Validar balance térmico y energía de deslizamiento, y explicar el tratamiento elegido para histéresis y volumen. No llamar conservada a una térmica que simplemente dejó de calentarse al fijar deformación cero.
-- Migración XML idempotente, rechazo de campos antiguos/mezclados, generación reproducible y aislamiento vertical de los parámetros empíricos. Comprobar N_step = sum(J_s)/dt, entrada idéntica de N a grip/térmica y casos de apoyo parcial seguido de vuelo sin fuerza residual.
+- Barrido de fuerza vs velocidad de -1 a +1 m/s, con y sin mezcla.
+- Comparar pendiente numérica en el codo.
+- Impacto de kerb y rebote; energía.
 
-### C. Integración, convergencia y regresiones
+---
 
-- Al finalizar TODO el paso y al comenzar el siguiente: DynGCg.pos.z = body_position[0] + statGC.z; ángulos/velocidades y DynGC coinciden con las conversiones del estado autoritativo. Aplicar tolerancias acordes con float/double reales.
-- Comprobar las dos rutas de actualización, inicialización, reset, cambio de reglaje y retorno a boxes. Sin correcciones externas de SimCarCollideZ ni clamp angular que dejen otra pose interna.
-- Verificar que aero consume alturas/velocidades coherentes y que predictor, Newton y subpasos no publican ni acumulan fuerzas/daños múltiples.
-- Comparar dt/subpasos de 2 ms, 1 ms y 0.5 ms con el mismo movimiento temporal del terreno. Medir hueco, impulso total, N utilizada por grip, recorrido, energía y estados finales. No comparar una excitación distinta al variar dt.
-- Ejecutar bancos actuales de vertical, geometría, contacto, fuerzas, selector, térmica, energía, chasis, aerodinámica y autoridad única. Registrar comandos, códigos de salida y resultados nuevos; no reutilizar totales históricos.
-- Build observado: C:/Users/bill/open-formula-build/engine, fuente D:/open-formula. Verificar toolchain/targets actuales; preservar CMAKE_DISABLE_FIND_PACKAGE_SOLID=TRUE si se reconfigura. Compilar simuv5 y todos los bancos afectados.
+## 4. Tope duro compliant (P1/P2)
 
-### D. Conducción y cierre
+### 4.1 Situación actual
 
-- Williams/Fuji: reposo, baja velocidad, aceleración, frenada fuerte, curva sostenida, alta velocidad, pianos, vuelo/aterrizaje, rasante y contacto del fondo. Comparar condiciones y reglajes reproducibles con la base.
-- Registrar por paso: dt, hueco y contacto por rueda, impulsos, N utilizada por grip, recorrido/velocidad de suspensión, pose y velocidad interna/publicada, fuerzas tangenciales, contactos del fondo, energía, residual/iteraciones, temperatura, presión y desgaste.
-- No afirmar de antemano que el contacto rígido elimina todos los rebotes: puede transmitir irregularidades con mayor brusquedad. Aceptar el cambio por cumplimiento del modelo solicitado y validación, no por ausencia de un resorte en el código.
-- Puertas de cierre: contacto rígido sin soporte radial elástico, suspensión operativa, grip conservado bajo entradas equivalentes, coherencia energética, autoridad única, regresiones e integración aprobadas y revisión humana de conducción. Las puertas que falten deben quedar declaradas pendientes.
+`integrate_vertical_suspension` impone el límite de recorrido como una proyección inelástica de velocidad. El impulso de tope se publica en `travel_limit_impulse_newton_seconds`. La fuerza equivalente crece muy rápido: ~0.55 kN a 0.1 mm, ~10 kN a 0.5 mm, con clamp.
 
-## 7. Entrega y límites
+### 4.2 Cambio requerido
 
-Entregar lista exacta de archivos, formulación adoptada, contratos de N/radios/huella/térmica, comandos y resultados, comparación con la base, hashes de DLL/XML probados, trazas originales, procedimiento de vuelta atrás y pendientes.
+1. **Tope compliant**: dentro de `hard_stop_compliance_m` (0.3–0.5 mm), aplicar un muelle C1 (cúbico o lineal+cúbico) y un amortiguador `hard_stop_damper_Ns_per_m` (1–2 kN·s/m), con fuerza opuesta a la penetración y a la velocidad de penetración.
+2. **Clamp de último recurso**: si se supera la compliance, mantener la proyección inelástica para no violar el envelope; el clamp no debe ser la primera respuesta.
+3. **Datos**: `hard_stop_compliance_m`, `hard_stop_stiffness_N_per_m` (o coeficiente cúbico), `hard_stop_damper_Ns_per_m`; `0.0` conserva el clamp actual.
+4. **Energía**: la compliance debe almacenar y devolver energía de forma controlada; el amortiguador disipa. Auditar que no se inyecta energía.
 
-No añadir tuning de muelles, amortiguadores, potencia, aero o curvas de grip para compensar el cambio sin una justificación y alcance separados. No rediseñar la selección de triángulos ni reintroducir una carcasa vertical integrada. Este encargo autoriza implementar el modelo confirmado y sus dependencias de coherencia; no autoriza commit ni push.
+### 4.3 Criterios de aceptación
+
+- No se supera el envelope más allá de `hard_stop_compliance_m` (salvo el clamp final).
+- Fuerza máxima acotada; sin pico > +10 % del actual.
+- Sin levantamiento de rueda adicional; sin oscilación post-impacto.
+- Energía disipada ≥ 0; sin rebote elástico no físico.
+- Reposo y cargas sin cambios.
+- A 500/240/120 Hz; documentar si el paso limita la compliance.
+
+### 4.4 Pruebas
+
+- Caída libre sobre el tope; impacto de kerb; compresión cuasiestática hasta el límite.
+- Comparar impulso, fuerza máxima, energía y levantamiento de rueda.
+
+---
+
+## 5. Amortiguador de barra (P2)
+
+### 5.1 Situación actual
+
+La barra es lineal en la diferencia de recorrido (`suspension.rs:1971-1987`). No tiene amortiguación propia. Las tasas actuales son 38.36 N/mm delante y 9.88 N/mm detrás.
+
+### 5.2 Cambio requerido
+
+1. Añadir un amortiguador de barra `arb_damper_Ns_per_m` (100–300 N·s/m en rueda), con fuerza en cada rueda proporcional a la velocidad relativa de recorrido y opuesta a ella. La fuerza debe entrar en el impulso de suspensión y en la reacción del cuerpo una sola vez.
+2. Mantener la barra actual sin cambios en estática; el amortiguador no debe alterar el equilibrio.
+3. Datos por eje; `0.0` desactiva.
+4. No añadir filtro de recorrido en esta fase; si hace falta, 1 ms en la fase 6.
+
+### 5.3 Criterios de aceptación
+
+- Reposo y reparto de carga sin cambios.
+- En bache a una rueda, la respuesta de balanceo es más suave; sin oscilación de roll.
+- `F_arb * v_rel ≤ 0`; energía disipada ≥ 0.
+- No afecta a la recta ni al frenado en línea recta.
+- `body_coupling` y `suspension_35_40` pasan.
+
+### 5.4 Pruebas
+
+- Bache a una rueda, escalón lateral, roll step.
+- Comparar roll, cargas y energía con y sin amortiguador.
+
+---
+
+## 6. Filtros de 1 ms solo si las mediciones muestran ruido (P2/P3)
+
+### 6.1 Regla
+
+No añadir filtros por defecto. Primero implementar y medir 1–5. Solo si aparece ruido de alta frecuencia (fuerza, velocidad o contacto) que no se explique por el integrador, añadir:
+
+- filtro de velocidad del amortiguador: `tau ≤ 1 ms`;
+- filtro de recorrido relativo de barra: `tau ≤ 1 ms`;
+- filtro de carga normal **solo para el modelo de neumático**: `tau = 2–5 ms`, nunca para la restricción de suspensión.
+
+### 6.2 Prohibiciones
+
+- No filtrar `chassis_suspension_force`, `body_acceleration_world`, `angular_acceleration`, la fuerza del muelle ni el impulso del tope.
+- No usar `tau > 1 ms` en fuerza; 2 ms ya son 14.4° a 20 Hz; 5 ms son 36°.
+- No usar filtros para ocultar un paso de integración grande o un substepping pendiente.
+- No filtrar dos veces la misma señal (por ejemplo, `road_height_filter_tau_s` y un limitador nuevo).
+
+### 6.3 Criterios de aceptación
+
+- Fase adicional ≤ 7° a 20 Hz para `tau = 1 ms`.
+- Sin ciclo límite de guiñada, balanceo ni rebote de rueda en la prueba de pulso a 74 m/s.
+- Energía: el filtro no debe aumentar la energía total; si la aumenta, retirarlo.
+- A 500/240/120 Hz; documentar resultados negativos si no se necesita.
+
+### 6.4 Pruebas
+
+- Análisis espectral de fuerza/velocidad en kerb y alta velocidad.
+- Pulso de dirección a 74 m/s (mismo protocolo que el neumático).
+- Comparar con filtros a 0, 0.5 y 1 ms; si no hay mejora medible, dejar 0.
+
+---
+
+## 7. Datos y archivos
+
+### 7.1 Dónde poner cada parámetro
+
+Recomendación:
+
+- **Coeficientes físicos** (tope C1, amortiguador de tope, mezcla de codo, tope compliant, amortiguador de barra) en `suspension.json`, dentro de `geometry_physical.front/rear`, porque son elementos de la suspensión y deben viajar con el reglaje.
+- **Filtros y limitadores numéricos** (velocidad de altura de carretera, filtros de 1 ms, carga normal para el neumático) en un dominio opcional `suspension_filters.json`, análogo a `tire_filters.json`, con secciones `front`/`rear` y valores `0.0` para desactivar.
+- Si se prefiere un solo archivo, usar `suspension_filters.json` para todo y declarar explícitamente qué campos son físicos y cuáles son filtros. No duplicar los mismos valores en dos archivos.
+
+### 7.2 Archivos previsibles
+
+- `rust/vehicle-physics-engine/src/suspension.rs` — leyes de tope, amortiguador, barra.
+- `rust/vehicle-physics-engine/src/simplified_axle_integration.rs` — integración, substepping, aplicación de fuerzas.
+- `rust/vehicle-physics-engine/src/vertical_suspension_integration.rs` — tope duro compliant.
+- `rust/vehicle-physics-engine/src/simplified_contact_kinematics.rs` — objetivo de contacto único.
+- `rust/vehicle-physics-engine/src/suspension_geo_config.rs` — campos de perfil y validación.
+- `rust/vehicle-physics-engine/src/vehicle_configuration/suspension/...` — serialización y esquema.
+- `rust/vehicle-physics-engine/src/wheel_mechanics.rs` — tuning, si se añaden límites.
+- `rust/data/vehicles/williams-fw19-hockenheim/suspension.json` y, si se crea, `suspension_filters.json`.
+- Copias en `distribution/share/games/speed-dreams-2/cars/rust/williams-fw19-hockenheim/`.
+- Tests: `suspension_35_40.rs`, `body_coupling.rs`, `structural_contact.rs`, `vertical_telemetry.rs`, y un nuevo `suspension_filters.rs` si se crea el dominio.
+
+### 7.3 Compatibilidad
+
+- Mantener ABI 7 y `OfpSnapshot` sin cambios.
+- Campos nuevos opcionales con `#[serde(default)]`; perfiles viejos deben cargar con el comportamiento actual.
+- No cambiar la firma de `SuspensionSystem::step` ni el contrato de `TriRaycastSample` salvo que sea imprescindible; documentarlo.
+
+---
+
+## 8. Orden de implementación
+
+0. **Inventario y base**: confirmar HEAD, `git status`, rama; ejecutar `body_coupling`, `suspension_35_40`, `structural_contact`, `vertical_telemetry`, `wheel_centre_contact` y `verify_dll.py`; registrar ride, cargas y fuerzas actuales. Decidir el substepping (0.2).
+1. **Codo C1 del amortiguador** (bajo riesgo, rápido): implementar, medir y comparar.
+2. **Tope progresivo C1 + amortiguador** (P0): implementar, medir, validar energía y estática.
+3. **Limitador de altura de carretera** (P1): unificar la ruta, limitar y validar kerb/rasante.
+4. **Tope duro compliant** (P1/P2): implementar, validar impacto y envelope.
+5. **Amortiguador de barra** (P2): implementar, validar bache a una rueda.
+6. **Filtros de 1 ms** (P2/P3): solo si las mediciones lo justifican; dejar 0 por defecto.
+
+Cada fase: compilar release, ejecutar tests, medir, actualizar el informe y la documentación. No commit ni push sin instrucción explícita.
+
+---
+
+## 9. Pruebas y puertas
+
+### 9.1 Unitarias
+
+- Continuidad C1 de la ley del tope y del codo del amortiguador (diferencias finitas).
+- Monotonía, signo y energía del tope/amortiguador/barra.
+- Tope compliant: fuerza, penetración, energía y clamp final.
+- Validación de perfiles: campos nuevos, valores inválidos, compatibilidad con perfiles viejos.
+
+### 9.2 Integración
+
+- Reposo: 35.014 / 39.991 mm; cargas 1335.8 / 1667.9 N.
+- Caída/impacto sobre el tope progresivo y sobre el tope duro.
+- Kerb de una rueda, piano longitudinal, cambio de rasante.
+- Bache a una rueda, roll step, frenada en recta, curva sostenida.
+- Pulso de dirección a 74 m/s (protocolo del neumático) para detectar ciclos límite.
+- 500 Hz, 240 Hz y 120 Hz; si 120 Hz no es válido, declararlo.
+
+### 9.3 Regresiones
+
+- `body_coupling` (6), `setup_authority` (15), `structural_contact` (16), `suspension_35_40` (5), `vertical_telemetry` (9), `wheel_centre_contact` (16; el fallo de `%TEMP%` es ambiental).
+- `tire::` 36/40; los 4 fallos por fixture ausente son ambientales.
+- `verify_dll.py`: ABI 7, firma, ride, cargas, sin topes ni impulsos de fondo, 2000 pasos aceptados.
+
+### 9.4 Métricas
+
+- Fuerza máxima de tope/amortiguador/barra.
+- Levantamiento de rueda y máscara de contacto.
+- Aceleración vertical/lateral de la carrocería.
+- Guiñada/balanceo tras el pulso.
+- Energía disipada y energía total; ninguna ganancia no explicada.
+- Transiciones de contacto (chattering).
+
+---
+
+## 10. Límites y no-objetivos
+
+- No cambiar el modelo de neumático, `tire_filters.json` ni la relajación lateral.
+- No cambiar el acoplamiento cuerpo/esquina ni el solver 6×6.
+- No cambiar aerodinámica, masas, inercias, frenos ni potencia.
+- No reajustar muelles o barras para ocultar un problema de integración o de filtro.
+- No usar filtros de fuerza de 10–45 ms.
+- No filtrar la fuerza total de suspensión, la aceleración del cuerpo ni la fuerza del muelle.
+- No cambiar ABI, FFI ni `OfpSnapshot`.
+- No commit ni push sin instrucción explícita.
+- `distribution/` está ignorado por Git: instalar localmente para probar, pero no esperar que esos artefactos entren en el commit.
+
+---
+
+## 11. Entrega
+
+El agente debe entregar:
+
+1. Lista exacta de archivos modificados y nuevos.
+2. Leyes implementadas y parámetros por defecto (con unidades).
+3. Comandos de compilación y tests, con resultados.
+4. Comparación antes/después: ride, cargas, fuerza de tope, codo, barra, energía.
+5. Hashes de la DLL y del perfil probados.
+6. Procedimiento de vuelta atrás.
+7. Pendientes y límites declarados (por ejemplo, substepping a 120 Hz o compliance no validada).
+8. Confirmación de que no se ha tocado el modelo de neumático ni el acoplamiento cuerpo/esquina.
+
+**Definición de terminado:** los seis puntos implementados o diferidos con evidencia; estática sin cambios; sin ciclo límite en la prueba de pulso; topes y kerbs con picos acotados y sin levantamiento adicional; energía no negativa; regresiones y `verify_dll.py` en verde; documentación y handoff actualizados. Si algún punto no se implementa, debe quedar desactivado por defecto (`0.0`) y declarado.

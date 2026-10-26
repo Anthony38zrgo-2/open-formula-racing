@@ -186,10 +186,72 @@ pub struct AxlePhysicalElements {
     /// None preserves the existing mechanical tuning for other profiles.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hard_stop_overtravel_m: Option<f64>,
+    /// C1 knee blend width at the damper shaft (m/s), symmetric around the knee
+    /// (`knee - blend/2 .. knee + blend/2`). Zero keeps the historical hard knee.
+    /// The blend is applied to the stiffness, so the force stays C1 and the far
+    /// asymptote keeps its rate and offset.
+    #[serde(default)]
+    pub damper_knee_blend_m_per_s: f64,
+    /// Bump-stop force law. `legacy` keeps the historical
+    /// `k_rest * mult * excess * (1 + 3 p^2)` shape.
+    #[serde(default)]
+    pub bump_stop_law: BumpStopLaw,
+    /// Dedicated bump-stop damper at the wheel (N·s/m), compression only.
+    /// The force opposes the compression velocity (`F >= 0` for `v >= 0`) and is
+    /// ramped in over the first 10 % of the stop working length. Zero disables it.
+    #[serde(default)]
+    pub bump_stop_damper_Ns_per_m: f64,
+    /// Travel allowance inside which the hard travel stop is a compliant spring
+    /// and damper instead of an inelastic projection (m). `0` keeps the clamp as
+    /// the first response.
+    #[serde(default)]
+    pub hard_stop_compliance_m: f64,
+    /// Compliant-stop secant stiffness (N/m): `F(compliance) = k * compliance`,
+    /// with a C1 quadratic ramp `F(x) = k * x^2 / compliance`.
+    #[serde(default)]
+    pub hard_stop_stiffness_N_per_m: f64,
+    /// Compliant-stop damper (N·s/m), compression only.
+    #[serde(default)]
+    pub hard_stop_damper_Ns_per_m: f64,
+    /// Anti-roll bar damper at the wheel (N·s/m). Opposes the relative travel
+    /// velocity of the two wheels of the axle; the static equilibrium is
+    /// untouched. Zero disables it.
+    #[serde(default)]
+    pub arb_damper_Ns_per_m: f64,
 }
 
 fn default_bump_stop_mult() -> f64 {
     2.6
+}
+
+/// Bump-stop force shape over the progressive working length.
+///
+/// `cubic` and `smoothstep` both satisfy `F(0) = 0`, `dF/dx(0) = 0` and
+/// `F(working_length) = F_end`, with `F_end` the legacy force at the end of the
+/// working length (`4 * k_rest * mult * working_length`). Keeping `F_end` fixed
+/// means `bump_stop_mult` remains a single, physically meaningful scale.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BumpStopLaw {
+    /// Historical shape: slope jumps to `k_rest * mult` on entry.
+    #[default]
+    Legacy,
+    /// `F = k3 * x^3` with `k3 = F_end / working^3`: conservative, zero entry slope.
+    Cubic,
+    /// `F = F_end * (2u^3 - u^4)`, `u = x / working`: stiffness ramps from 0 with a
+    /// smoothstep (zero entry slope, C1 in the stiffness, no saturation before full
+    /// travel).
+    Smoothstep,
+}
+
+impl BumpStopLaw {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Legacy => "legacy",
+            Self::Cubic => "cubic",
+            Self::Smoothstep => "smoothstep",
+        }
+    }
 }
 
 impl Default for AxlePhysicalElements {
@@ -209,6 +271,13 @@ impl Default for AxlePhysicalElements {
             bump_stop_mult: default_bump_stop_mult(),
             bump_stop_travel_m: None,
             hard_stop_overtravel_m: None,
+            damper_knee_blend_m_per_s: 0.0,
+            bump_stop_law: BumpStopLaw::Legacy,
+            bump_stop_damper_Ns_per_m: 0.0,
+            hard_stop_compliance_m: 0.0,
+            hard_stop_stiffness_N_per_m: 0.0,
+            hard_stop_damper_Ns_per_m: 0.0,
+            arb_damper_Ns_per_m: 0.0,
         }
     }
 }
@@ -336,6 +405,12 @@ fn validate_axle(name: &str, a: &AxlePhysicalElements) -> Result<(), String> {
         ("damper_rebound_Ns_per_m", a.damper_rebound_Ns_per_m),
         ("damper_knee_m_per_s", a.damper_knee_m_per_s),
         ("damper_fast_factor", a.damper_fast_factor),
+        ("bump_stop_damper_Ns_per_m", a.bump_stop_damper_Ns_per_m),
+        ("damper_knee_blend_m_per_s", a.damper_knee_blend_m_per_s),
+        ("hard_stop_compliance_m", a.hard_stop_compliance_m),
+        ("hard_stop_stiffness_N_per_m", a.hard_stop_stiffness_N_per_m),
+        ("hard_stop_damper_Ns_per_m", a.hard_stop_damper_Ns_per_m),
+        ("arb_damper_Ns_per_m", a.arb_damper_Ns_per_m),
         ("wheel_droop_m", a.wheel_droop_m),
         ("wheel_bump_m", a.wheel_bump_m),
         ("damper_min_m", a.damper_min_m),
@@ -376,6 +451,44 @@ fn validate_axle(name: &str, a: &AxlePhysicalElements) -> Result<(), String> {
     if !(0.0 < a.damper_fast_factor && a.damper_fast_factor <= 1.0) {
         return Err(format!(
             "suspension.geometry_physical.{name}.damper_fast_factor must be in (0,1]"
+        ));
+    }
+    if a.damper_knee_blend_m_per_s < 0.0 {
+        return Err(format!(
+            "suspension.geometry_physical.{name}.damper_knee_blend_m_per_s must be >= 0"
+        ));
+    }
+    // The blend band must stay on one side of zero velocity, otherwise the bump
+    // and rebound laws would overlap and the "no force at standstill" property
+    // would be lost.
+    if a.damper_knee_blend_m_per_s >= 2.0 * a.damper_knee_m_per_s {
+        return Err(format!(
+            "suspension.geometry_physical.{name}.damper_knee_blend_m_per_s must be < 2 * damper_knee_m_per_s"
+        ));
+    }
+    if a.bump_stop_damper_Ns_per_m < 0.0 {
+        return Err(format!(
+            "suspension.geometry_physical.{name}.bump_stop_damper_Ns_per_m must be >= 0"
+        ));
+    }
+    if a.arb_damper_Ns_per_m < 0.0 {
+        return Err(format!(
+            "suspension.geometry_physical.{name}.arb_damper_Ns_per_m must be >= 0"
+        ));
+    }
+    if a.hard_stop_compliance_m < 0.0 || a.hard_stop_compliance_m > 0.002 {
+        return Err(format!(
+            "suspension.geometry_physical.{name}.hard_stop_compliance_m must be in [0, 0.002]"
+        ));
+    }
+    if a.hard_stop_compliance_m > 0.0 && a.hard_stop_stiffness_N_per_m <= 0.0 {
+        return Err(format!(
+            "suspension.geometry_physical.{name}.hard_stop_stiffness_N_per_m must be > 0 when a compliance band is declared"
+        ));
+    }
+    if a.hard_stop_stiffness_N_per_m < 0.0 || a.hard_stop_damper_Ns_per_m < 0.0 {
+        return Err(format!(
+            "suspension.geometry_physical.{name}.hard_stop stiffness/damper must be >= 0"
         ));
     }
     if !(a.wheel_droop_m > 0.0 && a.wheel_bump_m > 0.0) {
@@ -807,6 +920,20 @@ struct JsonAxlePhysical {
     bump_stop_travel_m: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     hard_stop_overtravel_m: Option<f64>,
+    #[serde(default)]
+    damper_knee_blend_m_per_s: f64,
+    #[serde(default)]
+    bump_stop_law: BumpStopLaw,
+    #[serde(default)]
+    bump_stop_damper_Ns_per_m: f64,
+    #[serde(default)]
+    hard_stop_compliance_m: f64,
+    #[serde(default)]
+    hard_stop_stiffness_N_per_m: f64,
+    #[serde(default)]
+    hard_stop_damper_Ns_per_m: f64,
+    #[serde(default)]
+    arb_damper_Ns_per_m: f64,
 }
 
 fn default_knee() -> f64 {
@@ -988,6 +1115,13 @@ fn axle_from_json(name: &str, j: &JsonAxlePhysical) -> Result<AxlePhysicalElemen
         bump_stop_mult: j.bump_stop_mult,
         bump_stop_travel_m: j.bump_stop_travel_m,
         hard_stop_overtravel_m: j.hard_stop_overtravel_m,
+        damper_knee_blend_m_per_s: j.damper_knee_blend_m_per_s,
+        bump_stop_law: j.bump_stop_law,
+        bump_stop_damper_Ns_per_m: j.bump_stop_damper_Ns_per_m,
+        hard_stop_compliance_m: j.hard_stop_compliance_m,
+        hard_stop_stiffness_N_per_m: j.hard_stop_stiffness_N_per_m,
+        hard_stop_damper_Ns_per_m: j.hard_stop_damper_Ns_per_m,
+        arb_damper_Ns_per_m: j.arb_damper_Ns_per_m,
     };
     validate_axle(name, &a)?;
     Ok(a)
@@ -1262,6 +1396,30 @@ pub fn geometric_to_json_value(cfg: &GeometricSuspensionConfig) -> serde_json::V
         }
         if let Some(overtravel) = axle.hard_stop_overtravel_m {
             value[name]["hard_stop_overtravel_m"] = serde_json::json!(overtravel);
+        }
+        // Profiles that never authored the C1 regularisation keep the historical
+        // document byte-for-byte; the resolved configuration only carries the new
+        // keys once a value departs from the legacy default.
+        if axle.damper_knee_blend_m_per_s > 0.0 {
+            value[name]["damper_knee_blend_m_per_s"] =
+                serde_json::json!(axle.damper_knee_blend_m_per_s);
+        }
+        if axle.bump_stop_law != BumpStopLaw::Legacy {
+            value[name]["bump_stop_law"] = serde_json::json!(axle.bump_stop_law.as_str());
+        }
+        if axle.bump_stop_damper_Ns_per_m > 0.0 {
+            value[name]["bump_stop_damper_Ns_per_m"] =
+                serde_json::json!(axle.bump_stop_damper_Ns_per_m);
+        }
+        if axle.hard_stop_compliance_m > 0.0 {
+            value[name]["hard_stop_compliance_m"] = serde_json::json!(axle.hard_stop_compliance_m);
+            value[name]["hard_stop_stiffness_N_per_m"] =
+                serde_json::json!(axle.hard_stop_stiffness_N_per_m);
+            value[name]["hard_stop_damper_Ns_per_m"] =
+                serde_json::json!(axle.hard_stop_damper_Ns_per_m);
+        }
+        if axle.arb_damper_Ns_per_m > 0.0 {
+            value[name]["arb_damper_Ns_per_m"] = serde_json::json!(axle.arb_damper_Ns_per_m);
         }
     }
     value

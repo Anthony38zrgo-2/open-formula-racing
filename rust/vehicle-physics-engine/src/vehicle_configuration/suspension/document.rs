@@ -11,6 +11,9 @@ pub(crate) struct JsonSuspension {
     pub(crate) rear: JsonSuspensionAxle,
     #[serde(default = "default_tri_ray")]
     pub(crate) tri_ray_spacing_ratio: f64,
+    /// Contact rays per wheel: 1 (centre only) or 3 (tricast). Default 3.
+    #[serde(default = "default_contact_ray_count")]
+    pub(crate) contact_ray_count: u8,
     /// Parser-only visual suspension geometry (per-corner hardpoints for
     /// UPPER_WISHBONE / LOWER_WISHBONE / PUSHROD / TRACKROD / UPRIGHT / ROCKER /
     /// DRIVESHAFT). Consumed exclusively by the GDScript visual kinematic layer;
@@ -37,6 +40,7 @@ impl Default for JsonSuspension {
             use_authored_wheel_centers: false,
             rear: JsonSuspensionAxle::default(),
             tri_ray_spacing_ratio: default_tri_ray(),
+            contact_ray_count: default_contact_ray_count(),
             geometry: None,
             model: default_suspension_model_name(),
             model_version: default_suspension_model_version(),
@@ -53,6 +57,11 @@ pub(crate) fn default_suspension_model_name() -> String {
 }
 pub(crate) fn default_tri_ray() -> f64 {
     0.40
+}
+
+/// Contact rays per wheel when the profile does not declare the field.
+pub(crate) fn default_contact_ray_count() -> u8 {
+    3
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

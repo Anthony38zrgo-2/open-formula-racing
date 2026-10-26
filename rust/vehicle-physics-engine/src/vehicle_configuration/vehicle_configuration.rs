@@ -41,6 +41,11 @@ pub struct VehicleConfiguration {
     /// values already carried by the steady-state tire profile.
     #[serde(default)]
     pub tire_filters: Option<TireFilterConfiguration>,
+    /// Optional numerical-filter tuning for the suspension (road-height slew
+    /// limit and the <= 1 ms force-path filters). Absent keeps the historical
+    /// unlimited behaviour.
+    #[serde(default)]
+    pub suspension_filters: Option<SuspensionFilterConfiguration>,
 }
 
 pub type VehicleConfig = VehicleConfiguration;
@@ -88,6 +93,9 @@ impl VehicleConfiguration {
             if let Some(tau) = filters.surface_transition_tau_s {
                 config.tires.surface_transition_tau_s = tau;
             }
+        }
+        if let Some(filters) = config.suspension_filters.as_ref() {
+            filters.validate()?;
         }
         config
             .chassis

@@ -1,0 +1,30 @@
+{
+  "passed": true,
+  "candidate": "rust\\target\\release\\vehicle_physics_engine.dll",
+  "sha256": "9722a6a92f0237f91909eb63c4758f7ff83bcf862f04ddacf095350a6091094a",
+  "abi_version": 7,
+  "abi_signature": "0xa91cdeba9d3fe775",
+  "accepted_steps": 2000,
+  "trace_records_without_opt_in": 0,
+  "ride_height_m": [
+    0.03501417547893593,
+    0.03999094743395162
+  ],
+  "normal_loads_n": [
+    1335.8411008181677,
+    1335.8411271896452,
+    1667.9085213171961,
+    1667.9085482352295
+  ],
+  "stop_forces_n": [
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "floor_impulse_ns": [
+    0.0,
+    0.0
+  ],
+  "source_profile_sha256": "46dc61a462c6378802d0857b87eb94f1b5c28389baf164bd7a6c08c2b5b4a824"
+}

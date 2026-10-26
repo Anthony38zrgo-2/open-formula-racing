@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::super::*;
+use super::document::default_contact_ray_count;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SuspensionConfiguration {
@@ -25,6 +26,13 @@ pub struct SuspensionConfiguration {
     pub rear_camber: f64,
     pub rear_bump_stop_multiplier: f64,
     pub tri_ray_spacing_ratio: f64,
+    /// Contact rays cast per wheel by the internal ground sampler: `1` (a single
+    /// centre ray represents the whole contact patch) or `3` (inner/centre/outer
+    /// tricast). The tricast is the only mode that can see a bank or a partial
+    /// contact; the single ray is cheaper and is the mode to use when the wheel
+    /// footprint does not need lateral resolution. Default 3.
+    #[serde(default = "default_contact_ray_count")]
+    pub contact_ray_count: u8,
     /// Wheel-kinematic camber change (rad) per meter of suspension travel relative
     /// to static/rest compression (see `rest_compression_m`). Positive gain means a
     /// bump (compression > rest, e.g. +0.02 m travel) shifts camber toward positive
@@ -67,6 +75,16 @@ fn default_virtual_unsprung_mass_multiplier() -> f64 {
 }
 
 impl SuspensionConfiguration {
+    /// Effective contact-ray count, normalised: only `1` and `3` are authored, any
+    /// other stored value (older documents) means the tricast.
+    pub fn contact_rays(&self) -> usize {
+        if self.contact_ray_count == 1 {
+            1
+        } else {
+            3
+        }
+    }
+
     /// Helper to get suspension spring rate in N/m for a wheel based on rest target.
     pub fn calculate_spring_rate(
         &self,

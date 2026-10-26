@@ -63,10 +63,29 @@ impl SimplifiedNormalContact {
 }
 
 impl SuspensionSystem {
+    /// Single authoritative route for the contact-height target of the Simplified
+    /// geometric backend.
+    ///
+    /// `sample_contact` only seeds a raw estimate for the body-less compatibility
+    /// entry point; every production step ends here, where the target is derived
+    /// from the body pose and then **rate-limited** (and optionally low-passed)
+    /// before the vertical solver consumes it:
+    ///
+    /// * the target may not move more than `road_height_max_rate_m_s * dt` per
+    ///   step, so a kerb/step cannot demand an unbounded compression in one tick;
+    /// * the published normal velocity is clamped to the same rate, so the
+    ///   in-step extrapolation `limit_at(t)` cannot outrun the slew limit;
+    /// * the optional `road_height_filter_tau_s` low-pass runs on the same route
+    ///   (never on the force, never twice).
+    ///
+    /// `previous_compression_metres` is the value that entered the solver on the
+    /// previous step (captured before `sample_contact` rewrites the field).
     pub(super) fn configure_simplified_contact_kinematics(
         &mut self,
         configuration: &VehicleConfig,
         body: crate::simulation::BodyKinematics,
+        previous_compression_metres: [f64; 4],
+        duration_seconds: f64,
     ) {
         let axis = body.transform.basis.y;
         let axis_velocity = body.angular_velocity.cross(axis);
@@ -75,6 +94,10 @@ impl SuspensionSystem {
             self.backend,
             &body.transform,
         );
+        let filters = configuration.suspension_filters.as_ref();
+        let max_rate = filters.map(|f| f.road_height_max_rate_m_s()).unwrap_or(0.0);
+        let tau = filters.map(|f| f.road_height_filter_tau_s()).unwrap_or(0.0);
+        let dt = duration_seconds.max(1e-6);
         for wheel in WheelIndex::ALL {
             let state = &mut self.wheels[wheel as usize];
             if state.contact_fraction <= 0.0 {
@@ -88,12 +111,31 @@ impl SuspensionSystem {
             );
             let base =
                 body.transform.transform_point(anchor) - axis * spring_length(configuration, wheel);
+            let raw_compression = tire_radius(configuration, wheel)
+                - normal.dot(base - state.effective_contact_point);
+            let raw_velocity =
+                -normal.dot(body.linear_velocity + body.angular_velocity.cross(base - center));
+            let mut target = raw_compression;
+            if state.normal_road_target_initialized {
+                let previous = previous_compression_metres[wheel as usize];
+                if tau > 0.0 {
+                    let alpha = 1.0 - (-dt / tau).exp();
+                    target = previous + (raw_compression - previous) * alpha;
+                }
+                if max_rate > 0.0 {
+                    let allowed = max_rate * dt;
+                    target = previous + (target - previous).clamp(-allowed, allowed);
+                }
+            }
             state.normal_contact_projection = normal.dot(axis).clamp(0.0, 1.0);
             state.normal_contact_projection_rate_per_second = normal.dot(axis_velocity);
-            state.normal_road_compression_metres = tire_radius(configuration, wheel)
-                - normal.dot(base - state.effective_contact_point);
-            state.normal_road_velocity_metres_per_second =
-                -normal.dot(body.linear_velocity + body.angular_velocity.cross(base - center));
+            state.normal_road_compression_metres = target;
+            state.normal_road_velocity_metres_per_second = if max_rate > 0.0 {
+                raw_velocity.clamp(-max_rate, max_rate)
+            } else {
+                raw_velocity
+            };
+            state.normal_road_target_initialized = true;
         }
     }
 

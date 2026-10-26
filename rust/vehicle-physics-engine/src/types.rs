@@ -574,6 +574,23 @@ pub struct WheelRayContext {
     /// Transverse half-spread of the outer rays from the wheel centre (m). The inner
     /// ray sits at `+span` on a left wheel and `-span` on a right wheel.
     pub span_m: f64,
+    /// Transverse rays the producer actually cast for this corner: `1` (centre only;
+    /// inner/outer repeat the centre hit so the patch is represented as one plane) or
+    /// `3` (tricast). `0` means "not declared" and is read as a tricast, so hand-built
+    /// samples keep their historical meaning.
+    #[serde(default)]
+    pub ray_count: u8,
+}
+
+impl WheelRayContext {
+    /// Rays actually cast for this corner: 1 or 3. `0` (unspecified) means 3.
+    pub fn effective_ray_count(&self) -> usize {
+        if self.ray_count == 1 {
+            1
+        } else {
+            3
+        }
+    }
 }
 
 impl Default for WheelRayContext {
@@ -587,6 +604,7 @@ impl Default for WheelRayContext {
             compression_m: 0.0,
             radius_m: 0.0,
             span_m: 0.0,
+            ray_count: 0,
         }
     }
 }
@@ -616,7 +634,15 @@ impl WheelRayContext {
             compression_m,
             radius_m,
             span_m,
+            ray_count: 0,
         }
+    }
+
+    /// Declare how many transverse rays produced this sample (1 or 3). The sampler
+    /// sets it; hand-built samples leave it at 0, which reads as a tricast.
+    pub fn with_ray_count(mut self, ray_count: u8) -> Self {
+        self.ray_count = ray_count;
+        self
     }
 
     /// Retired chassis-anchor contract (legacy FFI and hand-built unit-test samples).

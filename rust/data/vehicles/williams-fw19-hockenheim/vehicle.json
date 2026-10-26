@@ -15,6 +15,7 @@
     "powertrain": "powertrain.json",
     "steering": "steering.json",
     "suspension": "suspension.json",
+    "suspension_filters": "suspension_filters.json",
     "suspension_presentation": "suspension_presentation.json",
     "tires": "tires.json",
     "tire_filters": "tire_filters.json",
