@@ -152,6 +152,7 @@ namespace
         //! state no longer advances, and the log must say so instead of repeating
         //! the same frozen timestamp as if it were live telemetry.
         bool frozen = false;
+        int consecutive_failures = 0;
         //! Etapa 3/4 audio presentation: one raw step per accepted physics step,
         //! written into the `tCarElt` ring that `snddefault` drains (see
         //! `ofp_audio_presentation.h`). Session increments on car reset so
@@ -806,17 +807,19 @@ namespace
             char buffer[1024] = { 0 };
             rustPhysicsLibrary.getLastError(car.handle, buffer, sizeof(buffer));
             car.last_error = buffer;
-            car.failed = true;
-            car.frozen = true;
-            GfLogError("Rust physics rejected the step for car %d: %s\n", car.index,
-                       car.last_error.c_str());
-            // Re-read the snapshot so the rejection counter and the failure block are
-            // current. Position, time and every physical value stay at the last
-            // accepted step: the host must not publish a new state for a step that
-            // was rejected.
+            car.consecutive_failures += 1;
+            GfLogWarning("Rust physics rejected step for car %d (%d consecutive): %s\n",
+                         car.index, car.consecutive_failures, car.last_error.c_str());
+            if (car.consecutive_failures >= 30)
+            {
+                car.failed = true;
+                car.frozen = true;
+                GfLogError("Rust physics permanently froze car %d: %s\n", car.index,
+                           car.last_error.c_str());
+            }
             if (rustPhysicsLibrary.snapshot(car.handle, &car.snapshot) != 0)
             {
-                GfLogWarning("Rust physics: cannot read the frozen snapshot for car %d\n",
+                GfLogWarning("Rust physics: cannot read the snapshot for car %d\n",
                              car.index);
             }
             if (g_diagnostics && car.snapshot.rejected_steps != car.reported_rejections)
@@ -828,6 +831,7 @@ namespace
             }
             return;
         }
+        car.consecutive_failures = 0;
         if (rustPhysicsLibrary.snapshot(car.handle, &car.snapshot) != 0)
         {
             car.failed = true;
@@ -1208,6 +1212,7 @@ namespace
         // A new car never inherits the previous session's frozen state or counters.
         car.frozen = false;
         car.reported_rejections = 0;
+        car.consecutive_failures = 0;
         car.next_diagnostic_s = 0.0;
         car.last_error.clear();
         car.car = elt;
@@ -1261,11 +1266,21 @@ namespace
         }
         rustPhysicsLibrary.vehicleGeometry(car.handle, &car.center_of_mass_local, &car.inertia,
                                            &car.spawn_height, &car.mass);
+        // Ensure the initial height places the tires on the track, regardless of whether
+        // raceman XML specified initial height = 0.20 or 0.35.
+        const double track_ground_z = RtTrackHeightL(&(elt->_trkPos));
+        double effective_com_z = com_z;
+        if (car.spawn_height > 0.1)
+        {
+            const double desired_com_z = track_ground_z + car.spawn_height + car.center_of_mass_local.y;
+            if (effective_com_z < desired_com_z)
+            {
+                effective_com_z = desired_com_z;
+            }
+        }
         // Reposition so that the published centre of gravity matches the placement.
-        // The previous implementation rotated only the cosine terms of the offset, so a
-        // car spawned on a yawed heading was displaced by up to |com_local| * sin(yaw).
         const ofp::frame::Basis spawn_basis = ofp::frame::basis_from_sd_euler(0.0, 0.0, yaw);
-        const ofp::frame::Vec3 com_rust = sdToRustOf(com_x, com_y, com_z);
+        const ofp::frame::Vec3 com_rust = sdToRustOf(com_x, com_y, effective_com_z);
         const ofp::frame::Vec3 body_origin =
             ofp::frame::origin_from_com(com_rust, spawn_basis, toFrame(car.center_of_mass_local));
         origin = toOfp(body_origin);

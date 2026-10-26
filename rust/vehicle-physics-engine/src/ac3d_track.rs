@@ -27,7 +27,7 @@ use std::time::UNIX_EPOCH;
 use crate::collision_world::TriangleMaterial;
 use crate::types::Vec3;
 
-const CACHE_MAGIC: &[u8; 16] = b"OFP_TRACK_CACHE1";
+const CACHE_MAGIC: &[u8; 16] = b"OFP_TRACK_CACHE2";
 
 /// One driveable ground triangle with physical tire interaction properties.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -389,6 +389,10 @@ fn parse_ac3d_file(
                     let is_obstacle_kw = is_obstacle_element(&name_lower);
                     let is_driveable_kw = is_driveable_element(&name_lower);
 
+                    let min_y = v0.y.min(v1.y).min(v2.y);
+                    let max_y = v0.y.max(v1.y).max(v2.y);
+                    let height_span = max_y - min_y;
+
                     if is_obstacle_kw {
                         obstacles.push(ObstacleTriangle {
                             vertices: [v0, v1, v2],
@@ -404,8 +408,8 @@ fn parse_ac3d_file(
                                 friction,
                                 rolling_resistance: rolling,
                             });
-                        } else {
-                            // Vertical drop / curb edge / embankment
+                        } else if height_span >= 0.35 {
+                            // Substantial vertical drop, retaining wall or embankment (> 35 cm)
                             obstacles.push(ObstacleTriangle {
                                 vertices: [v0, v1, v2],
                                 friction: 0.50,
@@ -413,7 +417,7 @@ fn parse_ac3d_file(
                                 damage: 1.0,
                             });
                         }
-                    } else if ny_abs < 0.40 {
+                    } else if ny_abs < 0.40 && height_span >= 0.35 {
                         // Unclassified vertical surface near track: obstacle
                         obstacles.push(ObstacleTriangle {
                             vertices: [v0, v1, v2],
@@ -465,6 +469,13 @@ fn is_ignored_element(name: &str) -> bool {
         "fbuild",
         "largesign",
         "smallsign",
+        "pitslot",
+        "stslot",
+        "aisle",
+        "bridge",
+        "stand",
+        "tribune",
+        "light",
     ];
     IGNORED.iter().any(|k| name.contains(k))
 }
@@ -499,7 +510,7 @@ fn is_obstacle_element(name: &str) -> bool {
 
 fn is_driveable_element(name: &str) -> bool {
     const DRIVEABLE: &[&str] = &[
-        "track", "trak", "pitlane", "pitfloor", "pit_box", "pitslot", "stslot", "paddock", "aisle",
+        "track", "trak", "pitlane", "pitfloor", "pit_box", "paddock",
         "kerb", "curb", "verge", "sidl", "sidr", "nland", "grass", "gravel", "sand", "road",
         "asphalt",
     ];

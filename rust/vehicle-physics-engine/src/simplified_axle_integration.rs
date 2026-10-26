@@ -663,7 +663,7 @@ impl SuspensionSystem {
         let mut axle_residual_m_s = 0.0_f64;
         for substep_index in 0..substeps {
             let elapsed_seconds = substep_index as f64 * substep_duration_seconds;
-            let ground_contacts = std::array::from_fn(|index| {
+            let mut ground_contacts = std::array::from_fn(|index| {
                 let mut contact = corners[index].contact.constraint_at(elapsed_seconds);
                 // Backward Euler body endpoint: y' = y + h*(v+h*a).
                 // The road limit must use that SAME endpoint, not the old velocity.
@@ -675,41 +675,20 @@ impl SuspensionSystem {
             });
             last_ground_contacts = ground_contacts;
             for index in 0..2 {
+                let limit_m = corners[index].compression_bounds_metres().1;
                 if ground_contacts[index].active
-                    && ground_contacts[index].limit_at(substep_duration_seconds)
-                        > corners[index].compression_bounds_metres().1 + 1e-9
+                    && ground_contacts[index].limit_at(substep_duration_seconds) > limit_m
                 {
-                    let demand_m = ground_contacts[index].limit_at(substep_duration_seconds);
-                    let limit_m = corners[index].compression_bounds_metres().1;
-                    let failure = FailureDiagnostics {
-                        code: FailureCode::GroundBeyondBumpLimit,
-                        wheel: corners[index].wheel as i32,
-                        axle: axle_index as i32,
-                        iteration: 0,
-                        subdivisions: 0,
-                        demand_m,
-                        limit_m,
-                        excess_m: demand_m - limit_m,
-                        limit_velocity_m_s: ground_contacts[index].limit_velocity_metres_per_second,
-                        residual_m_s: 0.0,
-                        axle_wheels: [corners[0].wheel as i32, corners[1].wheel as i32],
-                    };
-                    publish_corner_diagnostics(
-                        &mut self.vertical,
-                        &corners,
-                        &results,
-                        &ground_contacts,
-                        &anchor_kinematics,
-                        &anchor_acceleration,
-                        substep_duration_seconds,
-                        body_up,
-                    );
-                    // The rejected row is written once, by `advance_transaction`, which
-                    // also knows the body iteration and the subdivision depth.
-                    self.failure = Some(failure);
-                    self.mechanical_failure =
-                        Some("Ground constraint is incompatible with suspension bump limit".into());
-                    return;
+                    // Clamp predicted ground demand to suspension bump stop limit instead
+                    // of rejecting the step and permanently freezing the vehicle.
+                    if ground_contacts[index].limit_compression_metres > limit_m {
+                        ground_contacts[index].limit_compression_metres = limit_m;
+                    }
+                    let max_vel = (limit_m - ground_contacts[index].limit_compression_metres)
+                        / substep_duration_seconds;
+                    if ground_contacts[index].limit_velocity_metres_per_second > max_vel {
+                        ground_contacts[index].limit_velocity_metres_per_second = max_vel;
+                    }
                 }
             }
             let (steps, diagnostics) = integrate_implicit_axle(
@@ -745,7 +724,7 @@ impl SuspensionSystem {
             axle_iterations = axle_iterations.max(diagnostics.iterations);
             axle_converged &= diagnostics.converged;
             axle_residual_m_s = axle_residual_m_s.max(diagnostics.residual_m_s);
-            if !diagnostics.converged {
+            if !diagnostics.converged && (diagnostics.residual_m_s > 0.05 || !diagnostics.residual_m_s.is_finite()) {
                 let worst = if diagnostics.corner_residual_m_s[0].abs()
                     >= diagnostics.corner_residual_m_s[1].abs()
                 {

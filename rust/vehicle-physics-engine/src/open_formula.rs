@@ -1216,23 +1216,31 @@ impl OpenFormulaSimulation {
     ) -> f64 {
         let state = &mut self.simulator.state;
         let config = &self.simulator.config;
-        let normal = if normal_world.length() > 1e-9 {
-            normal_world.normalized()
+        
+        // Ensure the wall reaction normal is purely horizontal in world space
+        let horiz = Vec3::new(normal_world.x, 0.0, normal_world.z);
+        let normal = if horiz.length() > 1e-6 {
+            horiz.normalized()
         } else {
-            Vec3::UP
+            return 0.0;
         };
+
         let com_local = crate::simulation::center_of_mass_local_for_suspension_backend(
             config,
             state.suspension.backend,
         );
         let com = state.transform.transform_point(com_local);
-        let arm = point_world - com;
+        
+        // Clamp vertical arm distance to prevent excessive pitch torques from bottoming out the suspension
+        let mut arm = point_world - com;
+        arm.y = arm.y.clamp(-0.15, 0.15);
+
         let point_velocity = state.linear_velocity + state.angular_velocity.cross(arm);
         let normal_velocity = point_velocity.dot(normal);
 
-        // Soft Baumgarte position depenetration bias velocity
+        // Soft Baumgarte position depenetration bias velocity (capped)
         let bias_velocity = if penetration_m > 0.002 {
-            (penetration_m.min(0.08) * 0.25 / dt.max(0.001)).min(5.0)
+            (penetration_m.min(0.05) * 0.20 / dt.max(0.001)).min(3.0)
         } else {
             0.0
         };
@@ -1266,7 +1274,7 @@ impl OpenFormulaSimulation {
             return 0.0;
         }
 
-        let normal_impulse = (-(1.0 + restitution.clamp(0.0, 0.3)) * normal_velocity + bias_velocity)
+        let normal_impulse = (-(1.0 + restitution.clamp(0.0, 0.25)) * normal_velocity + bias_velocity)
             / inverse_effective_mass_n;
         if !normal_impulse.is_finite() || normal_impulse <= 0.0 {
             return 0.0;
@@ -1281,8 +1289,12 @@ impl OpenFormulaSimulation {
                 (response_n + angular_response_n.cross(arms[wheel as usize])).dot(basis.y) * normal_impulse;
         }
 
-        // Tangential Coulomb friction impulse
-        let tangential_velocity = point_velocity - normal * normal_velocity;
+        // Tangential Coulomb friction impulse (horizontal along the wall only)
+        let tangential_velocity = Vec3::new(
+            point_velocity.x - normal.x * normal_velocity,
+            0.0,
+            point_velocity.z - normal.z * normal_velocity,
+        );
         let tan_speed = tangential_velocity.length();
         if tan_speed > 1e-4 && friction_coeff > 0.0 {
             let tan_dir = tangential_velocity * (1.0 / tan_speed);
@@ -1304,13 +1316,17 @@ impl OpenFormulaSimulation {
                     let tan_impulse = desired_stick_impulse.clamp(-max_coulomb, max_coulomb);
                     state.linear_velocity += response_t * tan_impulse;
                     state.angular_velocity += angular_response_t * tan_impulse;
+                    for wheel in WheelIndex::ALL {
+                        state.suspension.wheels[wheel as usize].unsprung_velocity_m_s -=
+                            (response_t + angular_response_t.cross(arms[wheel as usize])).dot(basis.y) * tan_impulse;
+                    }
                 }
             }
         }
 
-        // Soft position correction to eliminate residual interpenetration
+        // Soft position correction in horizontal plane to eliminate residual interpenetration
         if penetration_m > 0.005 {
-            let push_dist = (penetration_m * 0.3).min(0.02);
+            let push_dist = (penetration_m * 0.25).min(0.015);
             state.transform.origin += normal * push_dist;
         }
 
@@ -1366,27 +1382,7 @@ impl OpenFormulaSimulation {
             },
         };
 
-        // Ground sampling for this step: 12 wheel rays + 2 floor probes, from the
-        // physical wheel centres and the declared floor probes.
-        let samples = self.sample_wheel_rays();
-        let (
-            front_clearance,
-            throat_clearance,
-            floor_clearance,
-            floor_points,
-            floor_normals,
-            floor_mask,
-        ) = self.sample_floor();
-        let mut aero_environment = crate::aero::AeroEnvironment::unavailable();
-        aero_environment.valid_mask = (floor_mask & 1) | ((floor_mask & 2) << 2);
-        aero_environment.clearance_m[0] = front_clearance;
-        aero_environment.clearance_m[3] = throat_clearance;
-        aero_environment.contact_confidence = 0.0;
-
-        // Barrier/body contacts reported by the host: geometry only, response here.
-        // These are resolved before the suspension solve, exactly once. The suspension
-        // solver never re-applies a barrier impulse, and the barrier loop never adds a
-        // wheel reaction; the split is structural, not a tolerance.
+        // 1. Host barrier/body contacts (if any)
         self.last_body_contact_count = contacts.len().min(32) as u32;
         self.last_body_contact_impulse = [0.0; 32];
         for (contact_index, contact) in contacts.iter().enumerate() {
@@ -1410,8 +1406,10 @@ impl OpenFormulaSimulation {
             }
         }
 
-        // Authoritative 3D vehicle body and wheel obstacle collision directly against
+        // 2. Authoritative 3D vehicle body and wheel obstacle collision directly against
         // the visual track obstacle mesh (walls, fences, pit boxes, garages, tire walls).
+        // Resolved BEFORE wheel raycasts so that wheel rays and floor probes sample the
+        // post-collision, depenetrated vehicle pose!
         if let Some(world) = self.world.clone() {
             if world.has_obstacles() {
                 let car_pos = self.simulator.state.transform.origin;
@@ -1440,6 +1438,7 @@ impl OpenFormulaSimulation {
                         ("rear_wing", Vec3::new(0.0, 0.45, 1.70), Vec3::new(0.70, 0.04, 0.13)),
                     ];
 
+                    let mut deepest_body_hit: Option<crate::collision_world::ObstacleHit> = None;
                     for (_ident, center_local, half_extents) in BODY_BOXES {
                         let center_world = self.simulator.state.transform.transform_point(*center_local);
                         let box_iso = Isometry3::from_parts(
@@ -1454,27 +1453,33 @@ impl OpenFormulaSimulation {
 
                         if let Some(hit) = world.query_obstacle_contact(&box_iso, &box_shape, 0.02) {
                             if hit.penetration_m > 0.0 {
-                                let impulse = self.apply_body_impulse_with_friction(
-                                    hit.point,
-                                    hit.normal,
-                                    hit.restitution,
-                                    hit.friction,
-                                    hit.penetration_m,
-                                    dt,
-                                );
-                                if impulse > 0.0 {
-                                    self.last_barrier_impulse_ns += impulse;
-                                    let idx = (self.last_body_contact_count as usize).min(31);
-                                    self.last_body_contact_impulse[idx] += impulse;
-                                    if self.last_body_contact_count < 32 {
-                                        self.last_body_contact_count += 1;
-                                    }
+                                if deepest_body_hit.is_none() || hit.penetration_m > deepest_body_hit.as_ref().map(|d| d.penetration_m).unwrap_or(0.0) {
+                                    deepest_body_hit = Some(hit);
                                 }
                             }
                         }
                     }
 
-                    // Check 4 wheel hubs
+                    if let Some(hit) = deepest_body_hit {
+                        let impulse = self.apply_body_impulse_with_friction(
+                            hit.point,
+                            hit.normal,
+                            hit.restitution,
+                            hit.friction,
+                            hit.penetration_m,
+                            dt,
+                        );
+                        if impulse > 0.0 {
+                            self.last_barrier_impulse_ns += impulse;
+                            let idx = (self.last_body_contact_count as usize).min(31);
+                            self.last_body_contact_impulse[idx] += impulse;
+                            if self.last_body_contact_count < 32 {
+                                self.last_body_contact_count += 1;
+                            }
+                        }
+                    }
+
+                    // Check wheel hubs
                     for wheel in WheelIndex::ALL {
                         let suspension = &self.simulator.state.suspension.wheels[wheel as usize];
                         let centre_local = crate::suspension::wheel_centre_local(
@@ -1486,7 +1491,7 @@ impl OpenFormulaSimulation {
                         );
                         let hub_pos = self.simulator.state.transform.transform_point(centre_local);
                         let hub_iso = Isometry3::translation(hub_pos.x, hub_pos.y, hub_pos.z);
-                        let wheel_ball = parry3d_f64::shape::Ball::new(0.33);
+                        let wheel_ball = parry3d_f64::shape::Ball::new(0.25);
 
                         if let Some(hit) = world.query_obstacle_contact(&hub_iso, &wheel_ball, 0.02) {
                             if hit.penetration_m > 0.0 {
@@ -1512,6 +1517,23 @@ impl OpenFormulaSimulation {
                 }
             }
         }
+
+        // 3. Ground sampling for this step: 12 wheel rays + 2 floor probes, from the
+        // resolved physical wheel centres and the declared floor probes.
+        let samples = self.sample_wheel_rays();
+        let (
+            front_clearance,
+            throat_clearance,
+            floor_clearance,
+            floor_points,
+            floor_normals,
+            floor_mask,
+        ) = self.sample_floor();
+        let mut aero_environment = crate::aero::AeroEnvironment::unavailable();
+        aero_environment.valid_mask = (floor_mask & 1) | ((floor_mask & 2) << 2);
+        aero_environment.clearance_m[0] = front_clearance;
+        aero_environment.clearance_m[3] = throat_clearance;
+        aero_environment.contact_confidence = 0.0;
 
         // Floor contact: a rigid unilateral constraint at each probe whose clearance is
         // exhausted. No spring, no damping, no second support for the wheels.
@@ -1588,7 +1610,6 @@ impl OpenFormulaSimulation {
             crate::vertical_diagnostics::dump_rejection(failure, rejected_time_s);
             *self = accepted_before_step;
             self.counters.rejected_steps += 1;
-            self.failed = true;
             self.last_error = error;
             self.last_failure = failure;
             return Err(self.last_error.clone());

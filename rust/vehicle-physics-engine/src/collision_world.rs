@@ -532,29 +532,53 @@ impl CollisionWorld {
         )
         .ok()?;
 
+        let shape_center = Vec3::new(
+            shape_pose.translation.vector.x,
+            shape_pose.translation.vector.y,
+            shape_pose.translation.vector.z,
+        );
+
         let mut deepest: Option<ObstacleHit> = None;
         for manifold in generated {
-            // manifold.local_n1 is the normal on obs_mesh pointing toward shape
-            let normal = Vec3::new(
+            // manifold.local_n1 is the normal on obs_mesh (which is at identity, i.e. world space)
+            let mut normal = Vec3::new(
                 manifold.local_n1.x,
                 manifold.local_n1.y,
                 manifold.local_n1.z,
             );
-            let normal = if normal.length() > 1e-9 {
-                normal.normalized()
-            } else {
-                Vec3::UP
-            };
 
             for pt in manifold.points {
                 let penetration_m = -pt.dist;
                 let point = Vec3::new(pt.local_p1.x, pt.local_p1.y, pt.local_p1.z);
+
+                // Ensure the normal always repels the vehicle away from the obstacle
+                let to_shape = shape_center - point;
+                if normal.dot(to_shape) < 0.0 {
+                    normal = -normal;
+                }
+
+                // Project normal to horizontal plane for lateral barrier response
+                let horiz = Vec3::new(normal.x, 0.0, normal.z);
+                let horiz_len = horiz.length();
+                let effective_normal = if horiz_len > 1e-4 {
+                    horiz * (1.0 / horiz_len)
+                } else if to_shape.length() > 1e-4 {
+                    let h = Vec3::new(to_shape.x, 0.0, to_shape.z);
+                    if h.length() > 1e-4 {
+                        h.normalized()
+                    } else {
+                        Vec3::new(1.0, 0.0, 0.0)
+                    }
+                } else {
+                    Vec3::new(1.0, 0.0, 0.0)
+                };
+
                 if deepest.is_none()
                     || penetration_m > deepest.as_ref().map(|d| d.penetration_m).unwrap_or(0.0)
                 {
                     deepest = Some(ObstacleHit {
                         point,
-                        normal,
+                        normal: effective_normal,
                         penetration_m,
                         friction: 0.50,
                         restitution: 0.15,
