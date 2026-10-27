@@ -452,7 +452,7 @@ impl CollisionWorld {
             }
         }
 
-        let walls = WallField::build(driveable, obstacles);
+        let walls = WallField::build_visual_with_mesh(driveable, obstacles, &d_mesh);
         let (w_len, w_one, w_two) = (walls.len(), walls.one_sided_count, walls.two_sided_count);
 
         let geometry_sha256: String = hasher

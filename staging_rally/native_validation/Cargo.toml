@@ -1,0 +1,10 @@
+[package]
+name = "rally-profile-validation"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+vehicle_physics_engine = { path = "../../rust/vehicle-physics-engine" }
+serde_json = "1"

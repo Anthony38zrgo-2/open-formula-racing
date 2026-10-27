@@ -1,0 +1,183 @@
+#--------------------------------------------------------------------
+# Car Settings "Ford Escort Mk1 RS2000"
+#--------------------------------------------------------------------
+
+# --- Overlay graphics ---
+OverlayMeterLocation	=	{752, 496};	# Topleft in 1024x768 coords
+# Indicator locations
+OverlaySpeedLocation	=	{77, 178};	# Relative locations in 256x256 map
+OverlayRpmLocation	=	{180, 78};	# Relative locations in 256x256 map
+OverlayGearLocation	=	{171, 163};	# Relative locations in 256x256 map
+
+# Indicators dimensions (width, total length, tail length)
+OverlaySpeedSize	=	{8, 64, 10.5};
+OverlayRpmSize		=	{8, 64, 10.5};
+
+# Meter limits
+OverlaySpeedMax		=	180;
+OverlayRpmMax		=	10000;
+
+
+# --- Rigid body ---
+Mass            =       1027.0;
+MomentOfInertia =       {1.61, 1.73222, 0.29777};	#1500, 1500, 500
+CenterOfMass    =       {0, 0.4, 0.10};
+AeroDrag        =       0.00005;
+AeroAlign       =       0.65;
+Damping		=	{0.02, 0.02};		# linear, angular
+DownForceConst	=	3.6;
+CenterOfDownForce =	{0, 0.4, 0.10};
+
+# min/max damage speeds (m/s)
+DamageSpeedRange	=	{1.5, 7.0};	
+
+# Reflections
+Reflection		=	0.125;		# 0.25 = 25% reflection, 75% diffuse
+OpacityBias		=	0.375;		# opacity = matte + opacitybias
+
+#--------------------------------------------------------------------
+# Drive lights
+#--------------------------------------------------------------------
+DriveLightLocation	=	{0, 4.0, -1.0};
+DriveLightAngle 	=	2.0;
+
+InteriorLoc		=	{-0.35, 1.0, 0.05};
+DriverLoc		=	{-0.32, 0.52, -0.01};
+
+#--------------------------------------------------------------------
+# Flares
+#--------------------------------------------------------------------
+
+# Front drive flares
+FrontFlareRadius	=	1.2;
+FrontFlareSharpness	=	2.5;
+FrontFlareAlphaMin	=	0.1;
+
+# Rear drive flares
+RearFlareRadius		=	0.3;
+RearFlareSharpness	=	1.1;
+RearFlareAlphaMin	=	0.1;
+
+# Brake flares
+BrakeFlareRadius	=	0.6;
+BrakeFlareSharpness	=	1.1;
+BrakeFlareAlphaMin	=	0.1;
+
+#Reverse flares
+ReverseFlareRadius	=	0.3;
+ReverseFlareSharpness	=	1.1;
+ReverseFlareAlphaMin	=	0.1;
+
+
+
+# --- Misc visual settings ---
+WheelDisplacement		=	0.1;
+WheelAligningTorqueLimits	=	{500.0, 4000.0};
+
+
+
+# --- Brakes ---
+BrakeBalance	=	0.4;			#0 -> taakse, 1 -> eteen
+BrakeTorque	=	4000.0;			#default5000
+HandBrakeTorque =       3000.0;                 #default5000
+
+# --- Engine ---
+FrontTraction	=	0;
+RearTraction	=	1;
+
+RpmMin		=	1300;
+RpmMax		=	7500;			# Rpm at the end of torque curve
+
+#Torque0		=	{0.0,	0.3 };
+#Torque1		=	{0.2,	0.5 };
+#Torque2		=	{0.3,	0.8};
+#Torque3		=	{0.615, 1.00};
+#Torque4		=	{0.846,	0.90};
+#Torque5		=	{1.0,	0.58};
+
+#TorqueMax	=	235.0;
+
+Torque0		=	{0.0,	0.3 };
+Torque1		=	{0.2,	0.5 };
+Torque2		=	{0.5,	0.8};
+Torque3		=	{0.73, 1.00};
+Torque4		=	{0.846,	0.90};
+Torque5		=	{1.0,	0.58};
+
+
+TorqueMax	=	200.0;
+
+WheelspinAccRate	= 1500;
+WheelspinDecRate	= 4000;
+
+EngineResistance = 	0.01;			# 0.01
+# --- Gears ---
+
+NumGears	=	4;
+
+# --- Default gear ratios ---
+
+DefDriveRatio	=	4.444;
+
+DefGearRRatio	=	2.807;
+DefGearNRatio	=	2.97;
+
+DefGear1Ratio	=	2.97;
+DefGear2Ratio	=	2.02;
+DefGear3Ratio	=	1.39;
+DefGear4Ratio	=	1.0;
+DefGear5Ratio	=	1.0;
+DefGear6Ratio	=	1.0;
+
+# --- Differential ---
+# Locking system: 0 = spool differential, 1 = open differential
+DifferentialLocking	=	0.15;
+DifferentialBias	=	1.0;
+
+# --- Tires ---
+# Steering turn speed limits (1.0 = maximum steering in 1 s)
+SteeringSpeeds		=	{1.0, 2.0};	#default 1.2, 2.2
+SteeringLimit		=	45;		# slowest turning reached at m/s	default 40
+# Turn angles default: 26/28
+TireTurnAngleIn		=	26;		# Turning angle in degrees		default 26
+TireTurnAngleOut	=	28;		# 28
+TireCenteringSpeed	=	0.999;		# 0.8 = 80% decrease/s
+
+TireWidth		=	0.2;
+TireRadius		=	0.265;
+TireMass		=	80.0;
+FrontTireMomentOfInertia	=	1;
+RearTireMomentOfInertia		=	2;
+
+FrontCamberTravelUp		=  4.0;         # camber change when suspension at minimum lenght
+FrontCamberTravelDown		=  4.0;         # camber change when suspension at maximum length
+RearCamberTravelUp		= -0.0;
+RearCamberTravelDown		= -0.0;
+
+FrontCamberAngle                = -0.0;
+RearCamberAngle                 = -0.0;
+#--------------------------------------------------------------------
+# Suspension system
+#--------------------------------------------------------------------
+SolidRearAxle		=	1;		# Solid axle instead of independed
+
+FrontSuspensionRestLength	=	0.15;		# 0.18
+FrontSuspensionMaxLength	=	0.20;		# 0.35
+RearSuspensionRestLength	=	0.15;		# 0.18
+RearSuspensionMaxLength		=	0.20;		# 0.35
+FrontSuspensionConst    =       35000.0;	# 35000
+RearSuspensionConst     =       35000.0;	# 35000
+FrontRollBarStiffness	=	12000.0;
+RearRollBarStiffness	=	12000.0;
+
+# Dampers
+FrontBumpDamp		=	2000.0;		#2000
+FrontReboundDamp	=	2500.0;		#2500
+RearBumpDamp		=	2000.0;
+RearReboundDamp		=	2500.0;
+
+# Bump rubbers
+FrontBumperLength	=	0.03;
+FrontBumperConst	=	60000.0;
+RearBumperLength	=	0.03;
+RearBumperConst		=	60000.0;

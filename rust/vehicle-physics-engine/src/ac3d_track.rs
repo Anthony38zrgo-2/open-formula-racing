@@ -27,7 +27,7 @@ use std::time::UNIX_EPOCH;
 use crate::collision_world::TriangleMaterial;
 use crate::types::Vec3;
 
-const CACHE_MAGIC: &[u8; 16] = b"OFP_TRACK_CACHE5";
+const CACHE_MAGIC: &[u8; 16] = b"OFP_TRACK_CACHE7";
 
 /// One driveable ground triangle with physical tire interaction properties.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -354,8 +354,16 @@ fn parse_ac3d_file(
 
                 let name_lower = current_name.to_ascii_lowercase();
 
+                // The rally exporter prefixes every visual material with
+                // `tree_visual_` (see tools/export_rally_runtime.py). That tag
+                // covers billboards *and* solid props and the outer terrain, so a
+                // blanket "tree" ignore is wrong for this stage: it removes the
+                // tree trunks, barns, pylons and the ground outside the road.
+                let hidden_terrain = is_hidden_rally_terrain(&name_lower);
+                let solid_rally_prop = is_solid_rally_prop(&name_lower);
+
                 // 1. Ignored elements check
-                if is_ignored_element(&name_lower) {
+                if is_ignored_element(&name_lower) && !hidden_terrain && !solid_rally_prop {
                     continue;
                 }
 
@@ -386,8 +394,8 @@ fn parse_ac3d_file(
 
                     let ny_abs = (normal.y / area).abs();
 
-                    let is_obstacle_kw = is_obstacle_element(&name_lower);
-                    let is_driveable_kw = is_driveable_element(&name_lower);
+                    let is_obstacle_kw = is_obstacle_element(&name_lower) || solid_rally_prop;
+                    let is_driveable_kw = is_driveable_element(&name_lower) || hidden_terrain;
 
                     let min_y = v0.y.min(v1.y).min(v2.y);
                     let max_y = v0.y.max(v1.y).max(v2.y);
@@ -403,7 +411,8 @@ fn parse_ac3d_file(
                             });
                         }
                     } else if is_driveable_kw {
-                        if ny_abs >= 0.55 {
+                        let open_ground = is_open_ground_element(&name_lower);
+                        if ny_abs >= 0.55 || open_ground {
                             let (friction, rolling) = surface_material_from_name(&name_lower);
                             driveable.push(DriveableTriangle {
                                 vertices: [v0, v1, v2],
@@ -450,6 +459,25 @@ fn parse_ac3d_file(
     })
 }
 
+/// The outer terrain of a rally stage is tagged `tree_visual_terrain_grass_*` by
+/// the rally exporter because its material name contains `grass_1`. It is ground,
+/// not vegetation: without it the stage has no collision more than ~5 m off the
+/// road.
+fn is_hidden_rally_terrain(name: &str) -> bool {
+    name.contains("tree_visual_terrain_grass")
+}
+
+/// Solid rally props that the exporter also prefixed with `tree_visual_`:
+/// trunks, barns, pylons, stones, signs and tents. These are real obstacles; the
+/// billboard forest/canopy materials do not contain any of these keywords and stay
+/// ignored.
+fn is_solid_rally_prop(name: &str) -> bool {
+    name.contains("tree_visual_")
+        && ["trunk", "haybarn", "pylon", "stone", "sign", "tent"]
+            .iter()
+            .any(|keyword| name.contains(keyword))
+}
+
 fn is_ignored_element(name: &str) -> bool {
     const IGNORED: &[&str] = &[
         "sky",
@@ -482,6 +510,20 @@ fn is_ignored_element(name: &str) -> bool {
     IGNORED.iter().any(|k| name.contains(k))
 }
 
+/// A ground surface (terrain, grass verge, gravel road) is collidable ground even
+/// on a steep triangle. Turning the road embankment into an obstacle created an
+/// invisible wall 5-10 m from the centreline that kept the rally car on the road.
+/// Guardrails keep their own obstacle classification.
+fn is_open_ground_element(name: &str) -> bool {
+    if name.contains("roadbar") || name.contains("barrier") {
+        return false;
+    }
+    name.contains("terrain")
+        || name.contains("grass")
+        || name.contains("road")
+        || name.contains("gravel")
+}
+
 fn is_obstacle_element(name: &str) -> bool {
     const OBSTACLES: &[&str] = &[
         "wall",
@@ -490,6 +532,7 @@ fn is_obstacle_element(name: &str) -> bool {
         "tyrewall",
         "armco",
         "barrier",
+        "roadbar",
         "garage",
         "pitbld",
         "building",
@@ -628,6 +671,123 @@ kids 0
         eprintln!("Melbourne loaded from cache in {:?}", cache_time);
         assert_eq!(cached.driveable.len(), track.driveable.len());
         assert_eq!(cached.obstacles.len(), track.obstacles.len());
+    }
+}
+
+
+
+#[cfg(test)]
+mod rally_visual_tag_tests {
+    use super::*;
+
+    /// The rally exporter tags every stage material with `tree_visual_`, so the
+    /// blanket `tree` ignore used to remove the outer terrain, the tree trunks and
+    /// the barns/pylons/signs/stones. This test pins the role split.
+    #[test]
+    fn rally_visual_tags_route_ground_and_solid_props() {
+        let directory = std::env::temp_dir().join("ofp_rally_visual_tags");
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("rally_tags.acc");
+        let content = r#"AC3Db
+OBJECT world
+kids 5
+OBJECT poly
+name "tree_visual_russian_tree_trunks"
+numvert 4
+0 0 0
+10 0 0
+10 2 0
+0 2 0
+numsurf 1
+SURF 0x30
+mat 0
+refs 4
+0 0 0
+1 1 0
+2 1 1
+3 0 1
+kids 0
+OBJECT poly
+name "tree_visual_terrain_grass_1"
+numvert 4
+0 0 0
+10 0 0
+10 0 10
+0 0 10
+numsurf 1
+SURF 0x30
+mat 0
+refs 4
+0 0 0
+1 1 0
+2 1 1
+3 0 1
+kids 0
+OBJECT poly
+name "tree_visual_russian_tree_plane"
+numvert 4
+20 0 0
+30 0 0
+30 2 0
+20 2 0
+numsurf 1
+SURF 0x30
+mat 0
+refs 4
+0 0 0
+1 1 0
+2 1 1
+3 0 1
+kids 0
+OBJECT poly
+name "wall_solid_fence"
+numvert 4
+40 0 0
+50 0 0
+50 2 0
+40 2 0
+numsurf 1
+SURF 0x30
+mat 0
+refs 4
+0 0 0
+1 1 0
+2 1 1
+3 0 1
+kids 0
+OBJECT poly
+name "grass_terrain_slope"
+numvert 4
+60 0 0
+70 0 0
+70 2 0
+60 2 0
+numsurf 1
+SURF 0x30
+mat 0
+refs 4
+0 0 0
+1 1 0
+2 1 1
+3 0 1
+kids 0
+"#;
+        std::fs::write(&path, content).unwrap();
+        let track = load_or_parse_visual_track(path.to_str().unwrap(), Some("rally-tags"), Some(1))
+            .expect("rally tagged track must parse");
+        assert_eq!(
+            track.driveable.len(),
+            4,
+            "outer grass terrain and the steep ground slope must be ground, not walls"
+        );
+        assert_eq!(
+            track.obstacles.len(),
+            4,
+            "trunks (2) and fence (2) must be solid; the canopy plane must stay visual"
+        );
+        assert!((track.driveable[0].rolling_resistance - 0.05).abs() < 1e-9);
+        let _ = std::fs::remove_dir_all(&directory);
     }
 }
 

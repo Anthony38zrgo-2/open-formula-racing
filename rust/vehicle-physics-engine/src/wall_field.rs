@@ -1,12 +1,145 @@
-//! 2.5D Obstacle Wall representation with track-oriented outward normals.
+﻿//! 2.5D Obstacle Wall representation with track-oriented outward normals.
 //!
 //! Converts 3D obstacle triangles from visual track models (.acc/.ac) into vertical
 //! 2D wall segments with a height range [y_min, y_max].
 //! Each wall segment has a fixed, authoritative horizontal normal pointing towards
 //! the driveable track surface, determined at track load time.
 
+use std::collections::HashMap;
+
+use parry3d_f64::na::{Isometry3, Point3, Vector3};
+use parry3d_f64::query::{Ray, RayCast};
+use parry3d_f64::shape::TriMesh;
+
 use crate::ac3d_track::{DriveableTriangle, ObstacleTriangle};
 use crate::types::Vec3;
+
+/// Vertical slack allowed when deciding whether a body polygon overlaps a wall's
+/// height band. This is a surface tolerance, not the horizontal speculative
+/// margin: the prediction must not make a low kerb collide with a high wing.
+const VERTICAL_TOLERANCE_M: f64 = 0.03;
+
+/// A one-sided wall may push a body that is shallowly behind it (a car that has
+/// just tunnelled through the face). A body farther behind is on the outside of
+/// that wall, not a penetration, and must never be dragged through it.
+const BACK_RECOVERY_BAND_M: f64 = 0.50;
+
+/// Centre of the convex polygon in the XZ plane. Only used to pick which side of
+/// a two-sided wall the query body is on; the contact itself is always evaluated
+/// from the polygon's vertices.
+fn polygon_centroid(poly: &ConvexPoly2) -> (f64, f64) {
+    let mut x = 0.0;
+    let mut z = 0.0;
+    for i in 0..poly.n {
+        x += poly.v[i][0];
+        z += poly.v[i][1];
+    }
+    let count = poly.n.max(1) as f64;
+    (x / count, z / count)
+}
+
+/// True when `point` is inside (or on the boundary of) a convex polygon.
+fn point_in_convex_polygon(point: [f64; 2], poly: &ConvexPoly2) -> bool {
+    let mut positive = false;
+    let mut negative = false;
+    for i in 0..poly.n {
+        let j = (i + 1) % poly.n;
+        let ex = poly.v[j][0] - poly.v[i][0];
+        let ez = poly.v[j][1] - poly.v[i][1];
+        let px = point[0] - poly.v[i][0];
+        let pz = point[1] - poly.v[i][1];
+        let cross = ex * pz - ez * px;
+        if cross > 1e-9 {
+            positive = true;
+        } else if cross < -1e-9 {
+            negative = true;
+        }
+        if positive && negative {
+            return false;
+        }
+    }
+    true
+}
+
+/// Distance from `point` to the nearest polygon edge and that edge's outward
+/// normal. Used when a wall endpoint is inside the body: the shortest way out of
+/// the body is through its nearest edge.
+fn nearest_polygon_edge(point: [f64; 2], poly: &ConvexPoly2) -> (f64, [f64; 2]) {
+    let (cx, cz) = polygon_centroid(poly);
+    let mut best_distance = f64::INFINITY;
+    let mut best_normal = [1.0, 0.0];
+    for i in 0..poly.n {
+        let j = (i + 1) % poly.n;
+        let ax = poly.v[i][0];
+        let az = poly.v[i][1];
+        let bx = poly.v[j][0];
+        let bz = poly.v[j][1];
+        let ex = bx - ax;
+        let ez = bz - az;
+        let len_sq = ex * ex + ez * ez;
+        if len_sq < 1e-12 {
+            continue;
+        }
+        let t = (((point[0] - ax) * ex + (point[1] - az) * ez) / len_sq).clamp(0.0, 1.0);
+        let qx = ax + ex * t;
+        let qz = az + ez * t;
+        let distance = ((point[0] - qx).powi(2) + (point[1] - qz).powi(2)).sqrt();
+        if distance < best_distance {
+            best_distance = distance;
+            let len = len_sq.sqrt();
+            // Right-hand normal of the edge; orient it away from the centroid so
+            // the push always leaves the body, whatever the hull winding.
+            let mut normal = [ez / len, -ex / len];
+            let mid_x = (ax + bx) * 0.5;
+            let mid_z = (az + bz) * 0.5;
+            if normal[0] * (cx - mid_x) + normal[1] * (cz - mid_z) > 0.0 {
+                normal = [-normal[0], -normal[1]];
+            }
+            best_normal = normal;
+        }
+    }
+    (best_distance, best_normal)
+}
+
+/// Closest point on the polygon boundary to `point`, and its distance. Used for
+/// the speculative contact between a wall end (a rounded post) and a body edge
+/// that passes near it without any body vertex coming close.
+fn closest_polygon_edge(point: [f64; 2], poly: &ConvexPoly2) -> (f64, [f64; 2]) {
+    let mut best_distance = f64::INFINITY;
+    let mut best_point = point;
+    for i in 0..poly.n {
+        let j = (i + 1) % poly.n;
+        let ax = poly.v[i][0];
+        let az = poly.v[i][1];
+        let ex = poly.v[j][0] - ax;
+        let ez = poly.v[j][1] - az;
+        let len_sq = ex * ex + ez * ez;
+        if len_sq < 1e-12 {
+            continue;
+        }
+        let t = (((point[0] - ax) * ex + (point[1] - az) * ez) / len_sq).clamp(0.0, 1.0);
+        let qx = ax + ex * t;
+        let qz = az + ez * t;
+        let distance = ((point[0] - qx).powi(2) + (point[1] - qz).powi(2)).sqrt();
+        if distance < best_distance {
+            best_distance = distance;
+            best_point = [qx, qz];
+        }
+    }
+    (best_distance, best_point)
+}
+
+/// Height at which a wall contact is reported: the middle of the vertical band
+/// the body and the wall actually share, clamped to the wall segment.
+fn contact_height(poly: &ConvexPoly2, seg: &WallSegment) -> f64 {
+    let low = poly.y_min.max(seg.y_min);
+    let high = poly.y_max.min(seg.y_max);
+    if high > low {
+        (low + high) * 0.5
+    } else {
+        ((poly.y_min + poly.y_max) * 0.5).clamp(seg.y_min, seg.y_max)
+    }
+}
 
 /// Single 2.5D wall segment in the Rust XZ plane with height span in Y.
 #[derive(Debug, Clone, PartialEq)]
@@ -298,10 +431,15 @@ pub struct WallContact {
     pub damage: f64,
 }
 
-/// Memory of which side of a two-sided wall the vehicle was last on.
+/// Hysteresis for the normal of a two-sided wall.
+///
+/// The side is normally taken from the query polygon's centroid. The memory only
+/// breaks the tie when the centroid lies exactly on the wall plane; it must not
+/// latch a side and keep pushing after the body has clearly crossed the wall,
+/// which is what made free-standing posts behave as attractors.
 #[derive(Debug, Clone, Default)]
 pub struct WallSideMemory {
-    /// (wall_index, last_side_sign: f64, last_seen_time_s: f64)
+    /// (wall_index, last_side_sign: f64, last_seen_time_s)
     entries: Vec<(u32, f64, f64)>,
 }
 
@@ -310,17 +448,157 @@ impl WallSideMemory {
         // Prune old entries (> 2.0 s)
         self.entries.retain(|e| (current_time_s - e.2).abs() < 2.0);
 
+        let sign = if current_sign >= 0.0 { 1.0 } else { -1.0 };
         if let Some(entry) = self.entries.iter_mut().find(|e| e.0 == wall_index) {
+            // A centroid that is clearly on a side is authoritative; only a
+            // near-zero distance keeps the previous sign as hysteresis.
+            if current_sign.abs() >= 0.02 {
+                entry.1 = sign;
+            }
             entry.2 = current_time_s;
             entry.1
         } else {
-            let sign = if current_sign >= 0.0 { 1.0 } else { -1.0 };
             self.entries.push((wall_index, sign, current_time_s));
             sign
         }
     }
 }
 
+/// Invisible collision boundary at the edge of the driveable mesh.
+///
+/// A car that leaves the rally road drives on grass/gravel that is still the same
+/// driveable mesh. Where that mesh ends (outer edge or a hole in the terrain) there
+/// is nothing to catch the car. The old terrain-bank walls were removed because
+/// they stopped the car at 5-10 m; this function creates a wall only where the
+/// ground really ends: an edge is kept when at least one side of it has no ground
+/// under the ray used by the wheels. Road/terrain seams have ground on both sides
+/// and stay open.
+fn driveable_boundary_segments(
+    driveable: &[DriveableTriangle],
+    mesh: Option<&TriMesh>,
+) -> Vec<WallSegment> {
+    const SNAP: f64 = 0.05;
+    struct EdgeInfo {
+        count: u32,
+        a: [f64; 2],
+        b: [f64; 2],
+        y_min: f64,
+        y_max: f64,
+    }
+    let key = |p: [f64; 2]| ((p[0] / SNAP).round() as i64, (p[1] / SNAP).round() as i64);
+    let mut edges: HashMap<((i64, i64), (i64, i64)), EdgeInfo> = HashMap::new();
+    for tri in driveable {
+        for (i, j) in [(0usize, 1usize), (1, 2), (2, 0)] {
+            let p = tri.vertices[i];
+            let q = tri.vertices[j];
+            let kp = key([p.x, p.z]);
+            let kq = key([q.x, q.z]);
+            let k = if kp <= kq { (kp, kq) } else { (kq, kp) };
+            let entry = edges.entry(k).or_insert(EdgeInfo {
+                count: 0,
+                a: [p.x, p.z],
+                b: [q.x, q.z],
+                y_min: p.y.min(q.y),
+                y_max: p.y.max(q.y),
+            });
+            entry.count += 1;
+        }
+    }
+    let mut out = Vec::new();
+    // Boundary only outside a 15 m band around the road. Near ditches, banks and
+    // bumps must stay passable: the car is allowed to leave the road there. A
+    // boundary inside the road band was what the player felt as "the stage does
+    // not let me go off".
+    const ROAD_CELL: f64 = 20.0;
+    const ROAD_CLEARANCE: f64 = 15.0;
+    let mut road_grid: HashMap<(i32, i32), Vec<[f64; 2]>> = HashMap::new();
+    for tri in driveable {
+        if tri.rolling_resistance < 0.09 {
+            continue; // asphalt/grass, not the rally road reference
+        }
+        for vertex in tri.vertices {
+            let key = (
+                (vertex.x / ROAD_CELL).floor() as i32,
+                (vertex.z / ROAD_CELL).floor() as i32,
+            );
+            road_grid.entry(key).or_default().push([vertex.x, vertex.z]);
+        }
+    }
+    let near_road = |x: f64, z: f64| -> bool {
+        if road_grid.is_empty() {
+            return false;
+        }
+        let cell_x = (x / ROAD_CELL).floor() as i32;
+        let cell_z = (z / ROAD_CELL).floor() as i32;
+        for dz in -1..=1 {
+            for dx in -1..=1 {
+                let Some(points) = road_grid.get(&(cell_x + dx, cell_z + dz)) else {
+                    continue;
+                };
+                for point in points {
+                    let d_sq = (point[0] - x) * (point[0] - x) + (point[1] - z) * (point[1] - z);
+                    if d_sq <= ROAD_CLEARANCE * ROAD_CLEARANCE {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    };
+    for info in edges.values() {
+        if info.count != 1 {
+            continue; // shared by two driveable triangles: interior
+        }
+        let dx = info.b[0] - info.a[0];
+        let dz = info.b[1] - info.a[1];
+        let len = (dx * dx + dz * dz).sqrt();
+        if len <= 0.05 {
+            continue;
+        }
+        let normal = [dz / len, -dx / len];
+        let mid = [
+            (info.a[0] + info.b[0]) * 0.5,
+            (info.a[1] + info.b[1]) * 0.5,
+        ];
+        if near_road(mid[0], mid[1]) {
+            continue;
+        }
+        if let Some(mesh) = mesh {
+            let mut grounded_sides = 0;
+            for sign in [-1.0f64, 1.0] {
+                let origin = Point3::new(
+                    mid[0] + normal[0] * 0.35 * sign,
+                    info.y_max + 40.0,
+                    mid[1] + normal[1] * 0.35 * sign,
+                );
+                let ray = Ray::new(origin, Vector3::new(0.0, -1.0, 0.0));
+                if mesh
+                    .cast_ray_and_get_normal(&Isometry3::identity(), &ray, 80.0, true)
+                    .is_some()
+                {
+                    grounded_sides += 1;
+                }
+            }
+            if grounded_sides >= 2 {
+                continue; // ground continues on both sides (road/terrain seam)
+            }
+        }
+        out.push(WallSegment {
+            a: info.a,
+            b: info.b,
+            tangent: [dx / len, dz / len],
+            len,
+            normal,
+            two_sided: false,
+            y_min: info.y_min - 1.0,
+            y_max: info.y_max + 2.5,
+            friction: 0.45,
+            restitution: 0.0,
+            damage: 1.0,
+        });
+    }
+    out
+}
 /// Complete 2.5D visual wall field of a circuit.
 #[derive(Debug, Clone)]
 pub struct WallField {
@@ -348,9 +626,37 @@ impl WallField {
         self.segments.len()
     }
 
-    /// Builds a WallField from parsed driveable triangles and obstacle triangles.
+    /// Builds a WallField from obstacle triangles only. Synthetic worlds and unit
+    /// tests use this; no ground boundary is added.
     pub fn build(driveable: &[DriveableTriangle], obstacles: &[ObstacleTriangle]) -> Self {
-        if obstacles.is_empty() {
+        Self::build_internal(driveable, obstacles, false, None)
+    }
+
+    /// Builds the session wall field with a simple edge-count boundary (used by
+    /// tests that do not have a ground mesh).
+    pub fn build_visual(driveable: &[DriveableTriangle], obstacles: &[ObstacleTriangle]) -> Self {
+        Self::build_internal(driveable, obstacles, true, None)
+    }
+
+    /// Builds the session wall field used by the game: obstacle triangles plus an
+    /// invisible wall where the driveable mesh really ends. `mesh` is the same
+    /// ground mesh the wheel rays use, so road/terrain seams stay open and only
+    /// the outer edge/holes get a boundary.
+    pub fn build_visual_with_mesh(
+        driveable: &[DriveableTriangle],
+        obstacles: &[ObstacleTriangle],
+        mesh: &TriMesh,
+    ) -> Self {
+        Self::build_internal(driveable, obstacles, true, Some(mesh))
+    }
+
+    fn build_internal(
+        driveable: &[DriveableTriangle],
+        obstacles: &[ObstacleTriangle],
+        ground_boundary: bool,
+        mesh: Option<&TriMesh>,
+    ) -> Self {
+        if obstacles.is_empty() && !ground_boundary {
             return Self::empty();
         }
 
@@ -420,6 +726,10 @@ impl WallField {
             });
         }
 
+        if ground_boundary {
+            raw_segments.extend(driveable_boundary_segments(driveable, mesh));
+        }
+
         // 2. Collinear segment merging:
         // Group by normal angle (bucket ~2 degrees) and plane offset (bucket ~3 cm)
         let mut merged: Vec<WallSegment> = Vec::with_capacity(raw_segments.len());
@@ -479,18 +789,52 @@ impl WallField {
         }
 
         // 3. Track-oriented normal determination:
-        // Sample vertices and centroids over driveable triangles for robust nearest-surface lookup
-        let mut d_centers: Vec<Vec3> = Vec::with_capacity(driveable.len() * 4);
+        // Sample vertices and centroids over driveable triangles. The samples are
+        // bucketed into a 10 m grid: the old brute-force nearest search was
+        // O(segments x samples) and dominated the stage load (83 s on Russia after
+        // the terrain/prop classification). The maximum useful search radius is
+        // 6 m * 2.5 = 15 m, so a 5x5 cell window (20 m) is exact for the scoring
+        // below and turns the search into a handful of cells per probe.
+        const SAMPLE_CELL: f64 = 10.0;
+        const SAMPLE_REACH: i32 = 2;
+        let mut sample_grid: HashMap<(i32, i32), Vec<Vec3>> =
+            HashMap::with_capacity(driveable.len() * 2);
         for t in driveable {
-            d_centers.push(t.vertices[0]);
-            d_centers.push(t.vertices[1]);
-            d_centers.push(t.vertices[2]);
-            d_centers.push(Vec3::new(
+            let centroid = Vec3::new(
                 (t.vertices[0].x + t.vertices[1].x + t.vertices[2].x) / 3.0,
                 (t.vertices[0].y + t.vertices[1].y + t.vertices[2].y) / 3.0,
                 (t.vertices[0].z + t.vertices[1].z + t.vertices[2].z) / 3.0,
-            ));
+            );
+            for sample in [t.vertices[0], t.vertices[1], t.vertices[2], centroid] {
+                let key = (
+                    (sample.x / SAMPLE_CELL).floor() as i32,
+                    (sample.z / SAMPLE_CELL).floor() as i32,
+                );
+                sample_grid.entry(key).or_default().push(sample);
+            }
         }
+        let nearest_driveable = |x: f64, z: f64, mid_y: f64| -> f64 {
+            let cell_x = (x / SAMPLE_CELL).floor() as i32;
+            let cell_z = (z / SAMPLE_CELL).floor() as i32;
+            let mut best_sq = f64::INFINITY;
+            for dz in -SAMPLE_REACH..=SAMPLE_REACH {
+                for dx in -SAMPLE_REACH..=SAMPLE_REACH {
+                    let Some(points) = sample_grid.get(&(cell_x + dx, cell_z + dz)) else {
+                        continue;
+                    };
+                    for point in points {
+                        if (point.y - mid_y).abs() <= 2.5 {
+                            let d_sq =
+                                (point.x - x) * (point.x - x) + (point.z - z) * (point.z - z);
+                            if d_sq < best_sq {
+                                best_sq = d_sq;
+                            }
+                        }
+                    }
+                }
+            }
+            best_sq.sqrt()
+        };
 
         let mut one_sided = 0;
         let mut two_sided = 0;
@@ -511,20 +855,8 @@ impl WallField {
                 let neg_x = mid_x - seg.normal[0] * dist;
                 let neg_z = mid_z - seg.normal[1] * dist;
 
-                let mut min_pos_sq = f64::INFINITY;
-                let mut min_neg_sq = f64::INFINITY;
-
-                for c in &d_centers {
-                    if (c.y - mid_y).abs() <= 2.5 {
-                        let d_pos = (c.x - pos_x) * (c.x - pos_x) + (c.z - pos_z) * (c.z - pos_z);
-                        let d_neg = (c.x - neg_x) * (c.x - neg_x) + (c.z - neg_z) * (c.z - neg_z);
-                        min_pos_sq = min_pos_sq.min(d_pos);
-                        min_neg_sq = min_neg_sq.min(d_neg);
-                    }
-                }
-
-                let d_pos = min_pos_sq.sqrt();
-                let d_neg = min_neg_sq.sqrt();
+                let d_pos = nearest_driveable(pos_x, pos_z, mid_y);
+                let d_neg = nearest_driveable(neg_x, neg_z, mid_y);
 
                 if d_pos < d_neg - 0.25 && d_pos <= dist * 2.5 {
                     score_pos += 1;
@@ -569,6 +901,15 @@ impl WallField {
     }
 
     /// Queries contact points and signed gaps against a convex polygon using pre-queried candidate wall segments.
+    ///
+    /// The query is a **finite** segment-to-polygon query. A wall segment is a
+    /// zero-thickness obstacle with two ends, not an infinite plane: a body vertex
+    /// whose nearest point on the segment is an endpoint is at the Euclidean
+    /// distance from that endpoint and gets a radial normal, so a car sweeping past
+    /// a post is not reported as metres deep just because it crossed the plane of
+    /// one of the post's faces. The signed side of a two-sided segment is taken from
+    /// the query polygon itself (never from the car centre, which could be on the
+    /// other side of the wall and latch a stale direction for two seconds).
     pub fn query_poly_with_candidates(
         &self,
         poly: &ConvexPoly2,
@@ -584,83 +925,183 @@ impl WallField {
         }
 
         let pred = prediction.max(0.01);
+        let _ = car_ref_pos; // The contact side is a property of the polygon, not of the car centre.
+        let (centroid_x, centroid_z) = polygon_centroid(poly);
+        let mut poly_min_x = f64::INFINITY;
+        let mut poly_min_z = f64::INFINITY;
+        let mut poly_max_x = f64::NEG_INFINITY;
+        let mut poly_max_z = f64::NEG_INFINITY;
+        for i in 0..poly.n {
+            poly_min_x = poly_min_x.min(poly.v[i][0]);
+            poly_min_z = poly_min_z.min(poly.v[i][1]);
+            poly_max_x = poly_max_x.max(poly.v[i][0]);
+            poly_max_z = poly_max_z.max(poly.v[i][1]);
+        }
 
         for &wall_idx in candidates.iter() {
             let seg = &self.segments[wall_idx as usize];
 
-            // 1. Height range overlap
-            if poly.y_max < seg.y_min - pred || poly.y_min > seg.y_max + pred {
+            // 0. Segment AABB against the polygon AABB: the grid candidate set is
+            // a disc around the car, most of which cannot touch this polygon.
+            if seg.a[0].min(seg.b[0]) > poly_max_x + pred
+                || seg.a[0].max(seg.b[0]) < poly_min_x - pred
+                || seg.a[1].min(seg.b[1]) > poly_max_z + pred
+                || seg.a[1].max(seg.b[1]) < poly_min_z - pred
+            {
                 continue;
             }
 
-            // 2. Normal orientation: determine effective normal
-            let mut effective_normal = seg.normal;
-            if seg.two_sided {
-                let to_car_x = car_ref_pos.x - seg.a[0];
-                let to_car_z = car_ref_pos.z - seg.a[1];
-                let side_sign = to_car_x * seg.normal[0] + to_car_z * seg.normal[1];
-                let locked_sign = side_memory.get_or_set(wall_idx, side_sign, current_time_s);
-                if locked_sign < 0.0 {
-                    effective_normal = [-seg.normal[0], -seg.normal[1]];
-                }
+            // 1. Height overlap. The speculative prediction is a horizontal
+            // margin; it must not lift a 10 cm wall into a front wing 40 cm above.
+            if poly.y_max < seg.y_min - VERTICAL_TOLERANCE_M
+                || poly.y_min > seg.y_max + VERTICAL_TOLERANCE_M
+            {
+                continue;
             }
 
-            // 3. For each vertex of the polygon, evaluate distance along normal and tangent projection
-            let mut min_gap = f64::INFINITY;
-            let mut deepest_pt = Vec3::ZERO;
-            let mut second_gap = f64::INFINITY;
-            let mut second_pt = Vec3::ZERO;
+            // 2. Effective normal. Two-sided segments face the body's own centroid
+            // (hysteresis only matters when the centroid is exactly on the plane);
+            // one-sided segments keep their authoritative track-facing normal.
+            let centroid_side = (centroid_x - seg.a[0]) * seg.normal[0]
+                + (centroid_z - seg.a[1]) * seg.normal[1];
+            // A one-sided wall may recover a body that is shallowly behind it (a
+            // tunnelling correction). A body metres behind a barrier is outside
+            // that wall and must never be dragged back through it.
+            if !seg.two_sided && centroid_side < -BACK_RECOVERY_BAND_M {
+                continue;
+            }
+            let effective_normal = if seg.two_sided {
+                let locked = side_memory.get_or_set(wall_idx, centroid_side, current_time_s);
+                if locked < 0.0 {
+                    [-seg.normal[0], -seg.normal[1]]
+                } else {
+                    seg.normal
+                }
+            } else {
+                seg.normal
+            };
 
-            let t = [
-                seg.b[0] - seg.a[0],
-                seg.b[1] - seg.a[1],
-            ];
-            let len_sq = seg.len * seg.len;
+            let contact_y = contact_height(poly, seg);
+            let tangent = seg.tangent;
+            let len = seg.len;
 
+            // At most 8 polygon vertices + the two segment endpoints.
+            let mut candidates_local: [(f64, Vec3, Vec3); 10] =
+                [(f64::INFINITY, Vec3::ZERO, Vec3::ZERO); 10];
+            let mut candidate_count = 0usize;
+
+            // 3. Every polygon vertex against the finite segment.
             for i in 0..poly.n {
-                let vx = poly.v[i][0];
-                let vz = poly.v[i][1];
+                let px = poly.v[i][0];
+                let pz = poly.v[i][1];
 
-                // Tangent projection parameter u in [0, 1]
-                let u = ((vx - seg.a[0]) * t[0] + (vz - seg.a[1]) * t[1]) / len_sq;
-                // Allow a small end margin (0.10 m) to bridge adjacent wall segments seamlessly
-                let end_margin = 0.10 / seg.len;
-                if u >= -end_margin && u <= 1.0 + end_margin {
-                    // Signed gap along effective normal: gap = (P - A) . normal
-                    let gap = (vx - seg.a[0]) * effective_normal[0] + (vz - seg.a[1]) * effective_normal[1];
-                    if gap <= pred {
-                        let contact_y = (poly.y_min + poly.y_max) * 0.5;
-                        let pt = Vec3::new(vx, contact_y, vz);
+                let along = (px - seg.a[0]) * tangent[0] + (pz - seg.a[1]) * tangent[1];
+                let clamped = along.clamp(0.0, len);
+                let qx = seg.a[0] + tangent[0] * clamped;
+                let qz = seg.a[1] + tangent[1] * clamped;
+                let dx = px - qx;
+                let dz = pz - qz;
+                let distance = (dx * dx + dz * dz).sqrt();
 
-                        if gap < min_gap {
-                            second_gap = min_gap;
-                            second_pt = deepest_pt;
-                            min_gap = gap;
-                            deepest_pt = pt;
-                        } else if gap < second_gap {
-                            second_gap = gap;
-                            second_pt = pt;
-                        }
-                    }
+                // Only an interior projection lies on a side of the wall; beyond
+                // an end the wall stops and the distance is always positive.
+                let interior = along > 0.0 && along < len;
+                let signed = (px - seg.a[0]) * effective_normal[0]
+                    + (pz - seg.a[1]) * effective_normal[1];
+                let gap = if interior {
+                    if signed >= 0.0 { distance } else { -distance }
+                } else {
+                    distance
+                };
+
+                if gap <= pred && candidate_count < candidates_local.len() {
+                    let normal = if interior {
+                        Vec3::new(effective_normal[0], 0.0, effective_normal[1])
+                    } else if distance > 1e-9 {
+                        Vec3::new(dx / distance, 0.0, dz / distance)
+                    } else {
+                        Vec3::new(effective_normal[0], 0.0, effective_normal[1])
+                    };
+                    candidates_local[candidate_count] =
+                        (gap, Vec3::new(qx, contact_y, qz), normal);
+                    candidate_count += 1;
                 }
             }
 
-            if min_gap <= pred {
-                out.push(WallContact {
-                    point: deepest_pt,
-                    normal: Vec3::new(effective_normal[0], 0.0, effective_normal[1]),
-                    gap_m: min_gap,
-                    wall_index: wall_idx,
-                    friction: seg.friction,
-                    restitution: seg.restitution,
-                    damage: seg.damage,
-                });
+            // 4. A segment endpoint inside the body polygon means the wall end is
+            // under the car: push the car out through the nearest body edge.
+            for endpoint in [seg.a, seg.b] {
+                let point = [endpoint[0], endpoint[1]];
+                if point_in_convex_polygon(point, poly) {
+                    let (depth, outward) = nearest_polygon_edge(point, poly);
+                    // Freeing an endpoint that is inside the body means moving the
+                    // body opposite the nearest edge's outward normal, so the edge
+                    // travels past the endpoint. Push direction = -outward.
+                    let normal = [-outward[0], -outward[1]];
+                    if candidate_count < candidates_local.len() {
+                        candidates_local[candidate_count] = (
+                            -depth,
+                            Vec3::new(point[0], contact_y, point[1]),
+                            Vec3::new(normal[0], 0.0, normal[1]),
+                        );
+                        candidate_count += 1;
+                    }
+                    continue;
+                }
+                // Outside the body: the wall end is a rounded post. A body edge can
+                // be closer to it than any body vertex, so this is the missing
+                // speculative contact for a corner near a body flank.
+                if !seg.two_sided && centroid_side < 0.0 {
+                    continue;
+                }
+                let (distance, closest) = closest_polygon_edge(point, poly);
+                if distance > 1e-9 && distance <= pred && candidate_count < candidates_local.len() {
+                    let nx = (closest[0] - point[0]) / distance;
+                    let nz = (closest[1] - point[1]) / distance;
+                    candidates_local[candidate_count] = (
+                        distance,
+                        Vec3::new(point[0], contact_y, point[1]),
+                        Vec3::new(nx, 0.0, nz),
+                    );
+                    candidate_count += 1;
+                }
+            }
 
-                if second_gap <= pred {
+            // 6. Keep the deepest contact and a second one along the wall for
+            // torque stability, never a duplicate of the same point.
+            let mut first: Option<(f64, Vec3, Vec3)> = None;
+            let mut second: Option<(f64, Vec3, Vec3)> = None;
+            for &candidate in &candidates_local[..candidate_count] {
+                if first.is_none() || candidate.0 < first.unwrap().0 {
+                    second = first;
+                    first = Some(candidate);
+                } else if second.is_none() || candidate.0 < second.unwrap().0 {
+                    second = Some(candidate);
+                }
+            }
+
+            if let Some((gap, point, normal)) = first {
+                if gap <= pred {
                     out.push(WallContact {
-                        point: second_pt,
-                        normal: Vec3::new(effective_normal[0], 0.0, effective_normal[1]),
-                        gap_m: second_gap,
+                        point,
+                        normal,
+                        gap_m: gap,
+                        wall_index: wall_idx,
+                        friction: seg.friction,
+                        restitution: seg.restitution,
+                        damage: seg.damage,
+                    });
+                }
+            }
+            if let Some((gap, point, normal)) = second {
+                let separated = first
+                    .map(|(_, p, _)| (p - point).length() > 0.10)
+                    .unwrap_or(true);
+                if gap <= pred && separated {
+                    out.push(WallContact {
+                        point,
+                        normal,
+                        gap_m: gap,
                         wall_index: wall_idx,
                         friction: seg.friction,
                         restitution: seg.restitution,

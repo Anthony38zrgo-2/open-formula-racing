@@ -1449,8 +1449,11 @@ impl OpenFormulaSimulation {
         self.last_barrier_impulse_ns += total_impulse_ns;
 
         // Split impulse: pure position depenetration grouped per wall.
-        // Never changes velocity, eliminating energy injection and pinball oscillation!
-        // Find maximum penetration for each unique wall_index
+        // Never changes velocity, eliminating energy injection and pinball oscillation.
+        // The translation budget is shared by every wall of the step: applying the
+        // full per-wall cap to each face of a post (or to several walls of a corner)
+        // teleported the body by several centimetres in one substep with no velocity
+        // change, which is how a tangential brush threw a car out of the world.
         let mut wall_groups: Vec<(u32, Vec3, f64)> = Vec::new();
         for c in &constraints {
             if c.gap_m < -0.003 {
@@ -1466,15 +1469,24 @@ impl OpenFormulaSimulation {
             }
         }
 
-        // Apply a single depenetration push per wall
-        let max_push_per_step = (7.5 * dt).clamp(0.005, 0.040); // Max ~15 mm per 2ms substep
-        let mut any_push = false;
+        // Apply a single depenetration push per wall, then cap the total.
+        let max_push_per_step = (7.5 * dt).clamp(0.004, 0.020);
+        let mut total_push = Vec3::ZERO;
         for (_w_idx, normal, max_pen) in wall_groups {
             let push_dist = ((max_pen - 0.003) * 0.80).min(max_push_per_step);
             if push_dist > 0.0 {
-                self.simulator.state.transform.origin += normal * push_dist;
-                any_push = true;
+                total_push += normal * push_dist;
             }
+        }
+        let total_push_length = total_push.length();
+        let any_push = total_push_length > 1e-9;
+        if any_push {
+            let push = if total_push_length > max_push_per_step {
+                total_push * (max_push_per_step / total_push_length)
+            } else {
+                total_push
+            };
+            self.simulator.state.transform.origin += push;
         }
 
         total_impulse_ns > 0.0 || any_push

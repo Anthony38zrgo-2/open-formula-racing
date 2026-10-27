@@ -1,0 +1,117 @@
+{
+  "coupled_world": {
+    "aerodynamic_probe_length_metres": 1,
+    "aerodynamic_probe_positions_local_metres": [
+      {
+        "x": -0.4,
+        "y": -0.15,
+        "z": -1.0
+      },
+      {
+        "x": 0.4,
+        "y": -0.15,
+        "z": -1.0
+      },
+      {
+        "x": 0.0,
+        "y": -0.15,
+        "z": 0.0
+      },
+      {
+        "x": -0.4,
+        "y": -0.15,
+        "z": 1.0
+      },
+      {
+        "x": 0.4,
+        "y": -0.15,
+        "z": 1.0
+      }
+    ],
+    "body_collision_boxes": [
+      {
+        "center_local_metres": {
+          "x": 0.0,
+          "y": 0.1,
+          "z": 0.0
+        },
+        "half_extents_metres": {
+          "x": 0.8,
+          "y": 0.45,
+          "z": 1.95
+        },
+        "identifier": "cabin_engine"
+      },
+      {
+        "center_local_metres": {
+          "x": 0.0,
+          "y": -0.15,
+          "z": -0.9
+        },
+        "half_extents_metres": {
+          "x": 0.55,
+          "y": 0.05,
+          "z": 0.5
+        },
+        "identifier": "sump_guard"
+      }
+    ],
+    "contacts": {
+      "impact_friction_coefficient": 0.55,
+      "maximum_events_per_step": 128,
+      "maximum_iterations": 100,
+      "maximum_position_correction_metres": 0.002,
+      "maximum_supported_angular_speed_radians_per_second": 12,
+      "maximum_supported_speed_metres_per_second": 80,
+      "prediction_distance_metres": 0.002,
+      "restitution": 0.2,
+      "restitution_minimum_speed_metres_per_second": 1,
+      "velocity_tolerance_metres_per_second": 1e-05
+    },
+    "integration_owner": "rust_world_candidate",
+    "maximum_initial_overlap_metres": 0.1,
+    "physical_frequency_hertz": 500,
+    "road_query_extension_metres": 0.15,
+    "schema_version": 1,
+    "steering_rack_travel_metres": 0.04,
+    "suspension": {
+      "differentiation_step_metres": 0.0001,
+      "gravity_world_metres_per_second_squared": {
+        "x": 0,
+        "y": -9.80665,
+        "z": 0
+      },
+      "maximum_substep_seconds": 0.002,
+      "tire_vertical_damping_newton_seconds_per_metre": [
+        1100,
+        1100,
+        1100,
+        1100
+      ],
+      "tire_vertical_stiffness_newtons_per_metre": [
+        180000,
+        180000,
+        180000,
+        180000
+      ],
+      "travel_stop_damping_newton_seconds_per_metre": [
+        800,
+        800,
+        800,
+        800
+      ],
+      "travel_stop_engagement_fraction": [
+        0.85,
+        0.85,
+        0.85,
+        0.85
+      ],
+      "travel_stop_stiffness_newtons_per_cubic_metre": [
+        80000000,
+        80000000,
+        80000000,
+        80000000
+      ]
+    }
+  }
+}
